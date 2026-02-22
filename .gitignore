@@ -1,0 +1,16 @@
+__pycache__
+*.pyc
+
+# Editor settings
+.vscode
+.idea
+*.code-workspace
+
+# Output
+Logs*
+tmp*
+output*
+
+# Environment / OS
+.venv/
+.DS_Store
