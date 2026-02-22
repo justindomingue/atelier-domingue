@@ -1,50 +1,67 @@
-# custom/ — Historical Tailoring Garment Programs
+# Atelier Domingue — Architecture
 
-Personal garment drafting programs based on historical tailoring methods, built on top of the GarmentCode / pygarment infrastructure.
-
-## Why a separate directory?
-
-The main `assets/` tree uses anthropometric body models and pygarment's Panel/Component system. Our programs follow a different approach: **historical drafting methods** that work from a small set of tape measurements and procedural geometric constructions (points, lines, curves). Keeping them in `custom/` avoids mixing the two paradigms.
+Personal garment drafting programs based on historical tailoring methods.
 
 ## Directory layout
 
 ```
-custom/
-├── architecture.md                          # This file
-├── measurements/
-│   └── justin.yaml                          # Personal body measurements (inches)
+atelier-domingue/
+├── architecture.md
 ├── garment_programs/
-│   ├── __init__.py
-│   ├── jeans_front.py                       # Jeans front panel module
-│   └── jeans_front_instructions.md          # Step-by-step drafting instructions
-└── run.py                                   # Generic TUI runner (fzf-based)
+│   ├── SelvedgeJeans1873/          # 1873 selvedge jeans (11 pieces)
+│   │   ├── __init__.py             # GARMENT definition
+│   │   ├── jeans_front.py
+│   │   ├── jeans_back.py
+│   │   ├── jeans_yoke_1873.py
+│   │   ├── jeans_waistband.py
+│   │   ├── jeans_fly_1873.py
+│   │   ├── jeans_front_pocket.py
+│   │   ├── jeans_back_pocket.py
+│   │   ├── jeans_back_cinch.py
+│   │   ├── *_instructions.md       # Step-by-step drafting instructions
+│   │   └── verify.py               # Edge-length verification
+│   └── OnePleatTrouser/            # MM&S one-pleat trouser (2 pieces)
+│       ├── __init__.py
+│       ├── trouser_front.py
+│       └── trouser_back.py
+├── measurements/
+│   ├── justin.yaml
+│   ├── andrew.yaml
+│   └── size_50.yaml
+├── pygarment_port/                 # Archived pygarment port experiments
+│   ├── jeans_front_pyg.py
+│   ├── jeans_back_pyg.py
+│   └── pygarment_port_notes.md
+├── run.py                          # TUI runner (fzf-based)
+└── requirements.txt
 ```
 
 ## How to run
 
-From the repo root, with the `.venv` activated:
-
 ```bash
-# Interactive — uses fzf to pick measurements and program
-python -m custom.run
+# Interactive — uses fzf to pick measurements, program, mode, and units
+python run.py
 
 # Non-interactive
-python -m custom.run --measurements custom/measurements/justin.yaml --program jeans_front
+python run.py -m measurements/justin.yaml -p SelvedgeJeans1873 -d -u cm
+
+# Single piece
+python run.py -m measurements/justin.yaml -p SelvedgeJeans1873.jeans_front -d -u cm
 ```
 
-Output goes to `Logs/{program_name}_{date}.png` (e.g. `Logs/jeans_front_2026-02-20.png`).
+Output goes to `Logs/`.
 
 ### Adding a new garment program
 
-1. Create `custom/garment_programs/my_program.py`
-2. Expose a `run(measurements_path, output_path)` function
+1. Create `garment_programs/MyGarment/` with an `__init__.py` defining a `GARMENT` dict
+2. Each piece module exposes a `run(measurements_path, output_path, debug, units)` function
 3. It will automatically appear in the fzf selection
 
 ## Measurements
 
 Measurements are stored in YAML in **inches** (how they're actually taken with a tape measure). The `load_measurements()` function converts to cm at load time, since all internal geometry is in cm.
 
-To use different measurements, either edit `justin.yaml` or create a new file in `custom/measurements/`.
+To use different measurements, create a new file in `measurements/`.
 
 ## Module structure
 
@@ -53,14 +70,14 @@ Each garment program module exposes:
 - **`load_measurements(yaml_path)`** — reads YAML, converts units, returns a dict
 - **`draft_*(m)`** — takes measurements dict, computes all points/curves/construction geometry, returns a structured result dict
 - **`plot_*(draft, output_path)`** — renders the draft to a matplotlib figure
-- **`run(measurements_path, output_path)`** — top-level entry point that calls load → draft → plot
+- **`run(measurements_path, output_path, debug, units)`** — top-level entry point
 
 This is intentionally procedural (not class-based). Historical drafting is a sequence of geometric operations, and functions map naturally to that.
 
 ## Design decisions
 
 - **Bezier curves** for hip, rise, crotch, and inseam — cubic for curves needing tangent control at both ends, quadratic when passing through a specific midpoint
-- **matplotlib for visualization** — not yet converted to pygarment Panel edges; that's a future step
-- **All geometry in cm internally** — consistent with pygarment's coordinate system
-- **Drafting instructions colocated** with the program code — `jeans_front_instructions.md` lives next to `jeans_front.py` so the source material is always at hand
-- **Generic runner with fzf** — auto-discovers measurements and programs so adding a new garment only requires creating the module file
+- **matplotlib for visualization** — supports both clean pattern output and debug mode with construction lines, point labels, and grid
+- **All geometry in cm internally** — conversions happen at the boundary (load and display)
+- **Drafting instructions colocated** with the program code — `*_instructions.md` lives next to the `.py` so the source material is always at hand
+- **Generic runner with fzf** — auto-discovers measurements and programs so adding a new garment only requires creating the module
