@@ -324,7 +324,7 @@ def plot_jeans_yoke_modern(front, back, yoke,
         ax.grid(True, alpha=0.2)
 
     from garment_programs.plot_utils import save_pattern
-    save_pattern(fig, ax, output_path, units=units)
+    save_pattern(fig, ax, output_path, units=units, calibration=not debug)
 
 
 # -- Entry point for generic runner ------------------------------------------

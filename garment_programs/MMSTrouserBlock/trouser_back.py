@@ -527,7 +527,8 @@ def plot_trouser_back(front, back, output_path='Logs/trouser_back.svg',
                       debug=False, units='cm', step=6):
     """Render the trouser back draft up to the given step (1-6).
 
-    Front panel is drawn faded; back panel in bold black.
+    debug=False (pattern mode): clean outline + grainline + darts only.
+    debug=True: adds front faded, construction lines, reference lines, dimensions.
     """
     bpts = back['points']
     bcon = back['construction']
@@ -542,187 +543,176 @@ def plot_trouser_back(front, back, output_path='Logs/trouser_back.svg',
 
     x_max = bpts['back_hip_inseam'][0] + 5
 
-    # -- Front faded (always shown) --
-    _draw_front_faded(ax, front, x_max)
+    if debug:
+        # -- Front faded --
+        _draw_front_faded(ax, front, x_max)
 
-    # -- Horizontal reference lines (shared from front) --
-    for name, y in lvl.items():
-        ax.plot([-8, x_max], [y, y], **REF)
-        ax.annotate(name, (x_max, y), textcoords='offset points',
-                    xytext=(4, 2), fontsize=7, color='gray')
+        # -- Horizontal reference lines (shared from front) --
+        for name, y in lvl.items():
+            ax.plot([-8, x_max], [y, y], **REF)
+            ax.annotate(name, (x_max, y), textcoords='offset points',
+                        xytext=(4, 2), fontsize=7, color='gray')
 
-    # ── Step 1: Extend Legs + Back Creaseline + CB Slant ───────────
-    # Extended leg points
-    for pt_name in ('back_knee_side', 'back_hem_side_top', 'back_hem_side',
-                    'back_knee_inseam', 'back_hem_inseam_top', 'back_hem_inseam'):
-        ax.plot(*bpts[pt_name], 'ko', markersize=3)
+        # ── Step 1: Extend Legs + Back Creaseline + CB Slant ───────────
+        # Extended leg points
+        for pt_name in ('back_knee_side', 'back_hem_side_top', 'back_hem_side',
+                        'back_knee_inseam', 'back_hem_inseam_top', 'back_hem_inseam'):
+            ax.plot(*bpts[pt_name], 'ko', markersize=3)
 
-    # Extended leg lines (full outline: knee → hem_top → hem → hem → hem_top → knee)
-    EXT = dict(color='black', linewidth=0.8, alpha=0.5)
-    ax.plot([bpts['back_knee_side'][0], bpts['back_hem_side_top'][0],
-             bpts['back_hem_side'][0], bpts['back_hem_inseam'][0],
-             bpts['back_hem_inseam_top'][0], bpts['back_knee_inseam'][0]],
-            [bpts['back_knee_side'][1], bpts['back_hem_side_top'][1],
-             bpts['back_hem_side'][1], bpts['back_hem_inseam'][1],
-             bpts['back_hem_inseam_top'][1], bpts['back_knee_inseam'][1]],
-            **EXT)
+        # Extended leg lines (full outline: knee → hem_top → hem → hem → hem_top → knee)
+        EXT = dict(color='black', linewidth=0.8, alpha=0.5)
+        ax.plot([bpts['back_knee_side'][0], bpts['back_hem_side_top'][0],
+                 bpts['back_hem_side'][0], bpts['back_hem_inseam'][0],
+                 bpts['back_hem_inseam_top'][0], bpts['back_knee_inseam'][0]],
+                [bpts['back_knee_side'][1], bpts['back_hem_side_top'][1],
+                 bpts['back_hem_side'][1], bpts['back_hem_inseam'][1],
+                 bpts['back_hem_inseam_top'][1], bpts['back_knee_inseam'][1]],
+                **EXT)
 
-    # Back creaseline = front creaseline (grainline, unchanged)
+    # Back creaseline / grainline (always shown)
     ax.plot([bcon['back_creaseline_x'], bcon['back_creaseline_x']],
             [-3, lvl['waistline'] + 5],
             'k-.', linewidth=0.6, alpha=0.4)
-    ax.annotate('back creaseline', (bcon['back_creaseline_x'], -3),
-                fontsize=7, color='black', ha='center', va='top')
-    # Construction mark: 1–1.5 cm to the right on hipline (width distribution centre)
-    ax.plot(bcon['width_center_x'], lvl['hipline'], 'ko', markersize=4)
-    ax.annotate('1\u20131.5', (bcon['width_center_x'], lvl['hipline']),
-                textcoords='offset points', xytext=(6, -8),
-                fontsize=6, color='black')
+    if debug:
+        ax.annotate('back creaseline', (bcon['back_creaseline_x'], -3),
+                    fontsize=7, color='black', ha='center', va='top')
+        # Construction mark: 1–1.5 cm to the right on hipline (width distribution centre)
+        ax.plot(bcon['width_center_x'], lvl['hipline'], 'ko', markersize=4)
+        ax.annotate('1\u20131.5', (bcon['width_center_x'], lvl['hipline']),
+                    textcoords='offset points', xytext=(6, -8),
+                    fontsize=6, color='black')
 
-    # CB slant origin
-    ax.plot(*bpts['cb_slant_origin'], 'o', color='cornflowerblue', markersize=4)
-    ax.annotate('CB slant', bpts['cb_slant_origin'], textcoords='offset points',
-                xytext=(-10, 6), fontsize=5, color='cornflowerblue')
+        # CB slant origin
+        ax.plot(*bpts['cb_slant_origin'], 'o', color='cornflowerblue', markersize=4)
+        ax.annotate('CB slant', bpts['cb_slant_origin'], textcoords='offset points',
+                    xytext=(-10, 6), fontsize=5, color='cornflowerblue')
 
     if step < 2:
-        _finish_back_plot(fig, ax, back, output_path, step)
+        _finish_back_plot(fig, ax, back, output_path, step, debug)
         return
 
-    # ── Step 2: Width Distribution on Hipline ──────────────────────
-    # ½ Tbtw left and right from width centre; Bcw back to the left
-    ax.plot(*bpts['back_hip_side'], 'ko', markersize=4)
-    ax.plot(*bpts['back_hip_inseam'], 'ko', markersize=4)
-    ax.plot(*bpts['bcw_mark'], 's', color='cornflowerblue', markersize=4)
+    if debug:
+        # ── Step 2: Width Distribution on Hipline ──────────────────────
+        ax.plot(*bpts['back_hip_side'], 'ko', markersize=4)
+        ax.plot(*bpts['back_hip_inseam'], 'ko', markersize=4)
+        ax.plot(*bpts['bcw_mark'], 's', color='cornflowerblue', markersize=4)
 
-    ax.annotate('back hip (side)', bpts['back_hip_side'], textcoords='offset points',
-                xytext=(-10, 6), fontsize=5, color='black')
-    ax.annotate('back hip (inseam)', bpts['back_hip_inseam'], textcoords='offset points',
-                xytext=(4, 6), fontsize=5, color='black')
-    ax.annotate('CB/hip', bpts['bcw_mark'], textcoords='offset points',
-                xytext=(4, -10), fontsize=5, color='cornflowerblue')
+        ax.annotate('back hip (side)', bpts['back_hip_side'], textcoords='offset points',
+                    xytext=(-10, 6), fontsize=5, color='black')
+        ax.annotate('back hip (inseam)', bpts['back_hip_inseam'], textcoords='offset points',
+                    xytext=(4, 6), fontsize=5, color='black')
+        ax.annotate('CB/hip', bpts['bcw_mark'], textcoords='offset points',
+                    xytext=(4, -10), fontsize=5, color='cornflowerblue')
 
-    # Tbtw dimension arrow
-    ax.annotate('', xy=(bpts['back_hip_side'][0], lvl['hipline'] + 1.5),
-                xytext=(bpts['back_hip_inseam'][0], lvl['hipline'] + 1.5),
-                arrowprops=dict(arrowstyle='<->', color='blue', lw=0.6))
-    ax.text(bcon['width_center_x'], lvl['hipline'] + 3,
-            f"Tbtw={back['measurements']['Tbtw']:.1f}", fontsize=6,
-            color='blue', ha='center')
+        # Tbtw dimension arrow
+        ax.annotate('', xy=(bpts['back_hip_side'][0], lvl['hipline'] + 1.5),
+                    xytext=(bpts['back_hip_inseam'][0], lvl['hipline'] + 1.5),
+                    arrowprops=dict(arrowstyle='<->', color='blue', lw=0.6))
+        ax.text(bcon['width_center_x'], lvl['hipline'] + 3,
+                f"Tbtw={back['measurements']['Tbtw']:.1f}", fontsize=6,
+                color='blue', ha='center')
 
     if step < 3:
-        _finish_back_plot(fig, ax, back, output_path, step)
+        _finish_back_plot(fig, ax, back, output_path, step, debug)
         return
 
-    # ── Step 3: Connect Knee to Hip + CB Direction ─────────────────
-    # Sideseam guideline: knee → hip
-    ax.plot([bpts['back_knee_side'][0], bpts['back_hip_side'][0]],
-            [bpts['back_knee_side'][1], bpts['back_hip_side'][1]],
-            'k-', linewidth=0.5, alpha=0.4)
-    # Inseam guideline: knee → hip
-    ax.plot([bpts['back_knee_inseam'][0], bpts['back_hip_inseam'][0]],
-            [bpts['back_knee_inseam'][1], bpts['back_hip_inseam'][1]],
-            'k-', linewidth=0.5, alpha=0.4)
-    # CB guideline: slant origin → bcw_mark and beyond
-    cb_ext = bpts['bcw_mark'] + bcon['cb_perp_unit'] * 20
-    ax.plot([bpts['cb_slant_origin'][0], bpts['bcw_mark'][0], cb_ext[0]],
-            [bpts['cb_slant_origin'][1], bpts['bcw_mark'][1], cb_ext[1]],
-            color='cornflowerblue', linewidth=0.8, linestyle='--', alpha=0.5)
-    ax.annotate('CB', (cb_ext[0], cb_ext[1]), textcoords='offset points',
-                xytext=(4, 4), fontsize=7, fontweight='bold', color='cornflowerblue')
+    if debug:
+        # ── Step 3: Connect Knee to Hip + CB Direction ─────────────────
+        ax.plot([bpts['back_knee_side'][0], bpts['back_hip_side'][0]],
+                [bpts['back_knee_side'][1], bpts['back_hip_side'][1]],
+                'k-', linewidth=0.5, alpha=0.4)
+        ax.plot([bpts['back_knee_inseam'][0], bpts['back_hip_inseam'][0]],
+                [bpts['back_knee_inseam'][1], bpts['back_hip_inseam'][1]],
+                'k-', linewidth=0.5, alpha=0.4)
+        cb_ext = bpts['bcw_mark'] + bcon['cb_perp_unit'] * 20
+        ax.plot([bpts['cb_slant_origin'][0], bpts['bcw_mark'][0], cb_ext[0]],
+                [bpts['cb_slant_origin'][1], bpts['bcw_mark'][1], cb_ext[1]],
+                color='cornflowerblue', linewidth=0.8, linestyle='--', alpha=0.5)
+        ax.annotate('CB', (cb_ext[0], cb_ext[1]), textcoords='offset points',
+                    xytext=(4, 4), fontsize=7, fontweight='bold', color='cornflowerblue')
 
     if step < 4:
-        _finish_back_plot(fig, ax, back, output_path, step)
+        _finish_back_plot(fig, ax, back, output_path, step, debug)
         return
 
-    # ── Step 4: Transfer Lengths + Waist Heights ───────────────────
+    if debug:
+        # ── Step 4: Transfer Lengths + Waist Heights ───────────────────
+        ax.plot(*bpts['back_crotch_pt'], 'ko', markersize=4)
+        ax.annotate(f"inseam {bcon['back_inseam_target']:.1f}\n(front {bcon['front_inseam_len']:.1f} \u2212 0.7)",
+                    bpts['back_crotch_pt'], textcoords='offset points',
+                    xytext=(6, -6), fontsize=5, color='black')
 
-    # (a) Back crotch point — inseam length transfer (front inseam − 0.7)
-    ax.plot(*bpts['back_crotch_pt'], 'ko', markersize=4)
-    ax.annotate(f"inseam {bcon['back_inseam_target']:.1f}\n(front {bcon['front_inseam_len']:.1f} \u2212 0.7)",
-                bpts['back_crotch_pt'], textcoords='offset points',
-                xytext=(6, -6), fontsize=5, color='black')
+        ax.plot([bpts['back_hip_side'][0], bpts['back_waist_side'][0]],
+                [bpts['back_hip_side'][1], bpts['back_waist_side'][1]],
+                'k-', linewidth=0.5, alpha=0.4)
+        ax.plot(*bpts['back_waist_side'], 'ko', markersize=4)
+        ax.annotate(f"sideseam {bcon['front_side_from_knee']:.1f}\n(from knee)",
+                    bpts['back_waist_side'], textcoords='offset points',
+                    xytext=(-12, 6), fontsize=5, color='black', ha='right')
 
-    # (b) Extend sideseam guideline upward past hip → back_waist_side
-    ax.plot([bpts['back_hip_side'][0], bpts['back_waist_side'][0]],
-            [bpts['back_hip_side'][1], bpts['back_waist_side'][1]],
-            'k-', linewidth=0.5, alpha=0.4)
-    ax.plot(*bpts['back_waist_side'], 'ko', markersize=4)
-    ax.annotate(f"sideseam {bcon['front_side_from_knee']:.1f}\n(from knee)",
-                bpts['back_waist_side'], textcoords='offset points',
-                xytext=(-12, 6), fontsize=5, color='black', ha='right')
+        back_cl_knee = bcon['back_creaseline_knee']
+        ax.plot([back_cl_knee[0], bpts['back_waist_side'][0]],
+                [back_cl_knee[1], bpts['back_waist_side'][1]],
+                color='cornflowerblue', linewidth=0.8, linestyle='--', alpha=0.5)
+        mid_meas = (back_cl_knee + bpts['back_waist_side']) / 2
+        ax.annotate(f"{bcon['waist_side_height']:.1f}",
+                    mid_meas, textcoords='offset points',
+                    xytext=(6, 0), fontsize=6, color='cornflowerblue', ha='left')
+        ax.plot(*back_cl_knee, '+', color='cornflowerblue', markersize=5)
 
-    # (c) CB waist height: knee centre → waist_side, then transfer + 0–1 cm along CB
-    back_cl_knee = bcon['back_creaseline_knee']
-
-    # Intermediate line: back creaseline @ knee → back_waist_side (the measurement)
-    ax.plot([back_cl_knee[0], bpts['back_waist_side'][0]],
-            [back_cl_knee[1], bpts['back_waist_side'][1]],
-            color='cornflowerblue', linewidth=0.8, linestyle='--', alpha=0.5)
-    mid_meas = (back_cl_knee + bpts['back_waist_side']) / 2
-    ax.annotate(f"{bcon['waist_side_height']:.1f}",
-                mid_meas, textcoords='offset points',
-                xytext=(6, 0), fontsize=6, color='cornflowerblue', ha='left')
-    ax.plot(*back_cl_knee, '+', color='cornflowerblue', markersize=5)
-
-    # Transfer that distance + 0–1 cm upward along CB from knee
-    ax.plot([back_cl_knee[0], bpts['back_cb_waist'][0]],
-            [back_cl_knee[1], bpts['back_cb_waist'][1]],
-            color='cornflowerblue', linewidth=0.6, linestyle=':', alpha=0.5)
-    ax.plot(*bpts['back_cb_waist'], 'ko', markersize=4)
-    ax.annotate(f"{bcon['waist_side_height']:.1f} + {bcon['cb_height_extra']:.1f}",
-                bpts['back_cb_waist'], textcoords='offset points',
-                xytext=(6, 6), fontsize=5, color='black')
+        ax.plot([back_cl_knee[0], bpts['back_cb_waist'][0]],
+                [back_cl_knee[1], bpts['back_cb_waist'][1]],
+                color='cornflowerblue', linewidth=0.6, linestyle=':', alpha=0.5)
+        ax.plot(*bpts['back_cb_waist'], 'ko', markersize=4)
+        ax.annotate(f"{bcon['waist_side_height']:.1f} + {bcon['cb_height_extra']:.1f}",
+                    bpts['back_cb_waist'], textcoords='offset points',
+                    xytext=(6, 6), fontsize=5, color='black')
 
     if step < 5:
-        _finish_back_plot(fig, ax, back, output_path, step)
+        _finish_back_plot(fig, ax, back, output_path, step, debug)
         return
 
-    # ── Step 5: Waistline + Darts ──────────────────────────────────
-    # Waistline (construction straight line, extended past CB)
-    waist_unit = (bpts['back_cb_waist'] - bpts['back_waist_side'])
-    waist_unit = waist_unit / np.linalg.norm(waist_unit)
-    waist_ext = bpts['back_cb_waist'] + waist_unit * 5  # extend past CB
-    ax.plot([bpts['back_waist_side'][0], waist_ext[0]],
-            [bpts['back_waist_side'][1], waist_ext[1]],
-            'k-', linewidth=0.5, alpha=0.3)
+    if debug:
+        # ── Step 5: Waistline + Darts (construction) ──────────────────
+        waist_unit = (bpts['back_cb_waist'] - bpts['back_waist_side'])
+        waist_unit = waist_unit / np.linalg.norm(waist_unit)
+        waist_ext = bpts['back_cb_waist'] + waist_unit * 5
+        ax.plot([bpts['back_waist_side'][0], waist_ext[0]],
+                [bpts['back_waist_side'][1], waist_ext[1]],
+                'k-', linewidth=0.5, alpha=0.3)
 
-    # Front waist minus pleat: transferred from CB to the right
-    fwt = bpts['front_waist_transfer_pt']
-    ax.plot([bpts['back_cb_waist'][0], fwt[0]],
-            [bpts['back_cb_waist'][1], fwt[1]],
-            'k--', linewidth=0.8, alpha=0.4)
-    ax.plot(*fwt, '|', color='black', markersize=8, markeredgewidth=1.5)
-    ax.annotate(f"front waist \u2212 pleat\n{bcon['front_waist_minus_pleat']:.1f}",
-                fwt, textcoords='offset points',
-                xytext=(6, -10), fontsize=5, color='black', ha='left')
+        fwt = bpts['front_waist_transfer_pt']
+        ax.plot([bpts['back_cb_waist'][0], fwt[0]],
+                [bpts['back_cb_waist'][1], fwt[1]],
+                'k--', linewidth=0.8, alpha=0.4)
+        ax.plot(*fwt, '|', color='black', markersize=8, markeredgewidth=1.5)
+        ax.annotate(f"front waist \u2212 pleat\n{bcon['front_waist_minus_pleat']:.1f}",
+                    fwt, textcoords='offset points',
+                    xytext=(6, -10), fontsize=5, color='black', ha='left')
 
-    # From transfer point, ½ Wbg + darts to the left (toward sideseam)
-    chk = bpts['waist_check_pt']
-    ax.plot(*chk, '|', color='cornflowerblue', markersize=8, markeredgewidth=1.5)
-    ax.annotate(f"\u00bd Wbg + darts\n{bcon['half_Wbg']:.0f} + {bcon['dart_total']:.1f}",
-                chk, textcoords='offset points',
-                xytext=(0, 10), fontsize=5, color='cornflowerblue', ha='center')
+        chk = bpts['waist_check_pt']
+        ax.plot(*chk, '|', color='cornflowerblue', markersize=8, markeredgewidth=1.5)
+        ax.annotate(f"\u00bd Wbg + darts\n{bcon['half_Wbg']:.0f} + {bcon['dart_total']:.1f}",
+                    chk, textcoords='offset points',
+                    xytext=(0, 10), fontsize=5, color='cornflowerblue', ha='center')
 
-    # Remaining = sideseam intake (distance from check_pt to sideseam)
-    intake = bcon['sideseam_intake']
-    ax.annotate(f"remaining {intake:.1f}\n(expect 1\u20131.5)",
-                bpts['back_waist_side'], textcoords='offset points',
-                xytext=(-12, -10), fontsize=5,
-                color='red' if intake < 0.8 else 'darkgreen', ha='right')
+        intake = bcon['sideseam_intake']
+        ax.annotate(f"remaining {intake:.1f}\n(expect 1\u20131.5)",
+                    bpts['back_waist_side'], textcoords='offset points',
+                    xytext=(-12, -10), fontsize=5,
+                    color='red' if intake < 0.8 else 'darkgreen', ha='right')
 
-    # Darts
+    # Darts (always shown — they're part of the pattern)
     DART_STYLE = dict(color='black', linewidth=1.0, zorder=4)
-    # Small dart (2.0 cm, 7.5 cm)
     ax.plot([bpts['dart1_left'][0], bpts['dart1_tip'][0], bpts['dart1_right'][0]],
             [bpts['dart1_left'][1], bpts['dart1_tip'][1], bpts['dart1_right'][1]],
             **DART_STYLE)
-    # Large dart (2.5 cm, 9.5 cm)
     ax.plot([bpts['dart2_left'][0], bpts['dart2_tip'][0], bpts['dart2_right'][0]],
             [bpts['dart2_left'][1], bpts['dart2_tip'][1], bpts['dart2_right'][1]],
             **DART_STYLE)
 
     if step < 6:
-        _finish_back_plot(fig, ax, back, output_path, step)
+        _finish_back_plot(fig, ax, back, output_path, step, debug)
         return
 
     # ── Step 6: Final Curves and Outline ───────────────────────────
@@ -763,19 +753,19 @@ def plot_trouser_back(front, back, output_path='Logs/trouser_back.svg',
     ax.plot(bcrv['waist_seg2'][:, 0], bcrv['waist_seg2'][:, 1], **OUTLINE)
     ax.plot(bcrv['waist_seg3'][:, 0], bcrv['waist_seg3'][:, 1], **OUTLINE)
 
-    # Verification line: perpendicular from CB to sideseam/hipline
-    VERIF = dict(color='darkgreen', linewidth=0.8, linestyle='--', alpha=0.6)
-    ax.plot([bpts['bcw_mark'][0], bpts['back_hip_side'][0]],
-            [bpts['bcw_mark'][1], bpts['back_hip_side'][1]], **VERIF)
-    verif = bcon['verif_dist']
-    expected = bcon['verif_expected']
-    mid_verif = (bpts['bcw_mark'] + bpts['back_hip_side']) / 2
-    ax.annotate(f"{verif:.1f} (\u00bc Hg + 3 \u2248 {expected:.1f})",
-                mid_verif, textcoords='offset points',
-                xytext=(0, -8), fontsize=6, color='darkgreen', ha='center')
-
-    # -- Debug: dimension annotations --
     if debug:
+        # Verification line: perpendicular from CB to sideseam/hipline
+        VERIF = dict(color='darkgreen', linewidth=0.8, linestyle='--', alpha=0.6)
+        ax.plot([bpts['bcw_mark'][0], bpts['back_hip_side'][0]],
+                [bpts['bcw_mark'][1], bpts['back_hip_side'][1]], **VERIF)
+        verif = bcon['verif_dist']
+        expected = bcon['verif_expected']
+        mid_verif = (bpts['bcw_mark'] + bpts['back_hip_side']) / 2
+        ax.annotate(f"{verif:.1f} (\u00bc Hg + 3 \u2248 {expected:.1f})",
+                    mid_verif, textcoords='offset points',
+                    xytext=(0, -8), fontsize=6, color='darkgreen', ha='center')
+
+        # Dimension annotations
         _annotate_len(ax, bcrv['crotch'], offset=(6, 6))
         _annotate_len(ax, bcrv['inseam'], offset=(8, 0))
         _annotate_len(ax, bcrv['side_lower'], offset=(-10, 0), label='side lo')
@@ -790,13 +780,15 @@ def plot_trouser_back(front, back, output_path='Logs/trouser_back.svg',
         _annotate_len(ax, np.array([bpts['back_hem_side'], bpts['back_hem_inseam']]),
                       offset=(0, -8))
 
-    _finish_back_plot(fig, ax, back, output_path, step)
+    _finish_back_plot(fig, ax, back, output_path, step, debug)
 
 
-def _finish_back_plot(fig, ax, back, output_path, step):
+def _finish_back_plot(fig, ax, back, output_path, step, debug=False):
     """Common plot finalization."""
+    if not debug:
+        ax.axis('off')
     from garment_programs.plot_utils import save_pattern
-    save_pattern(fig, ax, output_path, units='cm')
+    save_pattern(fig, ax, output_path, units='cm', calibration=not debug)
 
 
 # -- Entry point for generic runner ------------------------------------------

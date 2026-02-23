@@ -326,11 +326,8 @@ def plot_trouser_front(draft, output_path='Logs/trouser_front.svg',
                        debug=False, units='cm', step=5):
     """Render the trouser front draft up to the given step (1-5).
 
-    step=1: framework only
-    step=2: + widths and creaseline
-    step=3: + hem widths, pleat, CF
-    step=4: + shaping (knee, crotch guide, waist sideseam)
-    step=5: + final curves and complete outline
+    debug=False (pattern mode): clean outline + grainline + pleat symbols only.
+    debug=True: adds construction lines, reference lines, point labels, dimensions.
     """
     pts = draft['points']
     lvl = draft['levels']
@@ -344,98 +341,101 @@ def plot_trouser_front(draft, output_path='Logs/trouser_front.svg',
     CON = dict(color='cornflowerblue', linewidth=0.6, linestyle=':', alpha=0.5)
     x_max = con['fcw_mark_x'] + 5
 
-    # ── Step 1: Framework ─────────────────────────────────────────
-    # Horizontal reference lines
-    for name, y in lvl.items():
-        ax.plot([-2, x_max], [y, y], **REF)
-        ax.annotate(name, (x_max, y), textcoords='offset points',
-                    xytext=(4, 2), fontsize=7, color='gray')
+    if debug:
+        # ── Step 1: Framework ─────────────────────────────────────────
+        # Horizontal reference lines
+        for name, y in lvl.items():
+            ax.plot([-2, x_max], [y, y], **REF)
+            ax.annotate(name, (x_max, y), textcoords='offset points',
+                        xytext=(4, 2), fontsize=7, color='gray')
 
-    # Left vertical reference (A upward)
-    ax.plot([0, 0], [-3, lvl['waistline'] + 5], 'k-', linewidth=0.8)
+        # Left vertical reference (A upward)
+        ax.plot([0, 0], [-3, lvl['waistline'] + 5], 'k-', linewidth=0.8)
 
-    # Dimension annotations (left side)
-    for val, label, xoff in [(mm['Kh'], 'Kh', -5),
-                              (mm['Is'], 'Is', -7),
-                              (mm['Sl'], 'Sl', -9)]:
-        ax.annotate('', xy=(-3, 0), xytext=(-3, val),
-                    arrowprops=dict(arrowstyle='<->', color='dimgray', lw=0.7))
-        ax.text(xoff, val / 2, f"{label}={val:.1f}", fontsize=6,
-                color='dimgray', ha='right', va='center', rotation=90)
+        # Dimension annotations (left side)
+        for val, label, xoff in [(mm['Kh'], 'Kh', -5),
+                                  (mm['Is'], 'Is', -7),
+                                  (mm['Sl'], 'Sl', -9)]:
+            ax.annotate('', xy=(-3, 0), xytext=(-3, val),
+                        arrowprops=dict(arrowstyle='<->', color='dimgray', lw=0.7))
+            ax.text(xoff, val / 2, f"{label}={val:.1f}", fontsize=6,
+                    color='dimgray', ha='right', va='center', rotation=90)
 
-    # Point A
-    ax.plot(0, 0, 'ko', markersize=5)
-    ax.annotate('A', (0, 0), textcoords='offset points',
-                xytext=(-8, -8), fontsize=9, fontweight='bold')
+        # Point A
+        ax.plot(0, 0, 'ko', markersize=5)
+        ax.annotate('A', (0, 0), textcoords='offset points',
+                    xytext=(-8, -8), fontsize=9, fontweight='bold')
 
     if step < 2:
-        _finish_plot(fig, ax, draft, output_path, step)
+        _finish_plot(fig, ax, draft, output_path, step, debug)
         return
 
-    # ── Step 2: Widths and creaseline ─────────────────────────────
-    # Ftw perpendicular (crotch → waist)
-    ax.plot([con['ftw_x'], con['ftw_x']],
-            [lvl['crotch line'], lvl['waistline']],
-            'k-', linewidth=0.6, alpha=0.5)
+    if debug:
+        # ── Step 2: Widths and creaseline ─────────────────────────────
+        # Ftw perpendicular (crotch → waist)
+        ax.plot([con['ftw_x'], con['ftw_x']],
+                [lvl['crotch line'], lvl['waistline']],
+                'k-', linewidth=0.6, alpha=0.5)
 
-    # Crotch point
-    ax.plot(*pts['crotch_pt'], 'ko', markersize=4)
-    ax.annotate('crotch pt', pts['crotch_pt'], textcoords='offset points',
-                xytext=(4, -8), fontsize=6, color='black')
+        # Crotch point
+        ax.plot(*pts['crotch_pt'], 'ko', markersize=4)
+        ax.annotate('crotch pt', pts['crotch_pt'], textcoords='offset points',
+                    xytext=(4, -8), fontsize=6, color='black')
 
-    # Creaseline (grainline)
+        # Mid hip/crotch mark
+        ax.plot([-1, 3], [con['mid_hip_crotch_y']] * 2, **CON)
+        ax.annotate('1/2', (-1, con['mid_hip_crotch_y']), textcoords='offset points',
+                    xytext=(-8, 2), fontsize=6, color='cornflowerblue')
+
+        # Ftw / Fcw dimension arrows
+        ax.annotate('', xy=(0, lvl['hipline'] + 1),
+                    xytext=(con['ftw_x'], lvl['hipline'] + 1),
+                    arrowprops=dict(arrowstyle='<->', color='blue', lw=0.6))
+        ax.text(con['ftw_x'] / 2, lvl['hipline'] + 2.5, f"Ftw={mm['Ftw']:.1f}",
+                fontsize=6, color='blue', ha='center')
+
+        ax.annotate('', xy=(con['ftw_x'], lvl['hipline'] + 1),
+                    xytext=(con['fcw_mark_x'], lvl['hipline'] + 1),
+                    arrowprops=dict(arrowstyle='<->', color='blue', lw=0.6))
+        ax.text((con['ftw_x'] + con['fcw_mark_x']) / 2, lvl['hipline'] + 2.5,
+                f"Fcw={mm['Fcw']:.1f}", fontsize=6, color='blue', ha='center')
+
+    # Creaseline / grainline (always shown)
     ax.plot([con['creaseline_x'], con['creaseline_x']],
             [-3, lvl['waistline'] + 3],
             'k-.', linewidth=0.6, alpha=0.5)
-    ax.annotate('front creaseline', (con['creaseline_x'], -3),
-                fontsize=7, color='black', ha='center', va='top')
-
-    # Mid hip/crotch mark
-    ax.plot([-1, 3], [con['mid_hip_crotch_y']] * 2, **CON)
-    ax.annotate('1/2', (-1, con['mid_hip_crotch_y']), textcoords='offset points',
-                xytext=(-8, 2), fontsize=6, color='cornflowerblue')
-
-    # Ftw / Fcw dimension arrows
-    ax.annotate('', xy=(0, lvl['hipline'] + 1),
-                xytext=(con['ftw_x'], lvl['hipline'] + 1),
-                arrowprops=dict(arrowstyle='<->', color='blue', lw=0.6))
-    ax.text(con['ftw_x'] / 2, lvl['hipline'] + 2.5, f"Ftw={mm['Ftw']:.1f}",
-            fontsize=6, color='blue', ha='center')
-
-    ax.annotate('', xy=(con['ftw_x'], lvl['hipline'] + 1),
-                xytext=(con['fcw_mark_x'], lvl['hipline'] + 1),
-                arrowprops=dict(arrowstyle='<->', color='blue', lw=0.6))
-    ax.text((con['ftw_x'] + con['fcw_mark_x']) / 2, lvl['hipline'] + 2.5,
-            f"Fcw={mm['Fcw']:.1f}", fontsize=6, color='blue', ha='center')
+    if debug:
+        ax.annotate('front creaseline', (con['creaseline_x'], -3),
+                    fontsize=7, color='black', ha='center', va='top')
 
     if step < 3:
-        _finish_plot(fig, ax, draft, output_path, step)
+        _finish_plot(fig, ax, draft, output_path, step, debug)
         return
 
-    # ── Step 3: Hem widths, pleat, CF ─────────────────────────────
-    # Hem width marks
-    for pt_name in ('hem_side', 'hem_inseam'):
-        p = pts[pt_name]
-        ax.plot(p[0], p[1], 'k+', markersize=6)
-    # Hem width dimension
-    ax.annotate('', xy=(pts['hem_side'][0], -2),
-                xytext=(con['creaseline_x'], -2),
-                arrowprops=dict(arrowstyle='<->', color='green', lw=0.5))
-    ax.text((pts['hem_side'][0] + con['creaseline_x']) / 2, -3.5,
-            f"{con['hem_half']:.1f}", fontsize=6, color='green', ha='center')
-    ax.annotate('', xy=(con['creaseline_x'], -2),
-                xytext=(pts['hem_inseam'][0], -2),
-                arrowprops=dict(arrowstyle='<->', color='green', lw=0.5))
-    ax.text((con['creaseline_x'] + pts['hem_inseam'][0]) / 2, -3.5,
-            f"{con['hem_half']:.1f}", fontsize=6, color='green', ha='center')
+    if debug:
+        # ── Step 3: Hem widths, pleat, CF ─────────────────────────────
+        # Hem width marks
+        for pt_name in ('hem_side', 'hem_inseam'):
+            p = pts[pt_name]
+            ax.plot(p[0], p[1], 'k+', markersize=6)
+        # Hem width dimension
+        ax.annotate('', xy=(pts['hem_side'][0], -2),
+                    xytext=(con['creaseline_x'], -2),
+                    arrowprops=dict(arrowstyle='<->', color='green', lw=0.5))
+        ax.text((pts['hem_side'][0] + con['creaseline_x']) / 2, -3.5,
+                f"{con['hem_half']:.1f}", fontsize=6, color='green', ha='center')
+        ax.annotate('', xy=(con['creaseline_x'], -2),
+                    xytext=(pts['hem_inseam'][0], -2),
+                    arrowprops=dict(arrowstyle='<->', color='green', lw=0.5))
+        ax.text((con['creaseline_x'] + pts['hem_inseam'][0]) / 2, -3.5,
+                f"{con['hem_half']:.1f}", fontsize=6, color='green', ha='center')
 
-    # 0.5 cm guideline marks
-    for pt_name in ('hem_side_guide', 'hem_inseam_guide'):
-        p = pts[pt_name]
-        ax.plot(p[0], p[1], 'x', color='gray', markersize=4)
+        # 0.5 cm guideline marks
+        for pt_name in ('hem_side_guide', 'hem_inseam_guide'):
+            p = pts[pt_name]
+            ax.plot(p[0], p[1], 'x', color='gray', markersize=4)
 
-    # Pleat symbols: loop over all pleats (empty for 0-pleat)
-    # Extend vertical lines up to the raised waistline curve
+    # Pleat symbols: loop over all pleats (always shown; empty for 0-pleat)
     waist_crv = crv['waistline']
     chev_h = 1.5               # chevron height
     drop   = 6.0               # vertical lines extend below waist curve
@@ -457,62 +457,65 @@ def plot_trouser_front(draft, output_path='Logs/trouser_front.svg',
                 [py_l - 0.5 - chev_h, py_m - 0.5 - 2 * chev_h, py_r - 0.5 - chev_h],
                 'k-', linewidth=0.8)
 
-    # CF line (angled: hipline → waistline)
-    ax.plot([con['cf_hip_x'], con['cf_waist_x']],
-            [lvl['hipline'], lvl['waistline']],
-            'k-', linewidth=0.8, alpha=0.6)
-    ax.annotate('CF', (con['cf_waist_x'], lvl['waistline']),
-                textcoords='offset points', xytext=(4, 4),
-                fontsize=7, fontweight='bold', color='black')
+    if debug:
+        # CF line (angled: hipline → waistline)
+        ax.plot([con['cf_hip_x'], con['cf_waist_x']],
+                [lvl['hipline'], lvl['waistline']],
+                'k-', linewidth=0.8, alpha=0.6)
+        ax.annotate('CF', (con['cf_waist_x'], lvl['waistline']),
+                    textcoords='offset points', xytext=(4, 4),
+                    fontsize=7, fontweight='bold', color='black')
 
-    # Sideseam guideline: hem_side_guide angled to mid_side (halfway between hip & crotch)
-    ax.plot([pts['hem_side_guide'][0], pts['mid_side'][0]],
-            [pts['hem_side_guide'][1], pts['mid_side'][1]],
-            'k-', linewidth=0.5, alpha=0.4)
+        # Sideseam guideline: hem_side_guide angled to mid_side (halfway between hip & crotch)
+        ax.plot([pts['hem_side_guide'][0], pts['mid_side'][0]],
+                [pts['hem_side_guide'][1], pts['mid_side'][1]],
+                'k-', linewidth=0.5, alpha=0.4)
 
-    # Inseam guideline: hem_inseam_guide angled to Fcw mark on hipline
-    ax.plot([pts['hem_inseam_guide'][0], con['fcw_mark_x']],
-            [pts['hem_inseam_guide'][1], lvl['hipline']],
-            'k-', linewidth=0.5, alpha=0.4)
+        # Inseam guideline: hem_inseam_guide angled to Fcw mark on hipline
+        ax.plot([pts['hem_inseam_guide'][0], con['fcw_mark_x']],
+                [pts['hem_inseam_guide'][1], lvl['hipline']],
+                'k-', linewidth=0.5, alpha=0.4)
 
     if step < 4:
-        _finish_plot(fig, ax, draft, output_path, step)
+        _finish_plot(fig, ax, draft, output_path, step, debug)
         return
 
-    # ── Step 4: Shaping ───────────────────────────────────────────
-    # Hem perpendiculars (~4 cm tall)
-    for p in (pts['hem_side'], pts['hem_inseam']):
-        ax.plot([p[0], p[0]], [p[1], p[1] + 4], **CON)
+    if debug:
+        # ── Step 4: Shaping ───────────────────────────────────────────
+        # Hem perpendiculars (~4 cm tall)
+        for p in (pts['hem_side'], pts['hem_inseam']):
+            ax.plot([p[0], p[0]], [p[1], p[1] + 4], **CON)
 
-    # Knee points
-    ax.plot(*pts['knee_side'], 'ko', markersize=3)
-    ax.plot(*pts['knee_inseam'], 'ko', markersize=3)
-    ax.annotate('knee (side)', pts['knee_side'], textcoords='offset points',
-                xytext=(-10, -8), fontsize=5, color='gray')
-    ax.annotate('knee (inseam)', pts['knee_inseam'], textcoords='offset points',
-                xytext=(4, -8), fontsize=5, color='gray')
+        # Knee points
+        ax.plot(*pts['knee_side'], 'ko', markersize=3)
+        ax.plot(*pts['knee_inseam'], 'ko', markersize=3)
+        ax.annotate('knee (side)', pts['knee_side'], textcoords='offset points',
+                    xytext=(-10, -8), fontsize=5, color='gray')
+        ax.annotate('knee (inseam)', pts['knee_inseam'], textcoords='offset points',
+                    xytext=(4, -8), fontsize=5, color='gray')
 
-    # Crotch guide and slanted line
-    ax.plot(*pts['crotch_guide'], 'o', color='cornflowerblue', markersize=4)
-    ax.plot([pts['crotch_guide'][0], pts['crotch_pt'][0]],
-            [pts['crotch_guide'][1], pts['crotch_pt'][1]], **CON)
-    ax.annotate('crotch guide', pts['crotch_guide'], textcoords='offset points',
-                xytext=(-12, 6), fontsize=5, color='cornflowerblue')
+        # Crotch guide and slanted line
+        ax.plot(*pts['crotch_guide'], 'o', color='cornflowerblue', markersize=4)
+        ax.plot([pts['crotch_guide'][0], pts['crotch_pt'][0]],
+                [pts['crotch_guide'][1], pts['crotch_pt'][1]], **CON)
+        ax.annotate('crotch guide', pts['crotch_guide'], textcoords='offset points',
+                    xytext=(-12, 6), fontsize=5, color='cornflowerblue')
 
-    # Waist sideseam point (only show un-raised version in step 4)
+        # Waist sideseam point (only show un-raised version in step 4)
+        if step < 5:
+            ax.plot(*pts['waist_side'], 'ko', markersize=4)
+            ax.annotate(f"waist side ({mm['waist_side_x']:.1f})",
+                        pts['waist_side'], textcoords='offset points',
+                        xytext=(-8, 6), fontsize=5, color='black')
+
     if step < 5:
-        ax.plot(*pts['waist_side'], 'ko', markersize=4)
-        ax.annotate(f"waist side ({mm['waist_side_x']:.1f})",
-                    pts['waist_side'], textcoords='offset points',
-                    xytext=(-8, 6), fontsize=5, color='black')
-
-    if step < 5:
-        _finish_plot(fig, ax, draft, output_path, step)
+        _finish_plot(fig, ax, draft, output_path, step, debug)
         return
 
     # ── Step 5: Final curves and complete outline ─────────────────
-    # Raised waist point
-    ax.plot(*pts['waist_side_raised'], 'ko', markersize=4)
+    if debug:
+        # Raised waist point
+        ax.plot(*pts['waist_side_raised'], 'ko', markersize=4)
 
     # Waistline curve
     ax.plot(crv['waistline'][:, 0], crv['waistline'][:, 1],
@@ -572,13 +575,15 @@ def plot_trouser_front(draft, output_path='Logs/trouser_front.svg',
         _annotate_len(ax, np.array([pts['knee_side'], pts['hem_side_top']]), offset=(-10, 0))
         _annotate_len(ax, np.array([pts['hem_side'], pts['hem_inseam']]), offset=(0, -8))
 
-    _finish_plot(fig, ax, draft, output_path, step)
+    _finish_plot(fig, ax, draft, output_path, step, debug)
 
 
-def _finish_plot(fig, ax, draft, output_path, step):
+def _finish_plot(fig, ax, draft, output_path, step, debug=False):
     """Common plot finalization."""
+    if not debug:
+        ax.axis('off')
     from garment_programs.plot_utils import save_pattern
-    save_pattern(fig, ax, output_path, units='cm')
+    save_pattern(fig, ax, output_path, units='cm', calibration=not debug)
 
 
 # -- Entry point for generic runner ------------------------------------------

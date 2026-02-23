@@ -482,7 +482,7 @@ def plot_jeans_front(draft, output_path='Logs/jeans_front.svg', debug=False, uni
         ax.axis('off')
 
     from garment_programs.plot_utils import save_pattern
-    save_pattern(fig, ax, output_path, units=units)
+    save_pattern(fig, ax, output_path, units=units, calibration=not debug)
 
 
 # -- Entry point for generic runner ------------------------------------------

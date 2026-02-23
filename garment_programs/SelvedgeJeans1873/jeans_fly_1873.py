@@ -141,7 +141,7 @@ def plot_jeans_fly_1873(fly, output_path='Logs/jeans_fly_1873.svg',
         ax.axis('off')
 
     from garment_programs.plot_utils import save_pattern
-    save_pattern(fig, ax, output_path, units=units)
+    save_pattern(fig, ax, output_path, units=units, calibration=not debug)
 
 
 # -- Entry point for generic runner ------------------------------------------

@@ -97,47 +97,17 @@ def main():
     if args.program:
         program_name = args.program
     else:
-        # Build choice list: garments first (with indented pieces), then standalone programs
-        choices = []
-        garment_pkgs = set()
-        for pkg, garment in garments:
-            choices.append(garment['name'])
-            garment_pkgs.add(pkg)
-            for piece in garment['pieces']:
-                choices.append(f"  {piece['name']}")
-
-        # Add standalone programs (not part of a garment package)
-        standalone = sorted(
-            str(p.relative_to(PROGRAMS_DIR)).replace('/', '.').removesuffix('.py')
-            for p in PROGRAMS_DIR.rglob('*.py')
-            if p.name != '__init__.py'
-        )
-        for prog in standalone:
-            pkg_prefix = prog.split('.')[0] if '.' in prog else None
-            if pkg_prefix not in garment_pkgs:
-                choices.append(prog)
-
+        choices = [garment['name'] for _, garment in garments]
         selected = _fzf_select(choices, 'Program')
-
-        # Resolve selection back to a program_name
-        for pkg, garment in garments:
-            if selected == garment['name']:
-                program_name = garment['name']
-                break
-            for piece in garment['pieces']:
-                if selected.strip() == piece['name']:
-                    program_name = f"{pkg}.{piece['module']}"
-                    break
-            else:
-                continue
-            break
-        else:
-            # Standalone program selected as-is
-            program_name = selected
+        program_name = selected
 
     # --- mode selection ---
+    # -d / --debug enables debug mode; when omitted AND running non-interactively
+    # (all other args provided), default to pattern mode without prompting.
     if args.debug:
         debug = True
+    elif args.measurements and args.program:
+        debug = False
     else:
         mode = _fzf_select(['pattern', 'debug (construction lines, labels, grid)'], 'Mode')
         debug = mode.startswith('debug')
@@ -146,13 +116,13 @@ def main():
     if args.units:
         units = args.units
     else:
-        units = _fzf_select(['cm', 'inch'], 'Units')
+        units = _fzf_select(['inch', 'cm'], 'Units')
 
     # --- format selection ---
     if args.format:
         fmt = args.format
     else:
-        fmt = _fzf_select(['svg', 'pdf'], 'Output format')
+        fmt = _fzf_select(['pdf', 'svg'], 'Output format')
 
     # --- import and run ---
     timestamp = datetime.now().strftime('%Y-%m-%d_%H%M%S')

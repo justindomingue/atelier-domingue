@@ -355,7 +355,7 @@ def plot_jeans_back(front, back, output_path='Logs/jeans_back.svg', debug=False,
         ax.grid(True, alpha=0.2)
 
     from garment_programs.plot_utils import save_pattern
-    save_pattern(fig, ax, output_path, units=units)
+    save_pattern(fig, ax, output_path, units=units, calibration=not debug)
 
 
 # -- Entry point for generic runner ------------------------------------------
