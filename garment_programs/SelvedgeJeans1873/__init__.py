@@ -11,6 +11,8 @@ GARMENT = {
         {'module': 'jeans_fly_one_piece', 'name': 'Fly (One-Piece)'},
         {'module': 'jeans_front_pocket', 'name': 'Front Pocket'},
         {'module': 'jeans_back_pocket',  'name': 'Back Pocket'},
+        {'module': 'jeans_watch_pocket', 'name': 'Watch Pocket (1873)'},
+        {'module': 'jeans_front_facing', 'name': 'Front Pocket Facing'},
         {'module': 'jeans_back_cinch',   'name': 'Back Cinch Belt'},
     ],
 }

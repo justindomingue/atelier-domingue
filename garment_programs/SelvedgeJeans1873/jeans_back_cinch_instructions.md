@@ -40,7 +40,13 @@ Draw the top and bottom SA lines, extending them slightly past the ends.
 
 ### 5. Add seam allowances (short ends)
 
-Add **1/2"** on both ends.
+Add **1/2"** on both ends (shown in red on the draft).
+
+## Draft visualization
+
+The final draft shows five horizontal lines (SA top, finished top, center,
+finished bottom, SA bottom), vertical construction lines at both ends spanning
+the full SA height, and the 1/2" end SA verticals highlighted in red.
 
 ## Cutting note
 

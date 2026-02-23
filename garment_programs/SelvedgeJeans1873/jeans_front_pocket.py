@@ -21,8 +21,85 @@ from pathlib import Path
 from .jeans_front import (
     INCH, load_measurements, draft_jeans_front,
     _bezier_cubic, _curve_length, _annotate_segment,
-    _point_at_arclength,
+    _point_at_arclength, _offset_polyline,
 )
+
+
+# -- Watch pocket helper -----------------------------------------------------
+
+def _draft_watch_pocket(m, front, pocket_upper, pocket_lower, opening_curve):
+    """Draft the 1873 watch pocket (pentagon/shield shape).
+
+    Dimensions from the source:
+    - Top width: 3 1/2" (1 3/4" each side of center)
+    - Height: 4" straight section
+    - Bottom width: 3" (1 1/2" each side of center)
+    - Below 4": tapers to center point at 4 1/2" total height
+    - Shape: straight top, straight sides, V-bottom
+
+    Positioning (from the pattern book):
+    - About 1"–1 1/2" below the top edge (waist seamline)
+    - About 1 1/2" from the side seam
+    - Following the angle of the waist seam
+    """
+    fpts = front['points']
+
+    # -- Positioning --
+    # The waist seam runs from pt1' to pt7'.  Use its direction to orient
+    # the watch pocket so it follows the waist angle.
+    pt1p = fpts["1'"]
+    pt7p = fpts["7'"]
+    waist_dir = pt7p - pt1p
+    waist_dir_norm = waist_dir / np.linalg.norm(waist_dir)
+    # "Down" from waist = perpendicular, toward the hem (+x direction).
+    down = np.array([-waist_dir_norm[1], waist_dir_norm[0]])
+    # Make sure "down" points toward the hem (positive x)
+    if down[0] < 0:
+        down = -down
+
+    # Top-center of the watch pocket:
+    #   - 1 1/4" below the waist (midpoint of 1"–1 1/2" range)
+    #   - 1 1/2" from the side seam to the nearest edge
+    # pt1' is the outseam-waist corner.  Move along the waist toward
+    # the fly by (1 1/2" + half-width) so the nearest edge clears the
+    # side seam, then step down 1 1/4" perpendicular.
+    hw_top = 1.75 * INCH      # half-width at top
+    top_center = (pt1p
+                  + waist_dir_norm * ((1.5 + 1.75) * INCH)
+                  + down * (1.25 * INCH))
+
+    # -- Shield geometry (relative to top_center, oriented along waist) --
+    hw_bot = 1.5 * INCH       # half-width at 4" height
+    h_straight = 4.0 * INCH   # height of straight section
+    h_total = 4.5 * INCH      # total height to V-point
+
+    # "across" follows the waist seam direction (waist_dir_norm)
+    # "down" is perpendicular, toward the hem
+    pts = np.array([
+        top_center - waist_dir_norm * hw_top,                              # top-left
+        top_center + waist_dir_norm * hw_top,                              # top-right
+        top_center + waist_dir_norm * hw_bot + down * h_straight,          # bottom-right
+        top_center + down * h_total,                                       # V-point
+        top_center - waist_dir_norm * hw_bot + down * h_straight,          # bottom-left
+    ])
+
+    return {
+        'points': {
+            'top_center': top_center,
+            'top_left': pts[0],
+            'top_right': pts[1],
+            'bottom_right': pts[2],
+            'v_point': pts[3],
+            'bottom_left': pts[4],
+        },
+        'outline': pts,
+        'metadata': {
+            'title': '1873 Watch Pocket',
+            'sa_top': 7/8 * INCH,
+            'sa_sides': 3/8 * INCH,
+            'sa_bottom': 3/8 * INCH,
+        },
+    }
 
 
 # -- Drafting ----------------------------------------------------------------
@@ -92,6 +169,20 @@ def draft_jeans_front_pocket(m, front):
         bag_sideseam,
     )
 
+    # -- 5. Pocket facing --
+    # The facing is a ~1/2" band inside the pocket opening, extending
+    # ~1.5" below the opening along the side seam.
+    facing_offset = 0.5 * INCH
+    # Offset the opening inward. Travel is pocket_upper → pocket_lower;
+    # negative offset = right of travel = toward body center (inward).
+    facing_inner = _offset_polyline(opening_curve, -facing_offset)
+
+    # Facing extends ~1.5" below pocket_lower along the side seam.
+    facing_sideseam = _point_at_arclength(outseam_path, (3.25 + 1.5) * INCH)
+
+    # -- 6. 1873 Watch pocket --
+    watch = _draft_watch_pocket(m, front, pocket_upper, pocket_lower, opening_curve)
+
     return {
         'points': {
             'pocket_upper': pocket_upper,
@@ -99,12 +190,15 @@ def draft_jeans_front_pocket(m, front):
             'bag_inner_top': bag_inner_top,
             'bag_inner_bottom': bag_inner_bottom,
             'bag_sideseam': bag_sideseam,
+            'facing_sideseam': facing_sideseam,
         },
         'curves': {
             'opening': opening_curve,
             'bag_bottom': bag_bottom_curve,
+            'facing_inner': facing_inner,
         },
         'construction': {},
+        'watch_pocket': watch,
         'metadata': {
             'title': 'Front Pocket',
         },

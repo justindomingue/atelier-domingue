@@ -328,7 +328,8 @@ def draft_jeans_front(m):
 
 # -- Visualization -----------------------------------------------------------
 
-def plot_jeans_front(draft, output_path='Logs/jeans_front.svg', debug=False, units='cm'):
+def plot_jeans_front(draft, output_path='Logs/jeans_front.svg', debug=False, units='cm',
+                     pocket=None):
     """Render the draft to a matplotlib figure and save as PNG.
 
     Always draws the pattern outline and internal reference lines (hip, knee, CF).
@@ -446,6 +447,49 @@ def plot_jeans_front(draft, output_path='Logs/jeans_front.svg', debug=False, uni
         _annotate_segment(ax, pts["3'"], pts["0'"], offset=(10, 0))
         _annotate_segment(ax, pts["0'"], pts['0'], offset=(8, 0))
 
+    # --- Pocket internal lines (if provided) ---
+    if pocket is not None:
+        ppts = {k: v * s for k, v in pocket['points'].items()}
+        pcurves = {k: v * s for k, v in pocket['curves'].items()}
+
+        POCKET_OPEN = dict(color='black', linewidth=1.5, zorder=3)
+        POCKET_BAG = dict(color='green', linewidth=1, linestyle='--', alpha=0.6, zorder=3)
+        WATCH = dict(color='steelblue', linewidth=1.2, zorder=3)
+
+        # Pocket opening (solid)
+        ax.plot(pcurves['opening'][:, 0], pcurves['opening'][:, 1], **POCKET_OPEN)
+
+        # Pocket bag (dashed)
+        ax.plot([ppts['bag_inner_top'][0], ppts['bag_inner_bottom'][0]],
+                [ppts['bag_inner_top'][1], ppts['bag_inner_bottom'][1]], **POCKET_BAG)
+        ax.plot(pcurves['bag_bottom'][:, 0], pcurves['bag_bottom'][:, 1], **POCKET_BAG)
+        ax.plot([ppts['bag_sideseam'][0], ppts['pocket_lower'][0]],
+                [ppts['bag_sideseam'][1], ppts['pocket_lower'][1]], **POCKET_BAG)
+        ax.plot([ppts['pocket_upper'][0], ppts['bag_inner_top'][0]],
+                [ppts['pocket_upper'][1], ppts['bag_inner_top'][1]], **POCKET_BAG)
+
+        # Facing: not drawn on the front overlay — the facing is traced from
+        # the opening and gets extra SA at the bottom when cut as a separate
+        # piece (data stored in pocket dict for later extraction).
+
+        # Watch pocket (steelblue)
+        watch = pocket['watch_pocket']
+        wp = watch['outline'] * s
+        # Close the pentagon by appending the first point
+        wp_closed = np.vstack([wp, wp[0:1]])
+        ax.plot(wp_closed[:, 0], wp_closed[:, 1], **WATCH)
+
+        if debug:
+            for name, pt in ppts.items():
+                ax.plot(pt[0], pt[1], 'o', color='darkorange', markersize=4, zorder=5)
+                ax.annotate(name, pt, textcoords="offset points",
+                            xytext=(6, 4), ha='left', fontsize=6, color='darkorange')
+            wpts = {k: v * s for k, v in watch['points'].items()}
+            for name, pt in wpts.items():
+                ax.plot(pt[0], pt[1], 'o', color='steelblue', markersize=3, zorder=5)
+                ax.annotate(name, pt, textcoords="offset points",
+                            xytext=(6, -8), ha='left', fontsize=5, color='steelblue')
+
     # --- Seam allowances (always drawn) ---
     # SA values in cm (from the Seam Allowances lesson)
     SA_SIDE   = 3/4 * INCH    # side seam
@@ -491,4 +535,6 @@ def run(measurements_path, output_path, debug=False, units='cm'):
     """Uniform interface called by the generic runner."""
     m = load_measurements(measurements_path)
     draft = draft_jeans_front(m)
-    plot_jeans_front(draft, output_path, debug=debug, units=units)
+    from .jeans_front_pocket import draft_jeans_front_pocket
+    pocket = draft_jeans_front_pocket(m, draft)
+    plot_jeans_front(draft, output_path, debug=debug, units=units, pocket=pocket)
