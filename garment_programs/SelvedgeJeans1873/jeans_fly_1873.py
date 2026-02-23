@@ -75,6 +75,7 @@ def draft_jeans_fly_1873(m, front):
         },
         'metadata': {
             'title': '1873 Jeans Fly (Two-Piece, cut on fold)',
+            'cut_count': 2,
             'fly_height': fly_height,
             'half_width': half_width,
         },
@@ -123,6 +124,22 @@ def plot_jeans_fly_1873(fly, output_path='Logs/jeans_fly_1873.svg',
     mid_y = (pts['fold_bottom'][1] + pts['fold_top'][1]) / 2
     ax.annotate('FOLD', (pts['fold_bottom'][0] - 0.2 * s, mid_y),
                 fontsize=8, ha='right', va='center', rotation=90)
+
+    # --- Grainline and piece label (pattern mode only) ---
+    if not debug:
+        from garment_programs.plot_utils import draw_grainline, draw_piece_label
+        # Grainline parallel to fold line (vertical, offset from fold)
+        fly_height_s = fly['metadata']['fly_height'] * s
+        grain_x = pts['outer_top'][0] * 0.5  # midway between fold and outer edge
+        grain_top_pt = np.array([grain_x, fly_height_s * 0.85])
+        grain_bot_pt = np.array([grain_x, fly_height_s * 0.15])
+        draw_grainline(ax, grain_top_pt, grain_bot_pt)
+
+        # Piece label
+        center = (pts['outer_top'][0] / 2,
+                  (pts['fold_bottom'][1] + pts['fold_top'][1]) / 2)
+        draw_piece_label(ax, center, fly['metadata']['title'],
+                         fly['metadata'].get('cut_count'))
 
     if debug:
         for name, pt in pts.items():

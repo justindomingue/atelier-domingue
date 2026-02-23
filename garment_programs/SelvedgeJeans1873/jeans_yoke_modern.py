@@ -203,6 +203,7 @@ def draft_jeans_yoke_modern(m, front, back):
         },
         'metadata': {
             'title': 'Historical Jeans Yoke \u2013 Modern (Curved)',
+            'cut_count': 2,
         },
     }
 
@@ -315,6 +316,24 @@ def plot_jeans_yoke_modern(front, back, yoke,
             ax.annotate(name, pt, textcoords="offset points",
                         xytext=(6, 4), ha='left', fontsize=6,
                         color='gray', alpha=0.4)
+
+    # --- Grainline and piece label (pattern mode only) ---
+    if not debug:
+        from garment_programs.plot_utils import draw_grainline, draw_piece_label
+        # Grainline parallel to waist curve (from near side to near seat)
+        waist_dir = ypts['back_waist_rot'] - ypts['pt1_rot']
+        waist_dir_norm = waist_dir / np.linalg.norm(waist_dir)
+        grain_center = (ypts['pt1_rot'] + ypts['back_waist_rot'] +
+                        ypts['yoke_side_rot'] + ypts['yoke_seat_rot']) / 4
+        grain_half = np.linalg.norm(waist_dir) * 0.3
+        grain_left = grain_center - waist_dir_norm * grain_half
+        grain_right = grain_center + waist_dir_norm * grain_half
+        draw_grainline(ax, grain_right, grain_left)
+
+        # Piece label
+        draw_piece_label(ax, (grain_center[0], grain_center[1]),
+                         yoke['metadata']['title'],
+                         yoke['metadata'].get('cut_count'))
 
     if not debug:
         ax.axis('off')

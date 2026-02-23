@@ -111,6 +111,7 @@ def draft_jeans_watch_pocket(m):
         'outline': new_outline,
         'metadata': {
             'title': '1873 Watch Pocket',
+            'cut_count': 1,
             'width': width,
             'height': height,
             'sa_top': sa_top,
@@ -155,12 +156,16 @@ def plot_jeans_watch_pocket(piece, output_path='Logs/jeans_watch_pocket.svg',
     ]
     _draw_seam_allowance(ax, sa_edges, scale=s)
 
-    # Grain line arrow
-    ax.annotate('', xy=pts['grain_top'], xytext=pts['grain_bottom'],
-                arrowprops=dict(arrowstyle='->', color='gray', lw=0.8))
-    ax.annotate('grain', (pts['grain_top'][0], pts['grain_top'][1]),
-                textcoords="offset points", xytext=(8, 0),
-                fontsize=7, color='gray')
+    # Grain line arrow (double-headed)
+    from garment_programs.plot_utils import draw_grainline, draw_piece_label
+    draw_grainline(ax, pts['grain_top'], pts['grain_bottom'])
+
+    # Piece label (pattern mode only)
+    if not debug:
+        center = ((pts['top_left'][0] + pts['top_right'][0]) / 2,
+                  (pts['top_center'][1] + pts['v_point'][1]) / 2)
+        draw_piece_label(ax, center, piece['metadata']['title'],
+                         piece['metadata'].get('cut_count'))
 
     if debug:
         # Point labels

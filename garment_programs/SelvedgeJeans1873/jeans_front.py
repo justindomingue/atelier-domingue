@@ -322,6 +322,7 @@ def draft_jeans_front(m):
         },
         'metadata': {
             'title': 'Historical Jeans Front Panel (1873)',
+            'cut_count': 2,
         },
     }
 
@@ -491,13 +492,14 @@ def plot_jeans_front(draft, output_path='Logs/jeans_front.svg', debug=False, uni
                             xytext=(6, -8), ha='left', fontsize=5, color='steelblue')
 
     # --- Seam allowances (always drawn) ---
-    # SA values in cm (from the Seam Allowances lesson)
-    SA_SIDE   = 3/4 * INCH    # side seam
-    SA_HEM    = (1.5 + 7/8) * INCH  # 2 3/8" (1 1/2" turn-up + 7/8" hem)
-    SA_INSEAM = 3/8 * INCH    # inseam
-    SA_CROTCH = 3/8 * INCH    # crotch / fly
-    SA_FLY    = 3/4 * INCH    # fly extension (3/8" crotch + 3/8" additional)
-    SA_WAIST  = 3/8 * INCH    # waist
+    from .seam_allowances import SEAM_ALLOWANCES
+    SA = SEAM_ALLOWANCES['front']
+    SA_SIDE   = SA['side']
+    SA_HEM    = SA['hem']
+    SA_INSEAM = SA['inseam']
+    SA_CROTCH = SA['crotch']
+    SA_FLY    = SA['fly']
+    SA_WAIST  = SA['waist']
 
     # SA transition: 3/4" kicks in 1/2" before pt8 on the crotch curve
     _crotch_rev = curves['crotch'][::-1]          # scaled, pt6 → pt8
@@ -521,6 +523,22 @@ def plot_jeans_front(draft, output_path='Logs/jeans_front.svg', debug=False, uni
         (curves['rise'][::-1],                                   SA_WAIST),   # rise / waist (7'→1')
     ]
     _draw_seam_allowance(ax, sa_edges, scale=s)
+
+    # --- Grainline and piece label (pattern mode only) ---
+    if not debug:
+        from garment_programs.plot_utils import draw_grainline, draw_piece_label
+        # Grainline along center-front x, spanning waist to near hem
+        cf_x = pts['10'][1]  # center-front y-offset used as grainline x
+        grain_top = np.array([pts['1'][0] * 0.85 + pts['0'][0] * 0.15, cf_x])
+        grain_bottom = np.array([pts['1'][0] * 0.15 + pts['0'][0] * 0.85, cf_x])
+        draw_grainline(ax, grain_top, grain_bottom)
+
+        # Piece label at bounding-box center
+        all_x = [pts[k][0] for k in ('0', "1'", "7'", '6')]
+        all_y = [pts[k][1] for k in ('0', "1'", "7'", '6')]
+        center = ((min(all_x) + max(all_x)) / 2, (min(all_y) + max(all_y)) / 2)
+        draw_piece_label(ax, center, draft['metadata']['title'],
+                         draft['metadata'].get('cut_count'))
 
     if not debug:
         ax.axis('off')

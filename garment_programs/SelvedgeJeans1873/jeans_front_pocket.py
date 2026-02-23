@@ -23,6 +23,7 @@ from .jeans_front import (
     _bezier_cubic, _curve_length, _annotate_segment,
     _point_at_arclength, _offset_polyline,
 )
+from .seam_allowances import SEAM_ALLOWANCES
 
 
 # -- Watch pocket helper -----------------------------------------------------
@@ -95,9 +96,9 @@ def _draft_watch_pocket(m, front, pocket_upper, pocket_lower, opening_curve):
         'outline': pts,
         'metadata': {
             'title': '1873 Watch Pocket',
-            'sa_top': 7/8 * INCH,
-            'sa_sides': 3/8 * INCH,
-            'sa_bottom': 3/8 * INCH,
+            'sa_top': SEAM_ALLOWANCES['watch_pocket']['top'],
+            'sa_sides': SEAM_ALLOWANCES['watch_pocket']['sides'],
+            'sa_bottom': SEAM_ALLOWANCES['watch_pocket']['bottom'],
         },
     }
 
@@ -201,6 +202,7 @@ def draft_jeans_front_pocket(m, front):
         'watch_pocket': watch,
         'metadata': {
             'title': 'Front Pocket',
+            'cut_count': 2,
         },
     }
 
@@ -250,6 +252,14 @@ def plot_jeans_front_pocket(front, pocket, output_path='Logs/jeans_front_pocket.
     # Top edge (along opening)
     ax.plot([ppts['pocket_upper'][0], ppts['bag_inner_top'][0]],
             [ppts['pocket_upper'][1], ppts['bag_inner_top'][1]], **BAG)
+
+    # --- Piece label (pattern mode only) ---
+    if not debug:
+        from garment_programs.plot_utils import draw_piece_label
+        # Label at midpoint of pocket opening
+        mid = (ppts['pocket_upper'] + ppts['pocket_lower']) / 2
+        draw_piece_label(ax, (mid[0], mid[1]), pocket['metadata']['title'],
+                         pocket['metadata'].get('cut_count'))
 
     if debug:
         for name, pt in ppts.items():

@@ -1,9 +1,32 @@
 from pathlib import Path
 
+import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 
 CM_PER_INCH = 2.54
+
+
+def draw_piece_label(ax, center, title, cut_count=None, fontsize=9):
+    """Render piece name and cut count at center of the pattern piece."""
+    label = title
+    if cut_count:
+        label += f'\nCut {cut_count}'
+    ax.text(center[0], center[1], label,
+            fontsize=fontsize, ha='center', va='center',
+            color='black', alpha=0.6,
+            bbox=dict(boxstyle='round,pad=0.3', fc='white', ec='none', alpha=0.5))
+
+
+def draw_grainline(ax, top, bottom, label='GRAIN'):
+    """Draw a double-headed grainline arrow between two points."""
+    ax.annotate('', xy=top, xytext=bottom,
+                arrowprops=dict(arrowstyle='<->', color='black', lw=0.8))
+    mid = ((top[0] + bottom[0]) / 2, (top[1] + bottom[1]) / 2)
+    angle = np.degrees(np.arctan2(top[1] - bottom[1], top[0] - bottom[0]))
+    ax.text(mid[0], mid[1], label, fontsize=7, ha='center', va='center',
+            rotation=angle, color='black', alpha=0.6,
+            bbox=dict(boxstyle='round,pad=0.2', fc='white', ec='none', alpha=0.7))
 
 
 def draw_calibration_square(ax, size_cm=5.0):

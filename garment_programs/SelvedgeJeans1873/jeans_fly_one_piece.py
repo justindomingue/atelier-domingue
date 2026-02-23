@@ -45,7 +45,8 @@ def draft_jeans_fly_one_piece(m, front):
     length = 2 * fly_extension + 2 * INCH
     width = 4.5 * INCH
 
-    sa = 0.5 * INCH             # seam allowance on each side
+    from .seam_allowances import SEAM_ALLOWANCES
+    sa = SEAM_ALLOWANCES['fly_one_piece']['side']
     front_half = 1.75 * INCH    # front half width
     fold_x = sa + front_half    # fold line position
 
@@ -66,6 +67,7 @@ def draft_jeans_fly_one_piece(m, front):
         },
         'metadata': {
             'title': 'One-Piece Fly',
+            'cut_count': 1,
             'length': length,
             'width': width,
             'fly_extension': fly_extension,
@@ -99,6 +101,20 @@ def plot_jeans_fly_one_piece(fly, output_path='Logs/jeans_fly_one_piece.svg',
     ax.annotate('FOLD', (con['fold_x'], length_s / 2),
                 textcoords="offset points", xytext=(4, 0),
                 fontsize=8, ha='left', rotation=90)
+
+    # --- Grainline and piece label (pattern mode only) ---
+    if not debug:
+        from garment_programs.plot_utils import draw_grainline, draw_piece_label
+        # Grainline parallel to fold line (vertical)
+        grain_x = con['fold_x']
+        grain_top_pt = np.array([grain_x + width_s * 0.15, length_s * 0.85])
+        grain_bot_pt = np.array([grain_x + width_s * 0.15, length_s * 0.15])
+        draw_grainline(ax, grain_top_pt, grain_bot_pt)
+
+        # Piece label
+        center = (width_s / 2, length_s / 2)
+        draw_piece_label(ax, center, fly['metadata']['title'],
+                         fly['metadata'].get('cut_count'))
 
     if debug:
         # Seam allowance lines

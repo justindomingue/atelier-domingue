@@ -108,9 +108,11 @@ def draft_jeans_front_facing(m):
     rotated_hip = shift_curve(rotated_hip)
 
     # SA values
-    sa_waist = 3 / 8 * INCH     # rise / waist edge
-    sa_sideseam = 3 / 4 * INCH  # side seam (hip edge)
-    sa_opening = 3 / 8 * INCH   # pocket opening (cut edge)
+    from .seam_allowances import SEAM_ALLOWANCES
+    _sa = SEAM_ALLOWANCES['front_facing']
+    sa_waist = _sa['waist']
+    sa_sideseam = _sa['sideseam']
+    sa_opening = _sa['opening']
 
     # Grain line (vertical, centered in the piece)
     bbox_max = shift_curve(all_pts).max(axis=0)
@@ -134,6 +136,7 @@ def draft_jeans_front_facing(m):
         'construction': {},
         'metadata': {
             'title': 'Front Pocket Facing',
+            'cut_count': 2,
             'sa_waist': sa_waist,
             'sa_sideseam': sa_sideseam,
             'sa_opening': sa_opening,
@@ -180,12 +183,18 @@ def plot_jeans_front_facing(piece, output_path='Logs/jeans_front_facing.svg',
     ]
     _draw_seam_allowance(ax, sa_edges, scale=s)
 
-    # Grain line arrow
-    ax.annotate('', xy=pts['grain_top'], xytext=pts['grain_bottom'],
-                arrowprops=dict(arrowstyle='->', color='gray', lw=0.8))
-    ax.annotate('grain', (pts['grain_top'][0], pts['grain_top'][1]),
-                textcoords="offset points", xytext=(8, 0),
-                fontsize=7, color='gray')
+    # Grain line arrow (double-headed)
+    from garment_programs.plot_utils import draw_grainline, draw_piece_label
+    draw_grainline(ax, pts['grain_top'], pts['grain_bottom'])
+
+    # Piece label (pattern mode only)
+    if not debug:
+        all_curves = np.vstack([curves['rise'], curves['opening'], curves['hip']])
+        bbox_min = all_curves.min(axis=0)
+        bbox_max = all_curves.max(axis=0)
+        center = ((bbox_min[0] + bbox_max[0]) / 2, (bbox_min[1] + bbox_max[1]) / 2)
+        draw_piece_label(ax, center, piece['metadata']['title'],
+                         piece['metadata'].get('cut_count'))
 
     if debug:
         for name, pt in pts.items():

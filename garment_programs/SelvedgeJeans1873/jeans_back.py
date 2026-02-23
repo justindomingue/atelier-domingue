@@ -183,6 +183,7 @@ def draft_jeans_back(m, front):
         },
         'metadata': {
             'title': 'Historical Jeans Back Panel (1873)',
+            'cut_count': 2,
         },
     }
 
@@ -326,11 +327,13 @@ def plot_jeans_back(front, back, output_path='Logs/jeans_back.svg', debug=False,
         _annotate_segment(ax, fpts['4'], fpts['1'], offset=(-10, 0))
 
     # --- Seam allowances (always drawn) ---
-    SA_SIDE    = 3/4 * INCH   # side seam
-    SA_HEM     = (1.5 + 7/8) * INCH  # 2 3/8"
-    SA_INSEAM  = 3/4 * INCH   # back inseam
-    SA_SEAT    = 5/8 * INCH   # seat seam
-    SA_YOKE    = 3/4 * INCH   # yoke seam (outseam side → waist)
+    from .seam_allowances import SEAM_ALLOWANCES
+    SA = SEAM_ALLOWANCES['back']
+    SA_SIDE    = SA['side']
+    SA_HEM     = SA['hem']
+    SA_INSEAM  = SA['inseam']
+    SA_SEAT    = SA['seat']
+    SA_YOKE    = SA['yoke']
 
     # CW outline: outseam(1→4→0) → hem(0→back_hem) → lower_inseam(back_hem→12)
     #   → back_inseam(12→11) → seat_lower(11→8') → seat_upper(8'→back_waist)
@@ -346,6 +349,23 @@ def plot_jeans_back(front, back, output_path='Logs/jeans_back.svg', debug=False,
         (np.array([bpts['back_waist'], fpts['1']]),              SA_YOKE),    # waist
     ]
     _draw_seam_allowance(ax, sa_edges, scale=s)
+
+    # --- Grainline and piece label (pattern mode only) ---
+    if not debug:
+        from garment_programs.plot_utils import draw_grainline, draw_piece_label
+        # Grainline vertical, midpoint between outseam and inseam, waist to hem
+        mid_y = (fpts['0'][1] + bpts['back_hem'][1]) / 2
+        grain_x = (fpts['0'][0] + fpts['1'][0]) / 2  # midpoint of outseam range
+        grain_top_pt = np.array([fpts['1'][0] * 0.85 + fpts['0'][0] * 0.15, mid_y])
+        grain_bot_pt = np.array([fpts['1'][0] * 0.15 + fpts['0'][0] * 0.85, mid_y])
+        draw_grainline(ax, grain_top_pt, grain_bot_pt)
+
+        # Piece label at bounding-box center
+        all_x = [fpts['0'][0], fpts['1'][0], bpts['back_hem'][0], bpts['11'][0]]
+        all_y = [fpts['0'][1], fpts['1'][1], bpts['back_hem'][1], bpts['11'][1]]
+        center = ((min(all_x) + max(all_x)) / 2, (min(all_y) + max(all_y)) / 2)
+        draw_piece_label(ax, center, back['metadata']['title'],
+                         back['metadata'].get('cut_count'))
 
     if not debug:
         ax.axis('off')

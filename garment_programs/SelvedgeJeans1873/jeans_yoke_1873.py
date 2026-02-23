@@ -102,6 +102,7 @@ def draft_jeans_yoke(m, front, back, gathering_extension=0):
         },
         'metadata': {
             'title': 'Historical Jeans Yoke (1873)',
+            'cut_count': 2,
             'yoke_seat_dist': yoke_seat_dist,
         },
     }
@@ -219,9 +220,11 @@ def plot_jeans_yoke(front, back, yoke, output_path='Logs/jeans_yoke.svg',
                         color='gray', alpha=0.4)
 
     # --- Seam allowances (always drawn) ---
-    SA_SEAT_YOKE  = 5/8 * INCH   # long side / seat seam
-    SA_SIDE_YOKE  = 3/4 * INCH   # short edge / side seam
-    SA_WAIST_YOKE = 3/8 * INCH   # waist and yoke seams
+    from .seam_allowances import SEAM_ALLOWANCES
+    _sa = SEAM_ALLOWANCES['yoke']
+    SA_SEAT_YOKE  = _sa['seat']
+    SA_SIDE_YOKE  = _sa['side']
+    SA_WAIST_YOKE = _sa['waist']
 
     # CW outline: outseam(1→yoke_side) → yoke_line(yoke_side→yoke_seat)
     #   → seat_seg reversed(yoke_seat→back_waist) → waist(back_waist→1)
@@ -232,6 +235,23 @@ def plot_jeans_yoke(front, back, yoke, output_path='Logs/jeans_yoke.svg',
         (np.array([bpts['back_waist'], fpts['1']]),              SA_WAIST_YOKE),  # waist
     ]
     _draw_seam_allowance(ax, sa_edges, scale=s)
+
+    # --- Grainline and piece label (pattern mode only) ---
+    if not debug:
+        from garment_programs.plot_utils import draw_grainline, draw_piece_label
+        # Grainline parallel to waist edge (from near side seam to near seat seam)
+        waist_dir = bpts['back_waist'] - fpts['1']
+        waist_dir_norm = waist_dir / np.linalg.norm(waist_dir)
+        grain_center = (fpts['1'] + bpts['back_waist'] + ypts['yoke_side'] + ypts['yoke_seat']) / 4
+        grain_half = np.linalg.norm(waist_dir) * 0.3
+        grain_left = grain_center - waist_dir_norm * grain_half
+        grain_right = grain_center + waist_dir_norm * grain_half
+        draw_grainline(ax, grain_right, grain_left)
+
+        # Piece label
+        draw_piece_label(ax, (grain_center[0], grain_center[1]),
+                         yoke['metadata']['title'],
+                         yoke['metadata'].get('cut_count'))
 
     if not debug:
         ax.axis('off')

@@ -47,8 +47,10 @@ def draft_jeans_back_pocket(m):
     width = 2 * top_half        # 6 3/4" total at mouth
 
     # Seam allowances
-    sa_side = 3 / 8 * INCH
-    sa_top = 7 / 8 * INCH
+    from .seam_allowances import SEAM_ALLOWANCES
+    _sa = SEAM_ALLOWANCES['back_pocket']
+    sa_side = _sa['side']
+    sa_top = _sa['top']
 
     # Finished shape — origin at point 0 (top center), Y goes down
     # Using Y-up for matplotlib: top = total_depth, bottom = 0
@@ -88,6 +90,7 @@ def draft_jeans_back_pocket(m):
         },
         'metadata': {
             'title': 'Back Pocket',
+            'cut_count': 1,
             'width': width,
             'height': total_depth,
         },
@@ -122,12 +125,15 @@ def plot_jeans_back_pocket(pocket, output_path='Logs/jeans_back_pocket.svg',
     sy = [pts[k][1] for k in sa_order]
     ax.plot(sx, sy, **SA_STYLE)
 
-    # Grain line arrow
-    ax.annotate('', xy=pts['grain_top'], xytext=pts['grain_bottom'],
-                arrowprops=dict(arrowstyle='->', color='gray', lw=0.8))
-    ax.annotate('grain', (pts['grain_top'][0], pts['grain_top'][1]),
-                textcoords="offset points", xytext=(8, 0),
-                fontsize=7, color='gray')
+    # Grain line arrow (double-headed)
+    from garment_programs.plot_utils import draw_grainline, draw_piece_label
+    draw_grainline(ax, pts['grain_top'], pts['grain_bottom'])
+
+    # Piece label (pattern mode only)
+    if not debug:
+        center = (width_s / 2, height_s / 2)
+        draw_piece_label(ax, center, pocket['metadata']['title'],
+                         pocket['metadata'].get('cut_count'))
 
     if debug:
         # 7" reference mark

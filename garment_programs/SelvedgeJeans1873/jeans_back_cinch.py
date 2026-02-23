@@ -48,9 +48,11 @@ def draft_jeans_back_cinch(m):
     f_br = np.array([length, -narrow_half])
 
     # Seam allowances
-    sa_wide = 3 / 4 * INCH     # top/bottom at wide end
-    sa_narrow = 5 / 8 * INCH   # top/bottom at narrow end
-    sa_end = 1 / 2 * INCH      # left/right short ends
+    from .seam_allowances import SEAM_ALLOWANCES
+    _sa = SEAM_ALLOWANCES['back_cinch']
+    sa_wide = _sa['wide']
+    sa_narrow = _sa['narrow']
+    sa_end = _sa['end']
 
     sa_tl = np.array([-sa_end, wide_half + sa_wide])
     sa_bl = np.array([-sa_end, -(wide_half + sa_wide)])
@@ -67,6 +69,7 @@ def draft_jeans_back_cinch(m):
         'metadata': {
             'title': 'Back Cinch Belt',
             'length': length,
+            'cut_count': 1,
         },
     }
 
@@ -113,6 +116,19 @@ def plot_jeans_back_cinch(cinch, output_path='Logs/jeans_back_cinch.svg',
     mid_y_right = (pts['sa_tr'][1] + pts['sa_br'][1]) / 2
     ax.text(pts['sa_tr'][0] + 0.15 * s, mid_y_right, '1/2"',
             fontsize=12, ha='left', va='center')
+
+    # --- Grainline and piece label (pattern mode only) ---
+    if not debug:
+        from garment_programs.plot_utils import draw_grainline, draw_piece_label
+        # Horizontal grainline along center line
+        grain_left = np.array([length_s * 0.15, 0])
+        grain_right = np.array([length_s * 0.85, 0])
+        draw_grainline(ax, grain_right, grain_left)
+
+        # Piece label
+        center = (length_s / 2, 0)
+        draw_piece_label(ax, center, cinch['metadata']['title'],
+                         cinch['metadata'].get('cut_count'))
 
     if debug:
         for name, pt in pts.items():

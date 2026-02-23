@@ -65,6 +65,7 @@ def draft_jeans_waistband(m):
         },
         'metadata': {
             'title': 'Jeans Waistband',
+            'cut_count': 1,
             'length': length,
             'width': width,
         },
@@ -123,6 +124,19 @@ def plot_jeans_waistband(wb, output_path='Logs/jeans_waistband.svg',
     ax.annotate('← waist →',
                 (length_s / 2, width_s + 0.15 * s),
                 fontsize=7, ha='center', va='bottom', color='steelblue')
+
+    # --- Grainline and piece label (pattern mode only) ---
+    if not debug:
+        from garment_programs.plot_utils import draw_grainline, draw_piece_label
+        # Horizontal grainline along the length (selvedge direction)
+        grain_left = np.array([length_s * 0.15, width_s / 2])
+        grain_right = np.array([length_s * 0.85, width_s / 2])
+        draw_grainline(ax, grain_right, grain_left)
+
+        # Piece label
+        center = (length_s / 2, width_s / 2)
+        draw_piece_label(ax, center, wb['metadata']['title'],
+                         wb['metadata'].get('cut_count'))
 
     if debug:
         _annotate_segment(ax, pts['bl'], pts['br'], offset=(0, -10))
