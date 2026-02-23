@@ -316,9 +316,6 @@ def plot_jeans_yoke_modern(front, back, yoke,
                         xytext=(6, 4), ha='left', fontsize=6,
                         color='gray', alpha=0.4)
 
-    ax.set_title(yoke['metadata']['title'])
-    ax.set_aspect('equal')
-    ax.margins(0.05)
     if not debug:
         ax.axis('off')
     else:
@@ -326,11 +323,8 @@ def plot_jeans_yoke_modern(front, back, yoke,
         ax.set_ylabel(unit_label)
         ax.grid(True, alpha=0.2)
 
-    plt.tight_layout()
-    Path(output_path).parent.mkdir(parents=True, exist_ok=True)
-    plt.savefig(output_path, dpi=150, bbox_inches='tight')
-    plt.close(fig)
-    print(f"Saved visualization to {output_path}")
+    from garment_programs.plot_utils import save_pattern
+    save_pattern(fig, ax, output_path, units=units)
 
 
 # -- Entry point for generic runner ------------------------------------------

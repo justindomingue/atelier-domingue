@@ -44,16 +44,16 @@ def _discover_garments():
     return garments
 
 
-def _run_piece(pkg, piece_module, measurements_path, debug, units, output_dir=None):
+def _run_piece(pkg, piece_module, measurements_path, debug, units, fmt='svg', output_dir=None):
     """Import and run a single piece module, returning the output path."""
     full_module = f'garment_programs.{pkg}.{piece_module}'
     module = importlib.import_module(full_module)
     measurements_stem = Path(measurements_path).stem
     if output_dir:
-        output_path = f'{output_dir}/{piece_module}.svg'
+        output_path = f'{output_dir}/{piece_module}.{fmt}'
     else:
         timestamp = datetime.now().strftime('%Y-%m-%d_%H%M%S')
-        output_path = f'Logs/{pkg}.{piece_module}_{measurements_stem}_{timestamp}.svg'
+        output_path = f'Logs/{pkg}.{piece_module}_{measurements_stem}_{timestamp}.{fmt}'
     module.run(measurements_path, output_path, debug=debug, units=units)
     return output_path
 
@@ -66,6 +66,8 @@ def main():
                         help='show construction lines, point labels, and grid')
     parser.add_argument('--units', '-u', choices=['cm', 'inch'], default=None,
                         help='display units for the plot (default: prompt via fzf)')
+    parser.add_argument('--format', '-f', choices=['svg', 'pdf'], default=None,
+                        help='output format (default: prompt via fzf)')
     args = parser.parse_args()
 
     # --- measurements selection ---
@@ -134,6 +136,12 @@ def main():
     else:
         units = _fzf_select(['cm', 'inch'], 'Units')
 
+    # --- format selection ---
+    if args.format:
+        fmt = args.format
+    else:
+        fmt = _fzf_select(['svg', 'pdf'], 'Output format')
+
     # --- import and run ---
     timestamp = datetime.now().strftime('%Y-%m-%d_%H%M%S')
     measurements_stem = Path(measurements_path).stem
@@ -148,7 +156,7 @@ def main():
         outputs = []
         for piece in garment['pieces']:
             print(f"  Drafting {piece['name']}...")
-            out = _run_piece(program_name, piece['module'], measurements_path, debug, units, output_dir=output_dir)
+            out = _run_piece(program_name, piece['module'], measurements_path, debug, units, fmt=fmt, output_dir=output_dir)
             outputs.append((piece['name'], out))
         print(f"\nGenerated {len(outputs)} pieces:")
         for name, path in outputs:
@@ -157,10 +165,10 @@ def main():
         # Single piece — may be dotted (pkg.module) or standalone
         parts = program_name.split('.', 1)
         if len(parts) == 2 and parts[0] in garment_map:
-            _run_piece(parts[0], parts[1], measurements_path, debug, units)
+            _run_piece(parts[0], parts[1], measurements_path, debug, units, fmt=fmt)
         else:
             module = importlib.import_module(f'garment_programs.{program_name}')
-            output_path = f'Logs/{program_name}_{measurements_stem}_{timestamp}.svg'
+            output_path = f'Logs/{program_name}_{measurements_stem}_{timestamp}.{fmt}'
             module.run(measurements_path, output_path, debug=debug, units=units)
 
 

@@ -791,17 +791,8 @@ def plot_trouser_back(front, back, output_path='Logs/trouser_back.svg',
 
 def _finish_back_plot(fig, ax, back, output_path, step):
     """Common plot finalization."""
-    title = f"{back['metadata']['title']} — Step {step}"
-    ax.set_title(title)
-    ax.set_aspect('equal')
-    ax.margins(0.05)
-    ax.grid(True, alpha=0.15)
-
-    plt.tight_layout()
-    Path(output_path).parent.mkdir(parents=True, exist_ok=True)
-    plt.savefig(output_path, dpi=150, bbox_inches='tight')
-    plt.close(fig)
-    print(f"Saved: {output_path}")
+    from garment_programs.plot_utils import save_pattern
+    save_pattern(fig, ax, output_path, units='cm')
 
 
 # -- Entry point for generic runner ------------------------------------------
@@ -811,16 +802,4 @@ def run(measurements_path, output_path, debug=False, units='cm'):
     m = load_measurements(measurements_path)
     front = draft_trouser_front(m)
     back = draft_trouser_back(m, front)
-
-    out = Path(output_path)
-    stem = out.stem
-    suffix = out.suffix or '.svg'
-    parent = out.parent
-
-    # Per-step SVGs
-    for s in range(1, 7):
-        step_path = parent / f"{stem}_step{s}{suffix}"
-        plot_trouser_back(front, back, str(step_path), debug=debug, units=units, step=s)
-
-    # Final output at the requested path
     plot_trouser_back(front, back, output_path, debug=debug, units=units, step=6)

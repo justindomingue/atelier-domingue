@@ -563,38 +563,14 @@ def plot_trouser_front(draft, output_path='Logs/trouser_front.svg',
 
 def _finish_plot(fig, ax, draft, output_path, step):
     """Common plot finalization."""
-    title = f"{draft['metadata']['title']} — Step {step}"
-    ax.set_title(title)
-    ax.set_aspect('equal')
-    ax.margins(0.05)
-    ax.grid(True, alpha=0.15)
-
-    plt.tight_layout()
-    Path(output_path).parent.mkdir(parents=True, exist_ok=True)
-    plt.savefig(output_path, dpi=150, bbox_inches='tight')
-    plt.close(fig)
-    print(f"Saved: {output_path}")
+    from garment_programs.plot_utils import save_pattern
+    save_pattern(fig, ax, output_path, units='cm')
 
 
 # -- Entry point for generic runner ------------------------------------------
 
 def run(measurements_path, output_path, debug=False, units='cm'):
-    """Uniform interface called by the generic runner.
-
-    Renders all 5 steps as separate SVGs plus the final combined output.
-    """
+    """Uniform interface called by the generic runner."""
     m = load_measurements(measurements_path)
     draft = draft_trouser_front(m)
-
-    out = Path(output_path)
-    stem = out.stem
-    suffix = out.suffix or '.svg'
-    parent = out.parent
-
-    # Per-step SVGs
-    for s in range(1, 6):
-        step_path = parent / f"{stem}_step{s}{suffix}"
-        plot_trouser_front(draft, str(step_path), debug=debug, units=units, step=s)
-
-    # Final output at the requested path
     plot_trouser_front(draft, output_path, debug=debug, units=units, step=5)

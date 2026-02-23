@@ -182,15 +182,8 @@ def plot_jeans_front_pocket(front, pocket, output_path='Logs/jeans_front_pocket.
     else:
         ax.axis('off')
 
-    ax.set_title(pocket['metadata']['title'])
-    ax.set_aspect('equal')
-    ax.margins(0.05)
-
-    plt.tight_layout()
-    Path(output_path).parent.mkdir(parents=True, exist_ok=True)
-    plt.savefig(output_path, dpi=150, bbox_inches='tight')
-    plt.close(fig)
-    print(f"Saved visualization to {output_path}")
+    from garment_programs.plot_utils import save_pattern
+    save_pattern(fig, ax, output_path, units=units)
 
 
 # -- Entry point for generic runner ------------------------------------------
