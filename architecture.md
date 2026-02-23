@@ -20,8 +20,8 @@ atelier-domingue/
 │   │   ├── jeans_back_cinch.py
 │   │   ├── *_instructions.md       # Step-by-step drafting instructions
 │   │   └── verify.py               # Edge-length verification
-│   └── OnePleatTrouser/            # MM&S one-pleat trouser (2 pieces)
-│       ├── __init__.py
+│   └── MMSTrouserBlock/            # MM&S trouser block: 0, 1, or 2 pleats (2 pieces)
+│       ├── __init__.py             # GARMENTS list (3 variants)
 │       ├── trouser_front.py
 │       └── trouser_back.py
 ├── measurements/
@@ -53,7 +53,7 @@ Output goes to `Logs/`.
 
 ### Adding a new garment program
 
-1. Create `garment_programs/MyGarment/` with an `__init__.py` defining a `GARMENT` dict
+1. Create `garment_programs/MyGarment/` with an `__init__.py` defining a `GARMENT` dict (or `GARMENTS` list for multiple variants)
 2. Each piece module exposes a `run(measurements_path, output_path, debug, units)` function
 3. It will automatically appear in the fzf selection
 

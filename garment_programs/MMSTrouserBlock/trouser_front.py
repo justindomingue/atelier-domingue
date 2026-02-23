@@ -1,7 +1,7 @@
 """
-1-Pleat Trouser Front Panel (MM&S Basic Block)
+Trouser Front Panel (MM&S Basic Block)
 
-Based on: MM&S - Basic Block: Trousers with 1 Pleat - Front Pattern
+Based on: MM&S - Basic Block: Trousers (0, 1, or 2 Pleats) - Front Pattern
 
 Coordinate system:
   - Origin A at bottom-left (hemline, left reference edge)
@@ -14,6 +14,15 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 
 INCH = 2.54  # cm per inch
+
+# -- Pleat configuration by count ---------------------------------------------
+# Each pleat_offsets entry is (left_offset, right_offset) relative to creaseline_x.
+PLEAT_CONFIGS = {
+    0: {'ftw_ease': 0.0, 'pleat_offsets': [],                              'sideseam_relocation': 2.0, 'half_ease_range': (2.5, 4.5)},
+    1: {'ftw_ease': 1.0, 'pleat_offsets': [(-3.5, 0.0)],                   'sideseam_relocation': 1.5, 'half_ease_range': (3.5, 5.5)},
+    2: {'ftw_ease': 3.5, 'pleat_offsets': [(-3.5, 0.5), (-9.5, -7.0)],     'sideseam_relocation': 1.0, 'half_ease_range': (5.5, 8.0)},
+}
+PLEAT_NAMES = {0: 'Flat-Front', 1: '1-Pleat', 2: '2-Pleat'}
 
 
 def load_measurements(yaml_path):
@@ -60,18 +69,21 @@ def _annotate_len(ax, pts, offset=(0, 6), label=None):
 
 # -- Drafting ----------------------------------------------------------------
 
-def draft_trouser_front(m):
+def draft_trouser_front(m, num_pleats=1):
     """
-    Compute all geometry for the 1-pleat trouser front.
+    Compute all geometry for the trouser front.
 
     Parameters
     ----------
     m : dict  Measurements in cm.
+    num_pleats : int  Number of pleats (0, 1, or 2).
 
     Returns
     -------
     dict with keys: points, levels, construction, curves, measurements, metadata
     """
+    config = PLEAT_CONFIGS[num_pleats]
+
     # -- Extract measurements --
     Wbg = m['waist']        # waistband girth (full circumference)
     Hg  = m['seat']         # hip girth (full circumference)
@@ -82,7 +94,7 @@ def draft_trouser_front(m):
     # -- Derived measurements --
     Br  = Sl - Is                     # body rise
     Kh  = Is / 2 + Is / 10 - 2.0     # knee height
-    Ftw = Hg / 4 + 1.0               # front trouser width
+    Ftw = Hg / 4 + config['ftw_ease'] # front trouser width
     Fcw = Hg / 2 / 10 + 1.0          # front crotch width
     Cw  = Hg / 4 - 4.0               # crotch width (total)
     Bcw = Cw - Fcw                    # back crotch width
@@ -117,8 +129,9 @@ def draft_trouser_front(m):
     hem_side_guide_x   = hem_side_x + 0.5
     hem_inseam_guide_x = hem_inseam_x - 0.5
 
-    # Pleat: 3.5 cm left of creaseline on waistline
-    pleat_x = creaseline_x - 3.5
+    # Pleat edges: (left, right) offsets from creaseline_x
+    pleats = [(creaseline_x + l, creaseline_x + r) for l, r in config['pleat_offsets']]
+    pleat_total_intake = sum(r - l for l, r in pleats)
 
     # Centre front (CF): Ftw + 0.5 on hipline, angled to Ftw at waistline
     cf_hip_x   = Ftw + 0.5   # 0.5 cm ease at hip
@@ -159,11 +172,9 @@ def draft_trouser_front(m):
     # CF goes straight to crotch line; the crotch curve starts there and
     # bows toward the crotch guide line.
 
-    # Waist sideseam: 1/4 Wbg + 3.5 (pleat) = 25.5 from CF gives a natural
-    # intake of (cf_waist_x - 25.5) from the hip sideseam.  The -1.5 relocates
-    # the sideseam: the front only takes 1.5 cm of intake; the back adds the
-    # remaining 1.5 cm on its side.
-    sideseam_relocation = 1.5
+    # Waist sideseam relocation: the front takes this much of the intake;
+    # the back adds the remaining on its side.
+    sideseam_relocation = config['sideseam_relocation']
     waist_side_x = sideseam_relocation
 
     # ==========================================================
@@ -184,7 +195,6 @@ def draft_trouser_front(m):
     hip_side   = np.array([0.0, hip_y])              # sideseam at hipline
     cf_waist   = np.array([cf_waist_x, waist_y])
     cf_hip     = np.array([cf_hip_x, hip_y])
-    pleat_pt   = np.array([pleat_x, waist_y])
 
     # -- Waistline curve: waist_side_raised → cf_waist --
     # Slightly curved inward (dips below the straight line) from sideseam
@@ -263,7 +273,6 @@ def draft_trouser_front(m):
         'hip_side':         hip_side,
         'waist_side':       np.array([waist_side_x, waist_y]),
         'waist_side_raised': waist_side_raised,
-        'pleat':            pleat_pt,
     }
 
     levels = {
@@ -283,7 +292,7 @@ def draft_trouser_front(m):
         'cf_waist_x':        cf_waist_x,
         'mid_hip_crotch_y':  mid_hip_crotch_y,
         'hem_half':          hem_half,
-        'pleat_x':           pleat_x,
+        'pleats':            pleats,
     }
 
     curves = {
@@ -305,8 +314,9 @@ def draft_trouser_front(m):
             'Cw': Cw, 'Bcw': Bcw, 'Btw': Btw,
             'cf_hip_x': cf_hip_x, 'cf_waist_x': cf_waist_x,
             'waist_side_x': waist_side_x,
+            'pleat_total_intake': pleat_total_intake,
         },
-        'metadata': {'title': '1-Pleat Trouser Front (MM&S)'},
+        'metadata': {'title': f'{PLEAT_NAMES[num_pleats]} Trouser Front (MM&S)'},
     }
 
 
@@ -424,24 +434,28 @@ def plot_trouser_front(draft, output_path='Logs/trouser_front.svg',
         p = pts[pt_name]
         ax.plot(p[0], p[1], 'x', color='gray', markersize=4)
 
-    # Pleat symbol: spans from creaseline (right) to pleat_x (left)
-    pr = con['creaseline_x']   # right edge (creaseline)
-    pl = con['pleat_x']        # left edge (3.5 cm left)
-    pm = (pr + pl) / 2         # midpoint
-    py = lvl['waistline']
+    # Pleat symbols: loop over all pleats (empty for 0-pleat)
+    # Extend vertical lines up to the raised waistline curve
+    waist_crv = crv['waistline']
     chev_h = 1.5               # chevron height
-    drop   = 6.0               # vertical lines extend below waist
-    hw     = (pr - pl) / 2     # half-width
-    # Vertical lines at pleat edges
-    ax.plot([pl, pl], [py, py - drop], 'k-', linewidth=0.6, alpha=0.6)
-    ax.plot([pr, pr], [py, py - drop], 'k-', linewidth=0.6, alpha=0.6)
-    # Upper chevron (pointing down)
-    ax.plot([pl, pm, pr], [py - 0.5, py - 0.5 - chev_h, py - 0.5],
-            'k-', linewidth=0.8)
-    # Lower chevron (pointing down)
-    ax.plot([pl, pm, pr],
-            [py - 0.5 - chev_h, py - 0.5 - 2 * chev_h, py - 0.5 - chev_h],
-            'k-', linewidth=0.8)
+    drop   = 6.0               # vertical lines extend below waist curve
+    for pl, pr in con['pleats']:
+        pm = (pr + pl) / 2     # midpoint
+        # Interpolate raised waistline y at each pleat edge and midpoint
+        py_l = np.interp(pl, waist_crv[:, 0], waist_crv[:, 1])
+        py_r = np.interp(pr, waist_crv[:, 0], waist_crv[:, 1])
+        py_m = np.interp(pm, waist_crv[:, 0], waist_crv[:, 1])
+        # Vertical lines at pleat edges (from raised waistline down)
+        ax.plot([pl, pl], [py_l, py_l - drop], 'k-', linewidth=0.6, alpha=0.6)
+        ax.plot([pr, pr], [py_r, py_r - drop], 'k-', linewidth=0.6, alpha=0.6)
+        # Upper chevron (pointing down from waistline)
+        ax.plot([pl, pm, pr],
+                [py_l - 0.5, py_m - 0.5 - chev_h, py_r - 0.5],
+                'k-', linewidth=0.8)
+        # Lower chevron
+        ax.plot([pl, pm, pr],
+                [py_l - 0.5 - chev_h, py_m - 0.5 - 2 * chev_h, py_r - 0.5 - chev_h],
+                'k-', linewidth=0.8)
 
     # CF line (angled: hipline → waistline)
     ax.plot([con['cf_hip_x'], con['cf_waist_x']],
@@ -569,8 +583,8 @@ def _finish_plot(fig, ax, draft, output_path, step):
 
 # -- Entry point for generic runner ------------------------------------------
 
-def run(measurements_path, output_path, debug=False, units='cm'):
+def run(measurements_path, output_path, debug=False, units='cm', num_pleats=1):
     """Uniform interface called by the generic runner."""
     m = load_measurements(measurements_path)
-    draft = draft_trouser_front(m)
+    draft = draft_trouser_front(m, num_pleats=num_pleats)
     plot_trouser_front(draft, output_path, debug=debug, units=units, step=5)

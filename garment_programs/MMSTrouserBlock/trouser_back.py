@@ -1,7 +1,7 @@
 """
-1-Pleat Trouser Back Panel (MM&S Basic Block)
+Trouser Back Panel (MM&S Basic Block)
 
-Based on: MM&S - Basic Block: Trousers with 1 Pleat - Back Pattern
+Based on: MM&S - Basic Block: Trousers (0, 1, or 2 Pleats) - Back Pattern
 Drafted on top of the front panel, using front geometry as reference.
 
 Coordinate system (same as front):
@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 
 from .trouser_front import (
-    INCH, load_measurements, draft_trouser_front,
+    INCH, PLEAT_CONFIGS, PLEAT_NAMES, load_measurements, draft_trouser_front,
     _bezier_cubic, _bezier_quad, _curve_length, _annotate_len,
 )
 
@@ -56,15 +56,16 @@ DART_SMALL_LEN = 7.5      # cm
 
 # -- Drafting ----------------------------------------------------------------
 
-def draft_trouser_back(m, front, creaseline_shift=CREASELINE_SHIFT,
+def draft_trouser_back(m, front, num_pleats=1, creaseline_shift=CREASELINE_SHIFT,
                        cb_slant=CB_SLANT):
     """
-    Compute all geometry for the 1-pleat trouser back.
+    Compute all geometry for the trouser back.
 
     Parameters
     ----------
     m : dict   Measurements in cm (from load_measurements).
     front : dict   Result of draft_trouser_front(m).
+    num_pleats : int  Number of pleats (0, 1, or 2) — used for metadata title.
     creaseline_shift : float
         Back creaseline offset (1–1.5 cm) rightward from front creaseline.
         Larger → straighter CB; smaller → more slanted CB.
@@ -216,7 +217,8 @@ def draft_trouser_back(m, front, creaseline_shift=CREASELINE_SHIFT,
     # -- Waist measurement (MM&S procedure) --
     # Transfer front waist minus pleat from CB to the right (extending past CB)
     front_waist_curve_len = _curve_length(front['curves']['waistline'])
-    front_waist_minus_pleat = front_waist_curve_len - 3.5  # pleat = 3.5 cm
+    pleat_total = fmm['pleat_total_intake']
+    front_waist_minus_pleat = front_waist_curve_len - pleat_total
     front_waist_transfer_pt = back_cb_waist + waist_unit * front_waist_minus_pleat
     # Sideseam intake is given (1–1.5 cm); dart total is derived to balance:
     #   ½ Wbg + dart_total + sideseam_intake = back_waist + front_waist_minus_pleat
@@ -335,12 +337,13 @@ def draft_trouser_back(m, front, creaseline_shift=CREASELINE_SHIFT,
     B_back = np.linalg.norm(v_hip - par)
     half_ease = A_front + B_back - Hg / 2
 
-    if half_ease < 3.5:
+    ease_lo, ease_hi = PLEAT_CONFIGS[num_pleats]['half_ease_range']
+    if half_ease < ease_lo:
         print(f"WARNING: ½ ease = {half_ease:.1f} cm (A={A_front:.1f} + B={B_back:.1f} "
-              f"− ½Hg={Hg/2:.1f}). Expected ≥ 3.5 cm for classic fit.")
-    elif half_ease > 5.5:
+              f"− ½Hg={Hg/2:.1f}). Expected ≥ {ease_lo:.1f} cm for classic fit.")
+    elif half_ease > ease_hi:
         print(f"WARNING: ½ ease = {half_ease:.1f} cm (A={A_front:.1f} + B={B_back:.1f} "
-              f"− ½Hg={Hg/2:.1f}). Expected ≤ 5.5 cm — pattern may be too loose.")
+              f"− ½Hg={Hg/2:.1f}). Expected ≤ {ease_hi:.1f} cm — pattern may be too loose.")
     else:
         print(f"Hip verification OK: ½ ease = {half_ease:.1f} cm "
               f"(A={A_front:.1f} + B={B_back:.1f} − ½Hg={Hg/2:.1f})")
@@ -470,7 +473,7 @@ def draft_trouser_back(m, front, creaseline_shift=CREASELINE_SHIFT,
         'construction': construction,
         'curves': curves,
         'measurements': measurements,
-        'metadata': {'title': '1-Pleat Trouser Back (MM&S)'},
+        'metadata': {'title': f'{PLEAT_NAMES[num_pleats]} Trouser Back (MM&S)'},
     }
 
 
@@ -502,21 +505,22 @@ def _draw_front_faded(ax, front, x_max):
             [fpts['hem_inseam_top'][1], fpts['hem_inseam'][1],
              fpts['hem_side'][1], fpts['hem_side_top'][1]], **FADED)
 
-    # Pleat symbol faded
+    # Pleat symbols faded (loop over all pleats; empty for 0-pleat)
     con = front['construction']
-    lvl = front['levels']
-    pr = con['creaseline_x']
-    pl = con['pleat_x']
-    pm = (pr + pl) / 2
-    py = front['levels']['waistline']
+    waist_crv = front['curves']['waistline']
     chev_h = 1.5
     drop = 6.0
     PLEAT_FADED = dict(color='silver', linewidth=0.6, alpha=0.15)
-    ax.plot([pl, pl], [py, py - drop], **PLEAT_FADED)
-    ax.plot([pr, pr], [py, py - drop], **PLEAT_FADED)
-    ax.plot([pl, pm, pr], [py - 0.5, py - 0.5 - chev_h, py - 0.5], **PLEAT_FADED)
-    ax.plot([pl, pm, pr],
-            [py - 0.5 - chev_h, py - 0.5 - 2 * chev_h, py - 0.5 - chev_h], **PLEAT_FADED)
+    for pl, pr in con['pleats']:
+        pm = (pr + pl) / 2
+        py_l = np.interp(pl, waist_crv[:, 0], waist_crv[:, 1])
+        py_r = np.interp(pr, waist_crv[:, 0], waist_crv[:, 1])
+        py_m = np.interp(pm, waist_crv[:, 0], waist_crv[:, 1])
+        ax.plot([pl, pl], [py_l, py_l - drop], **PLEAT_FADED)
+        ax.plot([pr, pr], [py_r, py_r - drop], **PLEAT_FADED)
+        ax.plot([pl, pm, pr], [py_l - 0.5, py_m - 0.5 - chev_h, py_r - 0.5], **PLEAT_FADED)
+        ax.plot([pl, pm, pr],
+                [py_l - 0.5 - chev_h, py_m - 0.5 - 2 * chev_h, py_r - 0.5 - chev_h], **PLEAT_FADED)
 
 
 def plot_trouser_back(front, back, output_path='Logs/trouser_back.svg',
@@ -797,9 +801,9 @@ def _finish_back_plot(fig, ax, back, output_path, step):
 
 # -- Entry point for generic runner ------------------------------------------
 
-def run(measurements_path, output_path, debug=False, units='cm'):
+def run(measurements_path, output_path, debug=False, units='cm', num_pleats=1):
     """Uniform interface called by the generic runner."""
     m = load_measurements(measurements_path)
-    front = draft_trouser_front(m)
-    back = draft_trouser_back(m, front)
+    front = draft_trouser_front(m, num_pleats=num_pleats)
+    back = draft_trouser_back(m, front, num_pleats=num_pleats)
     plot_trouser_back(front, back, output_path, debug=debug, units=units, step=6)

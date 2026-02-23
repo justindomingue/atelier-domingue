@@ -34,18 +34,22 @@ def _fzf_select(choices, prompt):
 
 
 def _discover_garments():
-    """Find packages that define a GARMENT dict in __init__.py."""
+    """Find packages that define a GARMENT or GARMENTS in __init__.py."""
     garments = []
     for init in sorted(PROGRAMS_DIR.glob('*/__init__.py')):
         pkg = init.parent.name
         mod = importlib.import_module(f'garment_programs.{pkg}')
-        if hasattr(mod, 'GARMENT'):
+        if hasattr(mod, 'GARMENTS'):
+            for garment in mod.GARMENTS:
+                garments.append((pkg, garment))
+        elif hasattr(mod, 'GARMENT'):
             garments.append((pkg, mod.GARMENT))
     return garments
 
 
-def _run_piece(pkg, piece_module, measurements_path, debug, units, fmt='svg', output_dir=None):
+def _run_piece(pkg, piece, measurements_path, debug, units, fmt='svg', output_dir=None):
     """Import and run a single piece module, returning the output path."""
+    piece_module = piece['module']
     full_module = f'garment_programs.{pkg}.{piece_module}'
     module = importlib.import_module(full_module)
     measurements_stem = Path(measurements_path).stem
@@ -54,7 +58,8 @@ def _run_piece(pkg, piece_module, measurements_path, debug, units, fmt='svg', ou
     else:
         timestamp = datetime.now().strftime('%Y-%m-%d_%H%M%S')
         output_path = f'Logs/{pkg}.{piece_module}_{measurements_stem}_{timestamp}.{fmt}'
-    module.run(measurements_path, output_path, debug=debug, units=units)
+    kwargs = piece.get('kwargs', {})
+    module.run(measurements_path, output_path, debug=debug, units=units, **kwargs)
     return output_path
 
 
@@ -79,7 +84,14 @@ def main():
 
     # --- discover garments ---
     garments = _discover_garments()
-    garment_map = {pkg: garment for pkg, garment in garments}
+    # Map by garment name → (pkg, garment) for name-based lookup,
+    # and by pkg name when only one garment exists for that package.
+    garment_by_name = {garment['name']: (pkg, garment) for pkg, garment in garments}
+    # Also allow lookup by package name when unambiguous (single garment per pkg)
+    pkg_counts = {}
+    for pkg, garment in garments:
+        pkg_counts.setdefault(pkg, []).append(garment)
+    garment_by_pkg = {pkg: gs[0] for pkg, gs in pkg_counts.items() if len(gs) == 1}
 
     # --- program selection ---
     if args.program:
@@ -110,7 +122,7 @@ def main():
         # Resolve selection back to a program_name
         for pkg, garment in garments:
             if selected == garment['name']:
-                program_name = pkg
+                program_name = garment['name']
                 break
             for piece in garment['pieces']:
                 if selected.strip() == piece['name']:
@@ -146,9 +158,15 @@ def main():
     timestamp = datetime.now().strftime('%Y-%m-%d_%H%M%S')
     measurements_stem = Path(measurements_path).stem
 
-    if program_name in garment_map:
-        # Run all pieces into a garment folder
-        garment = garment_map[program_name]
+    # Resolve program_name to (pkg, garment) if it's a garment
+    resolved = None
+    if program_name in garment_by_name:
+        resolved = garment_by_name[program_name]
+    elif program_name in garment_by_pkg:
+        resolved = (program_name, garment_by_pkg[program_name])
+
+    if resolved:
+        pkg, garment = resolved
         output_dir = f'Logs/{garment["name"]}_{measurements_stem}_{timestamp}'
         Path(output_dir).mkdir(parents=True, exist_ok=True)
         print(f"\n--- {garment['name']} ---")
@@ -156,7 +174,7 @@ def main():
         outputs = []
         for piece in garment['pieces']:
             print(f"  Drafting {piece['name']}...")
-            out = _run_piece(program_name, piece['module'], measurements_path, debug, units, fmt=fmt, output_dir=output_dir)
+            out = _run_piece(pkg, piece, measurements_path, debug, units, fmt=fmt, output_dir=output_dir)
             outputs.append((piece['name'], out))
         print(f"\nGenerated {len(outputs)} pieces:")
         for name, path in outputs:
@@ -164,8 +182,10 @@ def main():
     else:
         # Single piece — may be dotted (pkg.module) or standalone
         parts = program_name.split('.', 1)
-        if len(parts) == 2 and parts[0] in garment_map:
-            _run_piece(parts[0], parts[1], measurements_path, debug, units, fmt=fmt)
+        if len(parts) == 2 and parts[0] in pkg_counts:
+            # Build a synthetic piece dict for the single-piece run
+            piece = {'module': parts[1]}
+            _run_piece(parts[0], piece, measurements_path, debug, units, fmt=fmt)
         else:
             module = importlib.import_module(f'garment_programs.{program_name}')
             output_path = f'Logs/{program_name}_{measurements_stem}_{timestamp}.{fmt}'
