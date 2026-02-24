@@ -14,6 +14,7 @@ from .jeans_front import (
     _annotate_curve, _annotate_segment,
     _draw_seam_allowance,
     _point_at_arclength, _curve_up_to_arclength,
+    _curve_length,
 )
 
 
@@ -125,16 +126,31 @@ def draft_jeans_back(m, front):
     params = np.linalg.solve(A, b)
     waist_seat_intersection = fpts['1'] + params[0] * waist_line_dir
 
-    # Back waist width
-    front_waist_width = np.linalg.norm(fpts["7'"] - fpts["1'"])
+    # Back waist width — use arc length of rise curve (the actual seam length),
+    # not the chord distance, per MHTML: "measure the waist seam of the front"
+    front_waist_width = _curve_length(front['curves']['rise'])
     back_waist_target = m['waist'] / 2 + 3/4 * INCH
     back_waist_width = back_waist_target - front_waist_width
     back_waist_pt = fpts['1'] + waist_line_dir * (back_waist_width / np.linalg.norm(waist_line_dir))
 
     # -- Final seat seam (back_waist_pt → 8' → 11) --
 
-    # Straight line from back_waist to 8'
-    curve_seat_upper = np.array([back_waist_pt, new_pt8])
+    # Upper seat: gentle curve from back_waist to 8', departing at 90° to waist
+    # MHTML: "starting at 90 degrees to the waist, gently curving into point 8"
+    # The waist direction is waist_line_dir; perpendicular (toward 8') is the
+    # seat angle direction.  We use that as the departure tangent at back_waist.
+    dist_bw_8 = np.linalg.norm(new_pt8 - back_waist_pt)
+    # At back_waist: depart perpendicular to waist (= along seat_angle direction)
+    bw_tangent = -seat_angle_dir_norm  # toward 8', away from waist
+    if np.dot(bw_tangent, new_pt8 - back_waist_pt) < 0:
+        bw_tangent = seat_angle_dir_norm
+    # At 8': arrive along the seat angle direction (blending into seat_lower)
+    curve_seat_upper = _bezier_cubic(
+        back_waist_pt,
+        back_waist_pt + bw_tangent * (dist_bw_8 / 3),
+        new_pt8 + seat_angle_dir_norm * (dist_bw_8 / 3),
+        new_pt8,
+    )
 
     curve_seat_lower = _bezier_cubic(
         new_pt8,
@@ -152,6 +168,11 @@ def draft_jeans_back(m, front):
     yoke_seat = _point_at_arclength(curve_seat_upper, 2.75 * INCH)
     # sub-curve of seat_upper from back_waist to yoke_seat
     yoke_seat_curve = _curve_up_to_arclength(curve_seat_upper, 2.75 * INCH)
+    # sub-curve of seat_upper from yoke_seat down to 8' (the back body portion)
+    seat_upper_len = _curve_length(curve_seat_upper)
+    yoke_len = min(2.75 * INCH, seat_upper_len)
+    remaining = seat_upper_len - yoke_len
+    seat_upper_below_yoke = _curve_up_to_arclength(curve_seat_upper[::-1], remaining)[::-1]
 
     return {
         'points': {
@@ -169,7 +190,8 @@ def draft_jeans_back(m, front):
             'back_inseam': curve_back_inseam,
             'seat_upper': curve_seat_upper,
             'seat_lower': curve_seat_lower,
-            'yoke_seat_curve': yoke_seat_curve,   # seat_upper sub-curve to yoke_seat
+            'yoke_seat_curve': yoke_seat_curve,           # seat_upper: back_waist → yoke_seat
+            'seat_upper_below_yoke': seat_upper_below_yoke,  # seat_upper: yoke_seat → 8'
         },
         'construction': {
             'inseam_line_start': pt11,
@@ -229,14 +251,26 @@ def plot_jeans_back(front, back, output_path='Logs/jeans_back.svg', debug=False,
         ax.plot([bcon['waist_line_start'][0], bcon['waist_line_end'][0]],
                 [bcon['waist_line_start'][1], bcon['waist_line_end'][1]], **CON_STYLE)
 
-    # -- Pattern outline --
+    # -- Pattern outline (back body with yoke removed) --
+    # The yoke is a separate piece, so the back body stops at the yoke seam.
+    # Outline: yoke_side → 4 → 0 → back_hem → 12 → 11 → 8' → yoke_seat → yoke_side
 
-    # Waist line (pt1 → back_waist)
-    ax.plot([fpts['1'][0], bpts['back_waist'][0]],
-            [fpts['1'][1], bpts['back_waist'][1]], **OUTLINE)
+    # Yoke seam (top edge of back body): yoke_side → yoke_seat (straight)
+    ax.plot([bpts['yoke_side'][0], bpts['yoke_seat'][0]],
+            [bpts['yoke_side'][1], bpts['yoke_seat'][1]], **OUTLINE)
+    # Ease annotation at yoke seam
+    yoke_mid = (bpts['yoke_side'] + bpts['yoke_seat']) / 2
+    ax.annotate('¾" SA + ¾" ease — gather to fit yoke',
+                (yoke_mid[0], yoke_mid[1]),
+                textcoords="offset points", xytext=(0, 8),
+                fontsize=6, ha='center', color='dimgray', style='italic')
 
-    # Seat seam curves (back_waist → 8' → 11)
-    ax.plot(bcurves['seat_upper'][:, 0], bcurves['seat_upper'][:, 1], **OUTLINE)
+    # Seat seam from yoke_seat to 8': sub-curve of seat_upper
+    # (seat_upper runs back_waist → 8'; we need yoke_seat → 8')
+    ax.plot(bcurves['seat_upper_below_yoke'][:, 0],
+            bcurves['seat_upper_below_yoke'][:, 1], **OUTLINE)
+
+    # Seat lower curve (8' → 11)
     ax.plot(bcurves['seat_lower'][:, 0], bcurves['seat_lower'][:, 1], **OUTLINE)
 
     # Back inseam curve (11 → 12)
@@ -246,36 +280,26 @@ def plot_jeans_back(front, back, output_path='Logs/jeans_back.svg', debug=False,
     ax.plot([bpts['12'][0], bpts['back_hem'][0]],
             [bpts['12'][1], bpts['back_hem'][1]], **OUTLINE)
 
-    # Outseam: back_hem → 0 → 4 → 1
+    # Outseam: back_hem → 0 → 4 → yoke_side
     ax.plot([bpts['back_hem'][0], fpts['0'][0]],
             [bpts['back_hem'][1], fpts['0'][1]], **OUTLINE)
     ax.plot([fpts['0'][0], fpts['4'][0]],
             [fpts['0'][1], fpts['4'][1]], **OUTLINE)
-    ax.plot([fpts['4'][0], fpts['1'][0]],
-            [fpts['4'][1], fpts['1'][1]], **OUTLINE)
+    ax.plot([fpts['4'][0], bpts['yoke_side'][0]],
+            [fpts['4'][1], bpts['yoke_side'][1]], **OUTLINE)
 
-    # -- Yoke seam reference line (always shown) --
-    # Shows where to cut the yoke away from the back body panel.
-    YOKE_REF = dict(color='steelblue', linewidth=1.2, linestyle='--')
-    ax.plot(bcurves['yoke_seat_curve'][:, 0], bcurves['yoke_seat_curve'][:, 1],
-            **YOKE_REF)
-    ax.plot([bpts['yoke_seat'][0], bpts['yoke_side'][0]],
-            [bpts['yoke_seat'][1], bpts['yoke_side'][1]], **YOKE_REF)
-    ax.plot([bpts['yoke_side'][0], fpts['1'][0]],
-            [bpts['yoke_side'][1], fpts['1'][1]], **YOKE_REF)
-    # Label near the midpoint of the straight yoke seam segment
+    # Yoke seam label and notch
     yoke_mid = (bpts['yoke_seat'] + bpts['yoke_side']) / 2
     ax.annotate('yoke seam', yoke_mid, textcoords="offset points",
-                xytext=(0, -14), fontsize=7, color='steelblue', ha='center',
+                xytext=(0, 8), fontsize=7, color='gray', ha='center',
                 bbox=dict(boxstyle='round,pad=0.2', fc='white', ec='none', alpha=0.8))
-    # Notch at midpoint of straight yoke seam — matches the yoke piece
     _seam_d    = bpts['yoke_seat'] - bpts['yoke_side']
     _seam_norm = _seam_d / np.linalg.norm(_seam_d)
     _perp      = np.array([-_seam_norm[1], _seam_norm[0]])
     _nsize     = 0.25 * INCH * s
     ax.plot([yoke_mid[0] - _perp[0]*_nsize, yoke_mid[0] + _perp[0]*_nsize],
             [yoke_mid[1] - _perp[1]*_nsize, yoke_mid[1] + _perp[1]*_nsize],
-            color='steelblue', linewidth=1.2)
+            color='gray', linewidth=1.2)
 
     # -- Reference lines --
     y_lo = min(bpts['11'][1], fpts['6'][1]) - 3
@@ -316,34 +340,36 @@ def plot_jeans_back(front, back, output_path='Logs/jeans_back.svg', debug=False,
                         xytext=(6, 4), ha='left', fontsize=7, color='gray', alpha=0.5)
 
         # Measurement annotations
-        _annotate_segment(ax, fpts['1'], bpts['back_waist'], offset=(0, 8))
-        _annotate_curve(ax, bcurves['seat_upper'], offset=(-10, 0))
+        _annotate_segment(ax, bpts['yoke_side'], bpts['yoke_seat'], offset=(0, 8))
+        _annotate_curve(ax, bcurves['seat_upper_below_yoke'], offset=(-10, 0))
         _annotate_curve(ax, bcurves['seat_lower'], offset=(-10, 0))
         _annotate_curve(ax, bcurves['back_inseam'], offset=(10, 0))
         _annotate_segment(ax, bpts['12'], bpts['back_hem'], offset=(10, 0))
         _annotate_segment(ax, bpts['back_hem'], fpts['0'], offset=(0, 8))
         _annotate_segment(ax, fpts['0'], fpts['4'], offset=(0, 8))
-        _annotate_segment(ax, fpts['4'], fpts['1'], offset=(-10, 0))
+        _annotate_segment(ax, fpts['4'], bpts['yoke_side'], offset=(-10, 0))
 
     # --- Seam allowances (always drawn) ---
+    # Back body piece with yoke removed — SA applied to the yoke seam edge,
+    # not the waist.  MHTML: "the yoke is a separate piece so don't include it
+    # when adding seam allowances for the back."
     SA_SIDE    = 3/4 * INCH   # side seam
     SA_HEM     = (1.5 + 7/8) * INCH  # 2 3/8"
     SA_INSEAM  = 3/4 * INCH   # back inseam
     SA_SEAT    = 5/8 * INCH   # seat seam
-    SA_YOKE    = 3/4 * INCH   # yoke seam (outseam side → waist)
+    SA_YOKE    = 3/4 * INCH   # yoke seam
+    EASE_YOKE  = 3/4 * INCH   # extra cutting width for gathering/ease at yoke join
 
-    # CW outline: outseam(1→4→0) → hem(0→back_hem) → lower_inseam(back_hem→12)
-    #   → back_inseam(12→11) → seat_lower(11→8') → seat_upper(8'→back_waist)
-    #   → waist(back_waist→1)
+    # CW outline: yoke_side → 4 → 0 → back_hem → 12 → 11 → 8' → yoke_seat → yoke_side
     sa_edges = [
-        (np.array([fpts['1'], fpts['4']]),                       SA_SIDE),    # outseam upper
+        (np.array([bpts['yoke_side'], fpts['4']]),               SA_SIDE),    # outseam upper (below yoke)
         (np.array([fpts['4'], fpts['0']]),                       SA_SIDE),    # outseam lower
         (np.array([fpts['0'], bpts['back_hem']]),                SA_HEM),     # hem
         (np.array([bpts['back_hem'], bpts['12']]),               SA_INSEAM),  # lower inseam straight
         (bcurves['back_inseam'][::-1],                           SA_INSEAM),  # back inseam curve (12→11)
         (bcurves['seat_lower'][::-1],                            SA_SEAT),    # seat lower (11→8')
-        (bcurves['seat_upper'][::-1],                            SA_SEAT),    # seat upper (8'→back_waist)
-        (np.array([bpts['back_waist'], fpts['1']]),              SA_YOKE),    # waist
+        (bcurves['seat_upper_below_yoke'][::-1],                 SA_SEAT),    # seat upper (8'→yoke_seat)
+        (np.array([bpts['yoke_seat'], bpts['yoke_side']]),       SA_YOKE + EASE_YOKE),  # yoke seam (3/4" SA + 3/4" ease)
     ]
     _draw_seam_allowance(ax, sa_edges, scale=s)
 

@@ -1,5 +1,5 @@
 measurements:
-  side_length: 40.00 # in - outside leg, waist to floor
+  side_length: 41.50 # in - outside leg, waist to floor (includes waistband)
   inseam: 32.00 # in - crotch to floor
   waist: 34.00 # in - circumference at natural waist
   seat: 40.00 # in - circumference around fullest part (hip girth)

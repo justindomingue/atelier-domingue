@@ -1,6 +1,6 @@
 # Final garment measurements (not body scan — ease already included)
 measurements:
-  side_length: 36.00 # in - outside leg, waist to floor
+  side_length: 37.50 # in - outside leg, waist to floor (includes waistband)
   inseam: 26.00 # in - crotch to floor
   waist: 39.00 # in - pant waist circumference
   seat: 43.00 # in - hip/seat circumference (fullest part)

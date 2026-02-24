@@ -207,14 +207,14 @@ def run(measurements_path=None, output_dir='Logs'):
     ----------
     measurements_path : str or Path, optional
         Path to a YAML measurements file.  Defaults to the bundled
-        ``justin.yaml`` next to this module.
+        ``justin_1873_jeans.yaml`` next to this module.
     output_dir : str or Path
         Directory under which output files are written.
     """
     if measurements_path is None:
         measurements_path = (
             Path(__file__).resolve().parent.parent.parent
-            / 'measurements' / 'justin.yaml'
+            / 'measurements' / 'justin_1873_jeans.yaml'
         )
 
     m = load_measurements(measurements_path)

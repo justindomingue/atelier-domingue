@@ -157,7 +157,8 @@ def verify_draft(measurements_path):
     side_arc   = _curve_length(fcurves['hip'])
     side_str   = _seg(fpts['4'], fpts['0'])
     side_total = side_arc + side_str
-    side_target = m['side_length']
+    waistband = m.get('waistband_width', 1.5 * INCH)
+    side_target = m['side_length'] - waistband
 
     front_inseam_arc = _curve_length(fcurves['inseam'])
     front_inseam_str = _seg(fpts["3'"], fpts["0'"])

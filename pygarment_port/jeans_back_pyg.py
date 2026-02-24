@@ -191,7 +191,7 @@ def run(measurements_path=None, output_dir='Logs'):
     if measurements_path is None:
         measurements_path = (
             Path(__file__).resolve().parent.parent.parent
-            / 'measurements' / 'justin.yaml'
+            / 'measurements' / 'justin_1873_jeans.yaml'
         )
 
     m = load_measurements(measurements_path)

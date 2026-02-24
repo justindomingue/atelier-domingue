@@ -96,12 +96,18 @@ def plot_jeans_waistband(wb, output_path='Logs/jeans_waistband.svg',
 
     # Selvedge line (3/8" from bottom)
     ax.plot([0, length_s], [con['selvedge_y'], con['selvedge_y']], **REF)
-    ax.annotate('selvedge edge  3/8"',
+    ax.annotate('3/8" — selvedge edge (or SA if not on selvedge)',
                 (length_s / 2, con['selvedge_y'] / 2),
                 fontsize=7, ha='center', va='center', color='dimgray')
 
-    # Inside / outside division (center of visible waistband)
-    ax.plot([0, length_s], [con['center_y'], con['center_y']], **REF)
+    # Fold line (center of visible waistband) — dash-dot per pattern convention
+    FOLD = dict(color='black', linewidth=1.0, linestyle='-.', alpha=0.7)
+    ax.plot([0, length_s], [con['center_y'], con['center_y']], **FOLD)
+    ax.annotate('— FOLD —',
+                (length_s / 2, con['center_y']),
+                textcoords="offset points", xytext=(0, 5),
+                fontsize=8, ha='center', va='bottom', color='black',
+                fontweight='bold')
     ax.annotate('inside  1½"',
                 (length_s / 2, (con['selvedge_y'] + con['center_y']) / 2),
                 fontsize=7, ha='center', va='center', color='dimgray')

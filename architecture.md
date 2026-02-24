@@ -25,8 +25,8 @@ atelier-domingue/
 │       ├── trouser_front.py
 │       └── trouser_back.py
 ├── measurements/
-│   ├── justin.yaml
-│   ├── andrew.yaml
+│   ├── justin_1873_jeans.yaml
+│   ├── andrew_1873_jeans.yaml
 │   └── size_50.yaml
 ├── pygarment_port/                 # Archived pygarment port experiments
 │   ├── jeans_front_pyg.py
@@ -43,10 +43,10 @@ atelier-domingue/
 python run.py
 
 # Non-interactive
-python run.py -m measurements/justin.yaml -p SelvedgeJeans1873 -d -u cm
+python run.py -m measurements/justin_1873_jeans.yaml -p SelvedgeJeans1873 -d -u cm
 
 # Single piece
-python run.py -m measurements/justin.yaml -p SelvedgeJeans1873.jeans_front -d -u cm
+python run.py -m measurements/justin_1873_jeans.yaml -p SelvedgeJeans1873.jeans_front -d -u cm
 ```
 
 Output goes to `Logs/`.

@@ -25,6 +25,7 @@ from .jeans_front import (
     INCH, load_measurements, draft_jeans_front,
     _bezier_cubic, _annotate_segment, _annotate_curve,
     _point_at_arclength, _curve_up_to_arclength,
+    _draw_seam_allowance,
 )
 from .jeans_back import draft_jeans_back
 
@@ -175,6 +176,14 @@ def draft_jeans_yoke_modern(m, front, back):
     waist_curve = _bezier_through_4(
         pt1_rot, dart1_waist, dart2_waist, back_waist_rot)
 
+    # Grain line — parallel to the outseam (side-seam edge), through the
+    # midpoint of the yoke.  The outseam runs from yoke_side_rot to pt1_rot.
+    grain_dir = pt1_rot - yoke_side_rot
+    grain_dir = grain_dir / np.linalg.norm(grain_dir)
+    yoke_center = (pt1_rot + back_waist_rot + yoke_side_rot + yoke_seat_rot) / 4
+    grain_top = yoke_center + grain_dir * 1.2 * INCH
+    grain_bottom = yoke_center - grain_dir * 1.2 * INCH
+
     return {
         'points': {
             'yoke_side':       yoke_side,
@@ -187,6 +196,8 @@ def draft_jeans_yoke_modern(m, front, back):
             'dart2_waist':     dart2_waist,
             'dart1_yoke':      dart1_yoke,
             'dart2_yoke':      dart2_yoke,
+            'grain_top':       grain_top,
+            'grain_bottom':    grain_bottom,
         },
         'curves': {
             'yoke_line':  yoke_curve,
@@ -262,6 +273,30 @@ def plot_jeans_yoke_modern(front, back, yoke,
     # Left side: outseam segment (yoke_side_rot → pt1_rot)
     ax.plot([ypts['yoke_side_rot'][0], ypts['pt1_rot'][0]],
             [ypts['yoke_side_rot'][1], ypts['pt1_rot'][1]], **OUTLINE)
+
+    # -- Seam allowances --
+    # SA values: 3/8" waist, 3/4" side seam, 3/4" yoke seam, 5/8" seat seam
+    SA_WAIST = 3/8 * INCH
+    SA_SIDE  = 3/4 * INCH
+    SA_YOKE  = 3/4 * INCH
+    SA_SEAT  = 5/8 * INCH
+
+    # Edges CW: waist curve (top) → seat straight (right) →
+    #           yoke curve reversed (bottom) → outseam straight (left)
+    sa_edges = [
+        (ycurves['waist_line'],                                            SA_WAIST),
+        (np.array([ypts['back_waist_rot'], ypts['yoke_seat_rot']]),        SA_SEAT),
+        (ycurves['yoke_line'][::-1],                                       SA_YOKE),
+        (np.array([ypts['yoke_side_rot'], ypts['pt1_rot']]),               SA_SIDE),
+    ]
+    _draw_seam_allowance(ax, sa_edges, scale=s)
+
+    # -- Grain line --
+    ax.annotate('', xy=ypts['grain_top'], xytext=ypts['grain_bottom'],
+                arrowprops=dict(arrowstyle='->', color='gray', lw=0.8))
+    ax.annotate('grain', (ypts['grain_top'][0], ypts['grain_top'][1]),
+                textcoords="offset points", xytext=(8, 0),
+                fontsize=7, color='gray')
 
     # -- Debug overlays --
     if debug:

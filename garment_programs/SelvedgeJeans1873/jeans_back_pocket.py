@@ -21,7 +21,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 
-from .jeans_front import INCH, load_measurements, _annotate_segment
+from .jeans_front import INCH, load_measurements, _annotate_segment, _offset_polyline
 
 
 # -- Drafting ----------------------------------------------------------------
@@ -42,7 +42,7 @@ def draft_jeans_back_pocket(m):
     top_half = 3.375 * INCH     # 3 3/8" each side at top
     mid_half = 2.625 * INCH     # 2 5/8" each side at 6" mark
     mid_depth = 6.0 * INCH      # vertical to the 6" mark
-    total_depth = 7.0 * INCH    # vertical to the bottom point
+    total_depth = 8.0 * INCH    # vertical to the bottom point (7" is ref mark, 8" is full height)
 
     width = 2 * top_half        # 6 3/4" total at mouth
 
@@ -61,12 +61,20 @@ def draft_jeans_back_pocket(m):
     f_ref_r = np.array([cx + mid_half, total_depth - mid_depth])  # 6" mark, right
     f_bottom = np.array([cx, 0.0])                                # center point
 
-    # SA outline
-    sa_tl = np.array([cx - top_half - sa_side, total_depth + sa_top])
-    sa_tr = np.array([cx + top_half + sa_side, total_depth + sa_top])
-    sa_ref_l = np.array([cx - mid_half - sa_side, total_depth - mid_depth])
-    sa_ref_r = np.array([cx + mid_half + sa_side, total_depth - mid_depth])
-    sa_bottom = np.array([cx, -sa_side])
+    # SA outline — proper parallel offset per edge.
+    # The finished pentagon (CW: tl → tr → ref_r → bottom → ref_l) has two
+    # SA zones: 7/8" at top, 3/8" everywhere else.
+    # Top edge offset (7/8")
+    top_edge = np.array([f_tl, f_tr])
+    top_off = _offset_polyline(top_edge, sa_top)
+    sa_tl = top_off[0]
+    sa_tr = top_off[1]
+    # Sides + bottom offset (3/8") — right side, bottom point, left side
+    side_bottom = np.array([f_tr, f_ref_r, f_bottom, f_ref_l, f_tl])
+    side_off = _offset_polyline(side_bottom, sa_side)
+    sa_ref_r = side_off[1]
+    sa_bottom = side_off[2]
+    sa_ref_l = side_off[3]
 
     # Grain line (center, vertical)
     grain_top = np.array([cx, total_depth * 0.85])
@@ -133,7 +141,7 @@ def plot_jeans_back_pocket(pocket, output_path='Logs/jeans_back_pocket.svg',
         # 7" reference mark
         ax.plot([0, width_s], [con['ref_mark_y'], con['ref_mark_y']],
                 color='blue', linewidth=0.5, linestyle=':', alpha=0.5)
-        ax.annotate('7" ref', (width_s, con['ref_mark_y']),
+        ax.annotate('6" ref', (width_s, con['ref_mark_y']),
                     textcoords="offset points", xytext=(4, 0),
                     fontsize=6, color='blue')
 

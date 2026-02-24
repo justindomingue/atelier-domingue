@@ -21,7 +21,7 @@ from pathlib import Path
 from .jeans_front import (
     INCH, load_measurements, draft_jeans_front,
     _bezier_cubic, _curve_length, _annotate_segment,
-    _point_at_arclength,
+    _point_at_arclength, _draw_seam_allowance,
 )
 
 
@@ -156,6 +156,17 @@ def plot_jeans_front_pocket(front, pocket, output_path='Logs/jeans_front_pocket.
     # Top edge (along opening)
     ax.plot([ppts['pocket_upper'][0], ppts['bag_inner_top'][0]],
             [ppts['pocket_upper'][1], ppts['bag_inner_top'][1]], **BAG)
+
+    # -- Seam allowances (3/8" on all bag edges) --
+    SA_BAG = 3/8 * INCH
+    sa_edges = [
+        (np.array([ppts['pocket_upper'], ppts['bag_inner_top']]),    SA_BAG),  # top (along rise)
+        (np.array([ppts['bag_inner_top'], ppts['bag_inner_bottom']]),SA_BAG),  # inner edge
+        (pcurves['bag_bottom'],                                      SA_BAG),  # bottom curve
+        (np.array([ppts['bag_sideseam'], ppts['pocket_lower']]),     SA_BAG),  # side (along outseam)
+        (pcurves['opening'][::-1],                                   SA_BAG),  # opening (lower→upper)
+    ]
+    _draw_seam_allowance(ax, sa_edges, scale=s)
 
     if debug:
         for name, pt in ppts.items():

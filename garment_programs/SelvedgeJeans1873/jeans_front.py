@@ -204,8 +204,10 @@ def draft_jeans_front(m):
     dict with keys: points, curves, construction, metadata
     """
     # Step 1: Marking out the lengths
+    # MHTML: "0-1: Side Length to measure minus 1½" or the width of your waistband."
     pt0 = np.array([0.0, 0.0])
-    pt1 = np.array([-m['side_length'], 0.0])
+    waistband = m.get('waistband_width', 1.5 * INCH)
+    pt1 = np.array([-(m['side_length'] - waistband), 0.0])
     pt2 = np.array([-m['inseam'], 0.0])
     pt3 = np.array([pt2[0] / 2 - 2 * INCH, 0.0])
     pt4 = np.array([pt2[0] - (m['seat'] / 2) / 6, 0.0])
