@@ -24,7 +24,9 @@ from .jeans_front import (
     _annotate_segment,
 )
 from .jeans_front_pocket import draft_jeans_front_pocket
-from garment_programs.plot_utils import SEAMLINE, CUTLINE, draw_seam_allowance
+from garment_programs.plot_utils import (
+    SEAMLINE, CUTLINE, draw_seam_allowance, display_scale, setup_figure, finalize_figure,
+)
 
 
 # -- Drafting ----------------------------------------------------------------
@@ -125,16 +127,13 @@ def draft_jeans_watch_pocket(m):
 
 def plot_jeans_watch_pocket(piece, output_path='Logs/jeans_watch_pocket.svg',
                             debug=False, units='cm', pdf_pages=None, ax=None):
-    s = 1 / INCH if units == 'inch' else 1.0
-    unit_label = 'in' if units == 'inch' else 'cm'
+    s, unit_label = display_scale(units)
 
     pts = {k: v * s for k, v in piece['points'].items()}
     outline = piece['outline'] * s
     meta = piece['metadata']
 
-    standalone = ax is None
-    if standalone:
-        fig, ax = plt.subplots(1, 1, figsize=(8, 10))
+    fig, ax, standalone = setup_figure(ax, figsize=(8, 10))
     OUTLINE = SEAMLINE
     SA_STYLE = CUTLINE
 
@@ -193,16 +192,8 @@ def plot_jeans_watch_pocket(piece, output_path='Logs/jeans_watch_pocket.svg',
                     (pts['v_point'][0], pts['v_point'][1] - sa_bottom * s - 2 * s),
                     fontsize=6, ha='center', color='gray')
 
-        ax.set_xlabel(unit_label)
-        ax.set_ylabel(unit_label)
-        ax.grid(True, alpha=0.2)
-    else:
-        ax.axis('off')
-
-    if standalone:
-        from garment_programs.plot_utils import save_pattern
-        save_pattern(fig, ax, output_path, units=units, calibration=not debug,
-                     pdf_pages=pdf_pages)
+    finalize_figure(ax, fig, standalone, output_path, units=units, debug=debug,
+                    pdf_pages=pdf_pages)
 
 
 # -- Entry point for generic runner ------------------------------------------

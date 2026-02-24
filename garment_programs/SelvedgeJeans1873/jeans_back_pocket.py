@@ -28,7 +28,9 @@ from pathlib import Path
 from .jeans_front import INCH, load_measurements, draft_jeans_front, _annotate_segment
 from .jeans_back import draft_jeans_back
 from .jeans_yoke_1873 import draft_jeans_yoke
-from garment_programs.plot_utils import SEAMLINE, CUTLINE, draw_seam_allowance
+from garment_programs.plot_utils import (
+    SEAMLINE, CUTLINE, draw_seam_allowance, display_scale, setup_figure, finalize_figure,
+)
 
 
 # -- Drafting ----------------------------------------------------------------
@@ -143,8 +145,7 @@ def _to_local(pts_dict, mouth_dir, depth_dir, origin):
 
 def plot_jeans_back_pocket(pocket, output_path='Logs/jeans_back_pocket.svg',
                            debug=False, units='cm', pdf_pages=None, ax=None):
-    s = 1 / INCH if units == 'inch' else 1.0
-    unit_label = 'in' if units == 'inch' else 'cm'
+    s, unit_label = display_scale(units)
 
     # Rotate points into pocket-local frame (mouth horizontal, depth downward)
     mouth_dir = pocket['construction']['mouth_dir']
@@ -154,9 +155,7 @@ def plot_jeans_back_pocket(pocket, output_path='Logs/jeans_back_pocket.svg',
     local_pts = _to_local(raw_pts, mouth_dir, depth_dir, origin)
     pts = {k: v * s for k, v in local_pts.items()}
 
-    standalone = ax is None
-    if standalone:
-        fig, ax = plt.subplots(1, 1, figsize=(8, 10))
+    fig, ax, standalone = setup_figure(ax, figsize=(8, 10))
     from .seam_allowances import SEAM_ALLOWANCES
     SA = SEAM_ALLOWANCES['back_pocket']
 
@@ -198,16 +197,8 @@ def plot_jeans_back_pocket(pocket, output_path='Logs/jeans_back_pocket.svg',
         _annotate_segment(ax, pts['f_tr'], pts['f_ref_r'], offset=(10, 0))
         _annotate_segment(ax, pts['f_ref_r'], pts['f_bottom'], offset=(10, 0))
 
-        ax.set_xlabel(unit_label)
-        ax.set_ylabel(unit_label)
-        ax.grid(True, alpha=0.2)
-    else:
-        ax.axis('off')
-
-    if standalone:
-        from garment_programs.plot_utils import save_pattern
-        save_pattern(fig, ax, output_path, units=units, calibration=not debug,
-                     pdf_pages=pdf_pages)
+    finalize_figure(ax, fig, standalone, output_path, units=units, debug=debug,
+                    pdf_pages=pdf_pages)
 
 
 # -- Entry point for generic runner ------------------------------------------

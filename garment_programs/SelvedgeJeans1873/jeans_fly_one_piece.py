@@ -19,7 +19,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 
-from garment_programs.plot_utils import SEAMLINE
+from garment_programs.plot_utils import (
+    SEAMLINE, display_scale, setup_figure, finalize_figure,
+)
 from .jeans_front import (
     INCH, load_measurements, draft_jeans_front,
     _curve_length, _annotate_segment,
@@ -80,17 +82,14 @@ def draft_jeans_fly_one_piece(m, front):
 
 def plot_jeans_fly_one_piece(fly, output_path='Logs/jeans_fly_one_piece.svg',
                           debug=False, units='cm', pdf_pages=None, ax=None):
-    s = 1 / INCH if units == 'inch' else 1.0
-    unit_label = 'in' if units == 'inch' else 'cm'
+    s, unit_label = display_scale(units)
 
     pts = {k: v * s for k, v in fly['points'].items()}
     con = {k: v * s for k, v in fly['construction'].items()}
     length_s = fly['metadata']['length'] * s
     width_s = fly['metadata']['width'] * s
 
-    standalone = ax is None
-    if standalone:
-        fig, ax = plt.subplots(1, 1, figsize=(6, 14))
+    fig, ax, standalone = setup_figure(ax, figsize=(6, 14))
     OUTLINE = SEAMLINE
 
     # Rectangle
@@ -143,16 +142,8 @@ def plot_jeans_fly_one_piece(fly, output_path='Logs/jeans_fly_one_piece.svg',
         _annotate_segment(ax, pts['bl'], pts['br'], offset=(0, -10))
         _annotate_segment(ax, pts['br'], pts['tr'], offset=(10, 0))
 
-        ax.set_xlabel(unit_label)
-        ax.set_ylabel(unit_label)
-        ax.grid(True, alpha=0.2)
-    else:
-        ax.axis('off')
-
-    if standalone:
-        from garment_programs.plot_utils import save_pattern
-        save_pattern(fig, ax, output_path, units=units, calibration=not debug,
-                     pdf_pages=pdf_pages)
+    finalize_figure(ax, fig, standalone, output_path, units=units, debug=debug,
+                    pdf_pages=pdf_pages)
 
 
 # -- Entry point for generic runner ------------------------------------------

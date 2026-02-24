@@ -18,6 +18,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 
+from garment_programs.plot_utils import display_scale, setup_figure, finalize_figure
 from .jeans_front import INCH, load_measurements, _annotate_segment
 
 
@@ -78,8 +79,7 @@ def draft_jeans_back_cinch(m):
 
 def plot_jeans_back_cinch(cinch, output_path='Logs/jeans_back_cinch.svg',
                           debug=False, units='cm', pdf_pages=None, ax=None):
-    s = 1 / INCH if units == 'inch' else 1.0
-    unit_label = 'in' if units == 'inch' else 'cm'
+    s, unit_label = display_scale(units)
 
     pts = {k: v * s for k, v in cinch['points'].items()}
 
@@ -92,9 +92,7 @@ def plot_jeans_back_cinch(cinch, output_path='Logs/jeans_back_cinch.svg',
     pivot = pts['f_bl'].copy()
     pts = {k: pivot + R @ (v - pivot) for k, v in pts.items()}
 
-    standalone = ax is None
-    if standalone:
-        fig, ax = plt.subplots(1, 1, figsize=(12, 4))
+    fig, ax, standalone = setup_figure(ax, figsize=(12, 4))
     LINE = dict(color='black', linewidth=1.5)
 
     # -- Long edges (SA top, finished top, center, finished bottom, SA bottom) --
@@ -149,16 +147,8 @@ def plot_jeans_back_cinch(cinch, output_path='Logs/jeans_back_cinch.svg',
                     textcoords="offset points", xytext=(0, -6),
                     fontsize=6, color='gray', ha='center')
 
-        ax.set_xlabel(unit_label)
-        ax.set_ylabel(unit_label)
-        ax.grid(True, alpha=0.2)
-    else:
-        ax.axis('off')
-
-    if standalone:
-        from garment_programs.plot_utils import save_pattern
-        save_pattern(fig, ax, output_path, units=units, calibration=not debug,
-                     pdf_pages=pdf_pages)
+    finalize_figure(ax, fig, standalone, output_path, units=units, debug=debug,
+                    pdf_pages=pdf_pages)
 
 
 # -- Entry point for generic runner ------------------------------------------

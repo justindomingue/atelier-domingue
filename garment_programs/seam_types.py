@@ -8,7 +8,7 @@ Individual garment seam_allowances modules reference these types so that
 changing a construction method propagates everywhere automatically.
 """
 
-INCH = 2.54
+from garment_programs.geometry import INCH
 
 SEAM_TYPES = {
     'flat_fell':    3/8 * INCH,           # flat-felled seam (each side)

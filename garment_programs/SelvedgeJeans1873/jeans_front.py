@@ -4,99 +4,21 @@ Based on: Historical Tailoring Masterclasses - Drafting the Front
 
 Refactored from the step-by-step exploration into a reusable module.
 """
-import yaml
 import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 
-from garment_programs.plot_utils import SEAMLINE, CUTLINE, offset_polyline, draw_seam_allowance
-
-INCH = 2.54  # cm per inch
-
-
-def load_measurements(yaml_path):
-    """Load measurements from YAML, converting inches to cm."""
-    with open(yaml_path) as f:
-        raw = yaml.safe_load(f)['measurements']
-
-    unit = raw.get('unit', 'inch')
-    scale = INCH if unit == 'inch' else 1.0
-
-    m = {}
-    for key, val in raw.items():
-        if key == 'unit':
-            continue
-        m[key] = val * scale
-    return m
-
-
-# -- Bezier helpers ----------------------------------------------------------
-
-def _bezier_cubic(P0, P1, P2, P3, n=100):
-    t = np.linspace(0, 1, n).reshape(-1, 1)
-    return (1-t)**3 * P0 + 3*(1-t)**2 * t * P1 + 3*(1-t) * t**2 * P2 + t**3 * P3
-
-
-def _bezier_quad(P0, P1, P2, n=100):
-    t = np.linspace(0, 1, n).reshape(-1, 1)
-    return (1-t)**2 * P0 + 2*(1-t) * t * P1 + t**2 * P2
-
-
-# -- Arc-length walk helpers ------------------------------------------------
-
-def _point_at_arclength(curve, dist):
-    """Interpolated (x, y) at *dist* arc-length from the start of a polyline."""
-    diffs = np.diff(curve, axis=0)
-    seg_lengths = np.sqrt(diffs[:, 0]**2 + diffs[:, 1]**2)
-    cum = np.concatenate([[0.0], np.cumsum(seg_lengths)])
-    if dist <= 0:
-        return curve[0].copy()
-    if dist >= cum[-1]:
-        return curve[-1].copy()
-    idx = max(0, int(np.searchsorted(cum, dist)) - 1)
-    idx = min(idx, len(curve) - 2)
-    t = (dist - cum[idx]) / seg_lengths[idx]
-    return curve[idx] * (1 - t) + curve[idx + 1] * t
-
-
-def _curve_up_to_arclength(curve, dist):
-    """Sub-polyline from ``curve[0]`` to the point at *dist* arc-length."""
-    diffs = np.diff(curve, axis=0)
-    seg_lengths = np.sqrt(diffs[:, 0]**2 + diffs[:, 1]**2)
-    cum = np.concatenate([[0.0], np.cumsum(seg_lengths)])
-    if dist >= cum[-1]:
-        return curve.copy()
-    idx = max(0, int(np.searchsorted(cum, dist)) - 1)
-    idx = min(idx, len(curve) - 2)
-    t = (dist - cum[idx]) / seg_lengths[idx]
-    endpoint = curve[idx] * (1 - t) + curve[idx + 1] * t
-    return np.vstack([curve[:idx + 1], endpoint.reshape(1, 2)])
-
-
-# -- Measurement annotation helpers -----------------------------------------
-
-def _curve_length(pts):
-    """Arc length of a polyline (Nx2 array)."""
-    diffs = np.diff(pts, axis=0)
-    return np.sum(np.sqrt(diffs[:, 0]**2 + diffs[:, 1]**2))
-
-
-def _annotate_curve(ax, pts, offset=(0, 6)):
-    """Label a curve with its arc length at the midpoint."""
-    length = _curve_length(pts)
-    mid = pts[len(pts) // 2]
-    ax.annotate(f'{length:.1f}', mid, textcoords="offset points",
-                xytext=offset, fontsize=6, color='darkblue', ha='center',
-                bbox=dict(boxstyle='round,pad=0.2', fc='white', ec='none', alpha=0.7))
-
-
-def _annotate_segment(ax, p0, p1, offset=(0, 6)):
-    """Label a straight segment with its length at the midpoint."""
-    length = np.linalg.norm(p1 - p0)
-    mid = (p0 + p1) / 2
-    ax.annotate(f'{length:.1f}', mid, textcoords="offset points",
-                xytext=offset, fontsize=6, color='darkblue', ha='center',
-                bbox=dict(boxstyle='round,pad=0.2', fc='white', ec='none', alpha=0.7))
+from garment_programs.geometry import (
+    INCH, _bezier_cubic, _bezier_quad,
+    _curve_length, _point_at_arclength, _curve_up_to_arclength,
+    _curve_from_arclength,
+    _annotate_curve, _annotate_segment,
+)
+from garment_programs.measurements import load_measurements
+from garment_programs.plot_utils import (
+    SEAMLINE, CUTLINE, offset_polyline, draw_seam_allowance,
+    display_scale, setup_figure, finalize_figure,
+)
 
 
 # -- Drafting ----------------------------------------------------------------
@@ -251,16 +173,13 @@ def plot_jeans_front(draft, output_path='Logs/jeans_front.svg', debug=False, uni
 
     units : 'cm' or 'inch' — display unit for axes and annotations.
     """
-    s = 1 / INCH if units == 'inch' else 1.0  # display scale factor
-    unit_label = 'in' if units == 'inch' else 'cm'
+    s, unit_label = display_scale(units)
     pts = {k: v * s for k, v in draft['points'].items()}
     curves = {k: v * s for k, v in draft['curves'].items()}
     con = {k: v * s for k, v in draft['construction'].items()}
     REF = dict(color='gray', linewidth=0.8, linestyle='--', alpha=0.4)
 
-    standalone = ax is None
-    if standalone:
-        fig, ax = plt.subplots(1, 1, figsize=(16, 10))
+    fig, ax, standalone = setup_figure(ax, figsize=(16, 10))
 
     # --- Debug-only: construction scaffolding ---
     if debug:
@@ -311,29 +230,28 @@ def plot_jeans_front(draft, output_path='Logs/jeans_front.svg', debug=False, uni
                 'k-', linewidth=1.5)
 
     # --- Internal reference lines (always shown) ---
-    # Clip to pattern outline bounding box (don't inflate SVG dimensions)
+    # Each vertical line is clipped to the piece outline width at that x,
+    # not the global bounding box (which would overshoot at the crotch fork).
     outline_keys = ['0', "0'", "3'", '4', "1'", "7'", '8', '6']
-    y_lo = min(pts[k][1] for k in outline_keys)
-    y_hi = max(pts[k][1] for k in outline_keys)
     x_lo = min(pts[k][0] for k in outline_keys)
     x_hi = max(pts[k][0] for k in outline_keys)
 
-    # Seat line — vertical at pt4 x-level (just above crotch fork)
+    # Seat line — vertical at pt4 x-level, clipped to outseam (pt4) → inseam (pt8)
     seat_x = pts['4'][0]
-    ax.plot([seat_x, seat_x], [y_lo, y_hi], **REF)
-    ax.annotate('seat', (seat_x, y_hi), textcoords="offset points",
+    ax.plot([seat_x, seat_x], [pts['4'][1], pts['8'][1]], **REF)
+    ax.annotate('seat', (seat_x, pts['4'][1]), textcoords="offset points",
                 xytext=(4, 4), fontsize=7, color='gray')
 
-    # Hip line — vertical at the crotch-fork x-level
+    # Hip line — vertical at pt2 x-level, clipped to baseline (pt2) → inseam (pt5)
     hip_x = pts['2'][0]
-    ax.plot([hip_x, hip_x], [y_lo, y_hi], **REF)
-    ax.annotate('hip', (hip_x, y_hi), textcoords="offset points",
+    ax.plot([hip_x, hip_x], [pts['2'][1], pts['5'][1]], **REF)
+    ax.annotate('hip', (hip_x, pts['2'][1]), textcoords="offset points",
                 xytext=(4, 4), fontsize=7, color='gray')
 
-    # Knee line — vertical at knee x-level
+    # Knee line — vertical at knee x-level, clipped to baseline (pt3) → inseam (pt3')
     knee_x = pts['3'][0]
-    ax.plot([knee_x, knee_x], [y_lo, y_hi], **REF)
-    ax.annotate('knee', (knee_x, y_hi), textcoords="offset points",
+    ax.plot([knee_x, knee_x], [pts['3'][1], pts["3'"][1]], **REF)
+    ax.annotate('knee', (knee_x, pts['3'][1]), textcoords="offset points",
                 xytext=(4, 4), fontsize=7, color='gray')
 
     # Center front line — horizontal at CF y-offset
@@ -457,13 +375,8 @@ def plot_jeans_front(draft, output_path='Logs/jeans_front.svg', debug=False, uni
         draw_piece_label(ax, center, draft['metadata']['title'],
                          draft['metadata'].get('cut_count'))
 
-    if not debug:
-        ax.axis('off')
-
-    if standalone:
-        from garment_programs.plot_utils import save_pattern
-        save_pattern(fig, ax, output_path, units=units, calibration=not debug,
-                     pdf_pages=pdf_pages)
+    finalize_figure(ax, fig, standalone, output_path, units=units, debug=debug,
+                    pdf_pages=pdf_pages)
 
 
 # -- Entry point for generic runner ------------------------------------------

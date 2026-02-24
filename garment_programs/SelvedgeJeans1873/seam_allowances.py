@@ -9,6 +9,8 @@ from garment_programs.seam_types import SEAM_TYPES, INCH
 
 S = SEAM_TYPES  # short alias for readability
 
+YOKE_SEAT_DEPTH = 2.75 * INCH   # yoke point along seat_upper curve from back_waist
+
 SEAM_ALLOWANCES = {
     'front': {
         'side':    2 * S['flat_fell'],       # 3/4" — outseam, flat-felled (wrap side)

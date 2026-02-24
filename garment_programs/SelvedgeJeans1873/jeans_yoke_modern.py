@@ -21,13 +21,16 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 
-from garment_programs.plot_utils import SEAMLINE, draw_seam_allowance
+from garment_programs.plot_utils import (
+    SEAMLINE, draw_seam_allowance, display_scale, setup_figure, finalize_figure,
+)
 from .jeans_front import (
     INCH, load_measurements, draft_jeans_front,
     _bezier_cubic, _annotate_segment, _annotate_curve,
     _point_at_arclength, _curve_up_to_arclength,
 )
 from .jeans_back import draft_jeans_back
+from .seam_allowances import SEAM_ALLOWANCES, YOKE_SEAT_DEPTH
 
 
 # -- Helpers -----------------------------------------------------------------
@@ -78,7 +81,7 @@ def draft_jeans_yoke_modern(m, front, back):
     dir_1_to_4 = fpts['4'] - fpts['1']
     dir_1_to_4_norm = dir_1_to_4 / np.linalg.norm(dir_1_to_4)
     yoke_side = fpts['1'] + dir_1_to_4_norm * (1.5 * INCH)
-    yoke_seat = _point_at_arclength(back['curves']['seat_upper'], 2.75 * INCH)
+    yoke_seat = _point_at_arclength(back['curves']['seat_upper'], YOKE_SEAT_DEPTH)
 
     pt1 = fpts['1']
     back_waist = bpts['back_waist']
@@ -229,8 +232,7 @@ def plot_jeans_yoke_modern(front, back, yoke,
     Always draws the final smooth yoke outline.
     With debug=True, adds the flat dart construction, point labels, and grid.
     """
-    s = 1 / INCH if units == 'inch' else 1.0
-    unit_label = 'in' if units == 'inch' else 'cm'
+    s, unit_label = display_scale(units)
 
     fpts    = {k: v * s for k, v in front['points'].items()}
     bpts    = {k: v * s for k, v in back['points'].items()}
@@ -240,11 +242,9 @@ def plot_jeans_yoke_modern(front, back, yoke,
     ycon    = {k: v * s for k, v in yoke['construction'].items()}
 
     # Seat-seam curve segment for yoke right side
-    seat_seg = _curve_up_to_arclength(back['curves']['seat_upper'], 2.75 * INCH) * s
+    seat_seg = _curve_up_to_arclength(back['curves']['seat_upper'], YOKE_SEAT_DEPTH) * s
 
-    standalone = ax is None
-    if standalone:
-        fig, ax = plt.subplots(1, 1, figsize=(16, 10))
+    fig, ax, standalone = setup_figure(ax, figsize=(16, 10))
     OUTLINE  = SEAMLINE
     CONTEXT  = dict(color='lightgray', linewidth=1, alpha=0.5)
     FLAT_DART = dict(color='orange', linewidth=0.8, linestyle='--', alpha=0.6)
@@ -277,21 +277,17 @@ def plot_jeans_yoke_modern(front, back, yoke,
     ax.plot([ypts['yoke_side_rot'][0], ypts['pt1_rot'][0]],
             [ypts['yoke_side_rot'][1], ypts['pt1_rot'][1]], **OUTLINE)
 
-    # -- Seam allowances --
-    # SA values: 3/8" waist, 3/4" side seam, 3/4" yoke seam, 5/8" seat seam
-    SA_WAIST = 3/8 * INCH
-    SA_SIDE  = 3/4 * INCH
-    SA_YOKE  = 3/4 * INCH
-    SA_SEAT  = 5/8 * INCH
+    # -- Seam allowances (from centralized SEAM_ALLOWANCES) --
+    _sa = SEAM_ALLOWANCES['yoke']
 
     # Edges CW (matching 1873 yoke convention):
     #   outseam(1→yoke_side) → yoke_line(yoke_side→yoke_seat) →
     #   seat(yoke_seat→back_waist) → waist reversed(back_waist→1)
     sa_edges = [
-        (np.array([ypts['pt1_rot'], ypts['yoke_side_rot']]),              SA_SIDE),
-        (ycurves['yoke_line'],                                             SA_YOKE),
-        (np.array([ypts['yoke_seat_rot'], ypts['back_waist_rot']]),       SA_SEAT),
-        (ycurves['waist_line'][::-1],                                      SA_WAIST),
+        (np.array([ypts['pt1_rot'], ypts['yoke_side_rot']]),              _sa['side']),
+        (ycurves['yoke_line'],                                             _sa['waist']),
+        (np.array([ypts['yoke_seat_rot'], ypts['back_waist_rot']]),       _sa['seat']),
+        (ycurves['waist_line'][::-1],                                      _sa['waist']),
     ]
     draw_seam_allowance(ax, sa_edges, scale=s)
 
@@ -372,17 +368,8 @@ def plot_jeans_yoke_modern(front, back, yoke,
                          yoke['metadata']['title'],
                          yoke['metadata'].get('cut_count'))
 
-    if not debug:
-        ax.axis('off')
-    else:
-        ax.set_xlabel(unit_label)
-        ax.set_ylabel(unit_label)
-        ax.grid(True, alpha=0.2)
-
-    if standalone:
-        from garment_programs.plot_utils import save_pattern
-        save_pattern(fig, ax, output_path, units=units, calibration=not debug,
-                     pdf_pages=pdf_pages)
+    finalize_figure(ax, fig, standalone, output_path, units=units, debug=debug,
+                    pdf_pages=pdf_pages)
 
 
 # -- Entry point for generic runner ------------------------------------------

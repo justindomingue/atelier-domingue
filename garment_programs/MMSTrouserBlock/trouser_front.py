@@ -8,12 +8,14 @@ Coordinate system:
   - X axis: positive to the right
   - Y axis: positive upward
 """
-import yaml
 import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 
-INCH = 2.54  # cm per inch
+from garment_programs.geometry import (
+    INCH, _bezier_cubic, _bezier_quad, _curve_length, _annotate_len,
+)
+from garment_programs.measurements import load_measurements
 
 # -- Pleat configuration by count ---------------------------------------------
 # Each pleat_offsets entry is (left_offset, right_offset) relative to creaseline_x.
@@ -25,46 +27,6 @@ PLEAT_CONFIGS = {
 PLEAT_NAMES = {0: 'Flat-Front', 1: '1-Pleat', 2: '2-Pleat'}
 
 
-def load_measurements(yaml_path):
-    """Load measurements from YAML, converting inches to cm if needed."""
-    with open(yaml_path) as f:
-        raw = yaml.safe_load(f)['measurements']
-    unit = raw.get('unit', 'inch')
-    scale = INCH if unit == 'inch' else 1.0
-    m = {}
-    for key, val in raw.items():
-        if key == 'unit':
-            continue
-        m[key] = val * scale
-    return m
-
-
-# -- Bezier helpers ----------------------------------------------------------
-
-def _bezier_cubic(P0, P1, P2, P3, n=100):
-    t = np.linspace(0, 1, n).reshape(-1, 1)
-    return (1-t)**3 * P0 + 3*(1-t)**2 * t * P1 + 3*(1-t) * t**2 * P2 + t**3 * P3
-
-
-def _bezier_quad(P0, P1, P2, n=100):
-    t = np.linspace(0, 1, n).reshape(-1, 1)
-    return (1-t)**2 * P0 + 2*(1-t) * t * P1 + t**2 * P2
-
-
-def _curve_length(pts):
-    """Arc length of a polyline (Nx2 array)."""
-    diffs = np.diff(pts, axis=0)
-    return np.sum(np.sqrt(diffs[:, 0]**2 + diffs[:, 1]**2))
-
-
-def _annotate_len(ax, pts, offset=(0, 6), label=None):
-    """Label a polyline/curve with its arc length at the midpoint."""
-    length = _curve_length(np.atleast_2d(pts))
-    mid = pts[len(pts) // 2]
-    text = f'{length:.1f}' if label is None else f'{label} {length:.1f}'
-    ax.annotate(text, mid, textcoords='offset points',
-                xytext=offset, fontsize=6, color='darkblue', ha='center',
-                bbox=dict(boxstyle='round,pad=0.2', fc='white', ec='none', alpha=0.7))
 
 
 # -- Drafting ----------------------------------------------------------------
@@ -335,7 +297,8 @@ def plot_trouser_front(draft, output_path='Logs/trouser_front.svg',
     mm  = draft['measurements']
     crv = draft['curves']
 
-    fig, ax = plt.subplots(1, 1, figsize=(10, 16))
+    from garment_programs.plot_utils import setup_figure, finalize_figure
+    fig, ax, standalone = setup_figure(figsize=(10, 16))
     plt.rcParams['lines.solid_capstyle'] = 'butt'
     REF = dict(color='gray', linewidth=0.8, linestyle='--', alpha=0.4)
     CON = dict(color='cornflowerblue', linewidth=0.6, linestyle=':', alpha=0.5)
@@ -580,10 +543,8 @@ def plot_trouser_front(draft, output_path='Logs/trouser_front.svg',
 
 def _finish_plot(fig, ax, draft, output_path, step, debug=False):
     """Common plot finalization."""
-    if not debug:
-        ax.axis('off')
-    from garment_programs.plot_utils import save_pattern
-    save_pattern(fig, ax, output_path, units='cm', calibration=not debug)
+    from garment_programs.plot_utils import finalize_figure
+    finalize_figure(ax, fig, True, output_path, units='cm', debug=debug)
 
 
 # -- Entry point for generic runner ------------------------------------------

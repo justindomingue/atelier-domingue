@@ -1,10 +1,13 @@
+import warnings
 from pathlib import Path
 
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 
-CM_PER_INCH = 2.54
+from garment_programs.geometry import INCH
+
+CM_PER_INCH = INCH  # alias for backward compat in save_pattern / lay_plan
 
 # -- Standard line styles for pattern pieces --------------------------------
 # Seamline: the finished sewing line (thinner)
@@ -188,6 +191,18 @@ def draw_seam_allowance(ax, edges, scale=1.0):
     scale : float
         Display scale factor (e.g. 1/INCH for inch mode).
     """
+    # Validate CW winding via signed area of edge start-points
+    if len(edges) >= 3:
+        verts = np.array([np.asarray(e[0])[0] for e in edges])
+        x, y = verts[:, 0], verts[:, 1]
+        signed_area = np.sum(x * np.roll(y, -1) - np.roll(x, -1) * y) / 2
+        if signed_area > 1e-6:
+            warnings.warn(
+                "SA edges appear to be wound counter-clockwise (signed area "
+                f"= {signed_area:.2f}).  Seam allowance will draw inward.  "
+                "Reverse the edge order to fix.",
+                stacklevel=2,
+            )
     # Offset each edge independently
     offsets = []
     scaled_sas = []
@@ -221,3 +236,47 @@ def draw_seam_allowance(ax, edges, scale=1.0):
     sa_pts.append(sa_pts[0])
     sa_path = np.array(sa_pts)
     ax.plot(sa_path[:, 0], sa_path[:, 1], **CUTLINE)
+
+
+# -- Plot boilerplate helpers ------------------------------------------------
+
+def display_scale(units):
+    """Return (scale_factor, unit_label) for converting from cm to display units."""
+    s = 1 / INCH if units == 'inch' else 1.0
+    label = 'in' if units == 'inch' else 'cm'
+    return s, label
+
+
+def setup_figure(ax=None, figsize=(16, 10)):
+    """Create or reuse a figure/axes pair.
+
+    Returns (fig, ax, standalone).  When *standalone* is True, the caller
+    should call :func:`finalize_figure` to save and close the figure.
+    """
+    standalone = ax is None
+    if standalone:
+        fig, ax = plt.subplots(1, 1, figsize=figsize)
+    else:
+        fig = ax.get_figure()
+    return fig, ax, standalone
+
+
+def finalize_figure(ax, fig, standalone, output_path, units='cm', debug=False,
+                    pdf_pages=None):
+    """Clean up axes and save the figure if standalone.
+
+    debug=True:  show xlabel, ylabel, and grid.
+    debug=False: turn off axes.
+    Always saves via save_pattern when standalone.
+    """
+    if not debug:
+        ax.axis('off')
+    else:
+        _, unit_label = display_scale(units)
+        ax.set_xlabel(unit_label)
+        ax.set_ylabel(unit_label)
+        ax.grid(True, alpha=0.2)
+
+    if standalone:
+        save_pattern(fig, ax, output_path, units=units, calibration=not debug,
+                     pdf_pages=pdf_pages)

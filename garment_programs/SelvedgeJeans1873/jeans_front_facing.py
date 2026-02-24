@@ -29,7 +29,9 @@ from .jeans_front import (
     _curve_up_to_arclength,
 )
 from .jeans_front_pocket import draft_jeans_front_pocket
-from garment_programs.plot_utils import SEAMLINE, draw_seam_allowance
+from garment_programs.plot_utils import (
+    SEAMLINE, draw_seam_allowance, display_scale, setup_figure, finalize_figure,
+)
 
 
 # -- Drafting ----------------------------------------------------------------
@@ -151,16 +153,13 @@ def draft_jeans_front_facing(m):
 
 def plot_jeans_front_facing(piece, output_path='Logs/jeans_front_facing.svg',
                             debug=False, units='cm', pdf_pages=None, ax=None):
-    s = 1 / INCH if units == 'inch' else 1.0
-    unit_label = 'in' if units == 'inch' else 'cm'
+    s, unit_label = display_scale(units)
 
     pts = {k: v * s for k, v in piece['points'].items()}
     curves = {k: v * s for k, v in piece['curves'].items()}
     meta = piece['metadata']
 
-    standalone = ax is None
-    if standalone:
-        fig, ax = plt.subplots(1, 1, figsize=(10, 8))
+    fig, ax, standalone = setup_figure(ax, figsize=(10, 8))
     # Finished outline: rise → opening → hip (all continuous)
     rise = curves['rise']
     opening = curves['opening']
@@ -206,16 +205,8 @@ def plot_jeans_front_facing(piece, output_path='Logs/jeans_front_facing.svg',
         _annotate_curve(ax, curves['opening'], offset=(8, 0))
         _annotate_curve(ax, curves['hip'], offset=(0, 8))
 
-        ax.set_xlabel(unit_label)
-        ax.set_ylabel(unit_label)
-        ax.grid(True, alpha=0.2)
-    else:
-        ax.axis('off')
-
-    if standalone:
-        from garment_programs.plot_utils import save_pattern
-        save_pattern(fig, ax, output_path, units=units, calibration=not debug,
-                     pdf_pages=pdf_pages)
+    finalize_figure(ax, fig, standalone, output_path, units=units, debug=debug,
+                    pdf_pages=pdf_pages)
 
 
 # -- Entry point for generic runner ------------------------------------------

@@ -1,8 +1,8 @@
-"""Generic cutting layout — skyline-pack piece SVGs within a fabric width.
+"""Lay plan — skyline-pack piece SVGs within a fabric width.
 
 Works for any garment: reads individual piece SVGs, packs them into a
-single composite SVG that represents the cutting layout on fabric of a
-given width.
+single composite SVG that represents the lay plan on fabric of a given
+width.
 
 Layout orientation (horizontal):
     x-axis = fabric length (grows rightward)
@@ -25,8 +25,9 @@ SVG_NS = 'http://www.w3.org/2000/svg'
 ET.register_namespace('', SVG_NS)
 ET.register_namespace('xlink', 'http://www.w3.org/1999/xlink')
 
+from garment_programs.geometry import INCH as CM_PER_INCH
+
 PTS_PER_INCH = 72.0
-CM_PER_INCH = 2.54
 
 
 def _tag(name):
@@ -317,7 +318,7 @@ def _extract_outline_polygon(svg_path):
 def _transform_polygon(polygon, transform, w_inches, h_inches):
     """Apply a layout transform to polygon vertices.
 
-    Mirrors the SVG embedding transforms used in generate_cutting_layout().
+    Mirrors the SVG embedding transforms used in generate_lay_plan().
 
     Parameters
     ----------
@@ -554,6 +555,150 @@ def _void_fill(selvedge_pieces, sel_positions, free_pieces, fabric_width,
     return placed, remaining
 
 
+def _offset_nest_selvedge(top_pieces, bot_pieces, fabric_width, gap=0.25,
+                          step=0.5):
+    """Try to offset-nest top/bottom selvedge piece pairs.
+
+    For each (top, bottom) pair whose bounding-box cross widths exceed
+    fabric_width, find the minimum lengthwise (x) offset where their actual
+    polygon shapes fit within fabric_width at every x-column.
+
+    Both selvedge pieces taper from wide (seat) to narrow (hem), so a
+    staggered placement lets the narrow end of one share fabric width
+    with the wide end of the other.
+
+    Parameters
+    ----------
+    top_pieces : list of (name, grain_len, cross_w, edge, poly, pad_x, pad_y)
+    bot_pieces : list of (name, grain_len, cross_w, edge, poly, pad_x, pad_y)
+    fabric_width : float
+    gap : float
+        Minimum clearance between pieces in inches.
+    step : float
+        X-discretization step for offset scanning and column checking.
+
+    Returns
+    -------
+    nested_positions : dict  {name: (svg_x, svg_y)}
+    remaining_tops : list of unpaired top piece tuples
+    remaining_bots : list of unpaired bottom piece tuples
+    """
+    # Build candidate pairs, prioritising cross-type main-panel pairings
+    # (front+back) over same-type (back+back) or accessory pairs.
+    # This ensures the lay plan always pairs front and back side-by-side
+    # on the fabric width, using offset nesting when they don't fit.
+    def _stem(name):
+        for sfx in ('_L', '_R', '_1', '_2', '_3', '_4'):
+            if name.endswith(sfx):
+                return name[:-len(sfx)]
+        return name
+
+    main_threshold = fabric_width * 0.3   # e.g. 9.3" for 31" fabric
+
+    candidates = []
+    for ti, top in enumerate(top_pieces):
+        for bi, bot in enumerate(bot_pieces):
+            excess = top[2] + bot[2] - fabric_width
+            # Priority: 0 = cross-pair of two main panels,
+            #           1 = same-family or involves accessory piece
+            is_cross_main = (
+                _stem(top[0]) != _stem(bot[0])
+                and top[2] > main_threshold
+                and bot[2] > main_threshold
+            )
+            priority = 0 if is_cross_main else 1
+            candidates.append((priority, excess, ti, bi))
+    candidates.sort()  # (priority ASC, excess ASC)
+
+    nested_positions = {}
+    used_tops = set()
+    used_bots = set()
+    # Track cumulative x-offset so successive pairs don't overlap
+    pair_x_cursor = 0.0
+
+    for _priority, _excess, ti, bi in candidates:
+        if ti in used_tops or bi in used_bots:
+            continue
+        top = top_pieces[ti]
+        bot = bot_pieces[bi]
+        # Only offset-nest main panels, not accessories (waistband, cinch)
+        if top[2] < main_threshold or bot[2] < main_threshold:
+            continue
+        t_name, t_gl, t_cw, _, t_poly, t_px, t_py = top
+        b_name, b_gl, b_cw, _, b_poly, b_px, b_py = bot
+
+        # "Unflip" the bottom polygon to original orientation
+        # (outseam at y=0) so y_max gives the cross-grain extent
+        # from the selvedge.
+        b_poly_h = max(p[1] for p in b_poly) if b_poly else 0
+        b_poly_orig = [(x, b_poly_h - y) for x, y in b_poly]
+
+        t_poly_xmax = max(p[0] for p in t_poly) if t_poly else t_gl
+        b_poly_xmax = (max(p[0] for p in b_poly_orig)
+                       if b_poly_orig else b_gl)
+
+        # Scan offsets from 0 upward
+        max_offset = max(t_poly_xmax, b_poly_xmax)
+        n_steps = int(max_offset / step) + 2
+
+        best_offset = None
+        for oi in range(n_steps):
+            offset = oi * step
+
+            # Overlap region: x-columns where both pieces are present
+            overlap_start = offset
+            overlap_end = min(t_poly_xmax, offset + b_poly_xmax)
+
+            if overlap_start >= overlap_end:
+                # No overlap — pieces are separate along x
+                best_offset = offset
+                break
+
+            fits = True
+            xc = overlap_start
+            while xc <= overlap_end + 0.001:
+                t_yr = _polygon_y_range_at_x(t_poly, xc)
+                b_yr = _polygon_y_range_at_x(b_poly_orig, xc - offset)
+
+                t_extent = t_yr[1] if t_yr else 0.0
+                b_extent = b_yr[1] if b_yr else 0.0
+
+                if t_extent + b_extent + gap > fabric_width:
+                    fits = False
+                    break
+
+                xc += step
+
+            if fits:
+                best_offset = offset
+                break
+
+        if best_offset is not None:
+            # Only nest if it actually saves fabric vs sequential
+            sequential_len = t_gl + b_gl + gap
+            nested_len = max(t_gl, best_offset + b_gl) + gap
+            savings = sequential_len - nested_len
+
+            if savings > step:
+                nested_positions[t_name] = (pair_x_cursor + gap / 2, 0.0)
+                nested_positions[b_name] = (pair_x_cursor + best_offset
+                                            + gap / 2,
+                                            fabric_width - b_cw)
+                used_tops.add(ti)
+                used_bots.add(bi)
+                pair_x_cursor += nested_len
+                print(f"    Offset nest: {t_name} + {b_name} "
+                      f"offset={best_offset:.1f}\" "
+                      f"(saves {savings:.1f}\" lengthwise)")
+
+    remaining_tops = [t for i, t in enumerate(top_pieces)
+                      if i not in used_tops]
+    remaining_bots = [b for i, b in enumerate(bot_pieces)
+                      if i not in used_bots]
+
+    return nested_positions, remaining_tops, remaining_bots
+
+
 def polygon_nest(pieces, fabric_width, gap=0.25):
     """Polygon-aware nesting with void filling and skyline fallback.
 
@@ -658,14 +803,127 @@ def polygon_nest(pieces, fabric_width, gap=0.25):
     sky_cont_positions.update(sel_positions)
     sky_cont_positions.update(all_free_sky_pos)
 
-    # --- Pick the best strategy (prefer void fill on ties) ---
+    # --- Strategy C: Offset nesting for too-wide selvedge pairs ---
+    # For selvedge pairs whose bounding-box widths exceed fabric_width,
+    # try offset nesting using actual polygon shapes.
+    sel_tops = [p for p in selvedge if p[3] == 'top']
+    sel_bots = [p for p in selvedge if p[3] == 'bottom']
+
+    has_wide_pair = any(
+        t[2] + b[2] > fabric_width
+        for t in sel_tops for b in sel_bots
+    )
+
+    c_result = None
+    if has_wide_pair:
+        offset_pos, rem_tops, rem_bots = _offset_nest_selvedge(
+            sel_tops, sel_bots, fabric_width, gap=gap)
+
+        if offset_pos:
+            # Build skyline from offset-nested pieces
+            c_skyline = [(0.0, fabric_width, 0.0)]
+            for oname in offset_pos:
+                ox, oy = offset_pos[oname]
+                opiece = next(p for p in selvedge if p[0] == oname)
+                ogl, ocw, oedge = opiece[1], opiece[2], opiece[3]
+                best_x = ox - gap / 2
+                new_right = best_x + ogl + gap
+                ptop = oy
+                pbot = oy + ocw + (gap / 2
+                                    if oedge in ('top', 'bottom') else gap)
+                new_sky = []
+                for sy0, sy1, sx in c_skyline:
+                    if sy1 <= ptop or sy0 >= pbot:
+                        new_sky.append((sy0, sy1, sx))
+                    else:
+                        if sy0 < ptop:
+                            new_sky.append((sy0, ptop, sx))
+                        if sy1 > pbot:
+                            new_sky.append((pbot, sy1, sx))
+                new_sky.append((ptop, pbot, new_right))
+                c_skyline = sorted(new_sky, key=lambda s: s[0])
+
+            # Remaining selvedge pieces via skyline
+            rem_sel = rem_tops + rem_bots
+            rem_sel_input = [(n, gl, cw, edge)
+                             for n, gl, cw, edge, _, _, _ in rem_sel]
+            if rem_sel_input:
+                rem_sel_pos, _, c_skyline = skyline_pack(
+                    rem_sel_input, fabric_width, gap=gap,
+                    initial_skyline=c_skyline, return_skyline=True)
+            else:
+                rem_sel_pos = {}
+
+            # Combine all selvedge positions for void filling
+            all_sel_pos_c = {}
+            all_sel_pos_c.update(offset_pos)
+            all_sel_pos_c.update(rem_sel_pos)
+
+            # Void fill free pieces into selvedge voids, then skyline
+            # the remainder — this combines offset-nest savings with
+            # void-fill savings.
+            c_void_placed, c_remaining = _void_fill(
+                selvedge, all_sel_pos_c, free, fabric_width, gap=gap)
+
+            if c_void_placed:
+                print(f"    Offset + void fill: placed {len(c_void_placed)} "
+                      f"piece(s) in selvedge voids")
+
+            # Update skyline for void-filled pieces
+            cv_skyline = list(c_skyline)
+            for vn, (vx, vy) in c_void_placed.items():
+                vp = next(p for p in free if p[0] == vn)
+                v_right = vx + vp[1] + gap
+                vtop, vbot = vy, vy + vp[2] + gap
+                new_sky = []
+                for sy0, sy1, sx in cv_skyline:
+                    if sy1 <= vtop or sy0 >= vbot:
+                        new_sky.append((sy0, sy1, sx))
+                    else:
+                        if sy0 < vtop:
+                            new_sky.append((sy0, vtop, sx))
+                        if sy1 > vbot:
+                            new_sky.append((vbot, sy1, sx))
+                new_sky.append((vtop, vbot, v_right))
+                cv_skyline = sorted(new_sky, key=lambda s: s[0])
+
+            # Skyline-pack remaining free pieces
+            c_rem_input = [(n, gl, cw, None)
+                           for n, gl, cw, _, _, _, _ in c_remaining]
+            if c_rem_input:
+                free_pos_c, c_total = skyline_pack(
+                    c_rem_input, fabric_width, gap=gap,
+                    initial_skyline=cv_skyline)
+            else:
+                free_pos_c = {}
+                c_total = max(s[2] for s in cv_skyline)
+
+            c_positions = {}
+            c_positions.update(offset_pos)
+            c_positions.update(rem_sel_pos)
+            c_positions.update(c_void_placed)
+            c_positions.update(free_pos_c)
+            c_result = (c_total, c_positions)
+
+    # --- Pick the best strategy ---
+    # When offset nesting paired cross-type main panels (front+back),
+    # always prefer it — it produces the layout the cutter expects
+    # (front and back side-by-side across fabric width).
+    # Fall back to length comparison only when offset nesting isn't applicable.
     candidates = [
         (vf_total, 0, vf_positions, True, "void fill + skyline"),
         (sky_length, 1, sky_positions, False, "baseline skyline"),
         (sky_cont_total, 2, sky_cont_positions, False, "skyline continuation"),
     ]
-    best_total, _, best_pos, best_poly, best_label = min(
-        candidates, key=lambda c: (c[0], c[1]))
+    if c_result is not None:
+        # Always use offset nest when it paired cross-main panels
+        best_total = c_result[0]
+        best_pos = c_result[1]
+        best_poly = False
+        best_label = "offset nest + skyline"
+    else:
+        best_total, _, best_pos, best_poly, best_label = min(
+            candidates, key=lambda c: (c[0], c[1]))
 
     # Report
     others = [(t, l) for t, _, _, _, l in candidates if l != best_label]
@@ -675,9 +933,9 @@ def polygon_nest(pieces, fabric_width, gap=0.25):
     return best_pos, best_total, best_poly
 
 
-def generate_cutting_layout(svg_paths, fabric_width, output_path,
-                            units='inch', gap=0.25):
-    """Composite piece SVGs into a single cutting layout SVG.
+def generate_lay_plan(svg_paths, fabric_width, output_path,
+                      units='inch', gap=0.25):
+    """Composite piece SVGs into a single lay plan SVG.
 
     Pieces are placed WITHOUT rotation — their SVG x-axis (grainline)
     maps directly to the layout x-axis (fabric length).
@@ -1042,7 +1300,7 @@ def generate_cutting_layout(svg_paths, fabric_width, output_path,
     tree = ET.ElementTree(root)
     ET.indent(tree, space='  ')
     tree.write(str(output_path), xml_declaration=True, encoding='utf-8')
-    print(f"Saved cutting layout to {output_path}")
+    print(f"Saved lay plan to {output_path}")
     print(f"  Fabric: {fabric_width}\" wide x {total_length:.1f}\" long")
     print(f"  Yardage: {yards:.2f} yd  ({metres:.2f} m)")
     print(f"  Pieces: {len(pieces)}")

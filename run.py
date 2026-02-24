@@ -145,7 +145,7 @@ def main():
         print(f"Output: {output_dir}/")
 
         outputs = []
-        svg_pieces = []  # (svg_path, cut_count) for cutting layout
+        svg_pieces = []  # (svg_path, cut_count) for lay plan
 
         for piece in garment['pieces']:
             print(f"  Drafting {piece['name']}...")
@@ -163,7 +163,7 @@ def main():
 
             outputs.append((piece['name'], out))
 
-            # Collect main-fabric pieces for cutting layout (skip verify, pocketing, etc.)
+            # Collect main-fabric pieces for lay plan (skip verify, pocketing, etc.)
             cut_count = piece.get('cut_count', 0)
             fabric = piece.get('fabric', 'main')
             if cut_count > 0 and fabric == 'main':
@@ -175,14 +175,14 @@ def main():
         for name, path in outputs:
             print(f"  {name} -> {path}")
 
-        # Generate cutting layout SVG
-        if svg_pieces:
-            from garment_programs.print_layout import generate_cutting_layout
+        # Generate lay plan SVG (pattern mode only)
+        if svg_pieces and not debug:
+            from garment_programs.lay_plan import generate_lay_plan
             fabric_width = args.fabric_width or garment.get('fabric_width', 60)
-            layout_path = f'{output_dir}/cutting_layout.svg'
-            print(f"\n  Generating cutting layout ({fabric_width}\" fabric)...")
-            generate_cutting_layout(svg_pieces, fabric_width, layout_path,
-                                    units=units)
+            layout_path = f'{output_dir}/lay_plan.svg'
+            print(f"\n  Generating lay plan ({fabric_width}\" fabric)...")
+            generate_lay_plan(svg_pieces, fabric_width, layout_path,
+                              units=units)
 
         # Summarize non-main fabric and interfacing requirements
         other_fabrics = {}  # fabric_name -> [(piece_name, cut_count), ...]

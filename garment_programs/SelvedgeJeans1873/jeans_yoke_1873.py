@@ -9,13 +9,16 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 
-from garment_programs.plot_utils import SEAMLINE, draw_seam_allowance
+from garment_programs.plot_utils import (
+    SEAMLINE, draw_seam_allowance, display_scale, setup_figure, finalize_figure,
+)
 from .jeans_front import (
     INCH, load_measurements, draft_jeans_front,
     _annotate_segment,
     _point_at_arclength, _curve_up_to_arclength,
 )
 from .jeans_back import draft_jeans_back
+from .seam_allowances import YOKE_SEAT_DEPTH
 
 
 # -- Drafting ----------------------------------------------------------------
@@ -47,8 +50,8 @@ def draft_jeans_yoke(m, front, back):
     yoke_side = fpts['1'] + dir_1_to_4_norm * (1.5 * INCH)
 
     # -- 2. Yoke point on seat seam --
-    # Walk the seat_upper curve (back_waist → 8') from the start by 2.75"
-    yoke_seat_dist = 2.75 * INCH
+    # Walk the seat_upper curve (back_waist → 8') from the start
+    yoke_seat_dist = YOKE_SEAT_DEPTH
     yoke_seat = _point_at_arclength(back['curves']['seat_upper'], yoke_seat_dist)
 
     # -- 3. Dart position — 1/3 of waist from pt 1 toward back_waist --
@@ -116,8 +119,7 @@ def plot_jeans_yoke(front, back, yoke, output_path='Logs/jeans_yoke.svg',
 
     units : 'cm' or 'inch' — display unit for axes and annotations.
     """
-    s = 1 / INCH if units == 'inch' else 1.0
-    unit_label = 'in' if units == 'inch' else 'cm'
+    s, unit_label = display_scale(units)
 
     fpts   = {k: v * s for k, v in front['points'].items()}
     bpts   = {k: v * s for k, v in back['points'].items()}
@@ -129,9 +131,7 @@ def plot_jeans_yoke(front, back, yoke, output_path='Logs/jeans_yoke.svg',
     yoke_seat_dist = yoke['metadata']['yoke_seat_dist']
     seat_seg = _curve_up_to_arclength(back['curves']['seat_upper'], yoke_seat_dist) * s
 
-    standalone = ax is None
-    if standalone:
-        fig, ax = plt.subplots(1, 1, figsize=(16, 10))
+    fig, ax, standalone = setup_figure(ax, figsize=(16, 10))
     OUTLINE  = SEAMLINE
     CONTEXT  = dict(color='lightgray', linewidth=1, alpha=0.5)
     DART_STY = dict(color='black', linewidth=1.2, linestyle='--')
@@ -251,17 +251,8 @@ def plot_jeans_yoke(front, back, yoke, output_path='Logs/jeans_yoke.svg',
                          yoke['metadata']['title'],
                          yoke['metadata'].get('cut_count'))
 
-    if not debug:
-        ax.axis('off')
-    else:
-        ax.set_xlabel(unit_label)
-        ax.set_ylabel(unit_label)
-        ax.grid(True, alpha=0.2)
-
-    if standalone:
-        from garment_programs.plot_utils import save_pattern
-        save_pattern(fig, ax, output_path, units=units, calibration=not debug,
-                     pdf_pages=pdf_pages)
+    finalize_figure(ax, fig, standalone, output_path, units=units, debug=debug,
+                    pdf_pages=pdf_pages)
 
 
 # -- Entry point for generic runner ------------------------------------------

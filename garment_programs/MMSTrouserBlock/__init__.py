@@ -2,8 +2,8 @@ GARMENTS = [
     {
         'name': 'Flat-Front Trouser (MM&S)',
         'pieces': [
-            {'module': 'trouser_front', 'name': 'Front Panel', 'kwargs': {'num_pleats': 0}},
-            {'module': 'trouser_back',  'name': 'Back Panel',  'kwargs': {'num_pleats': 0}},
+            {'module': 'trouser_front', 'name': 'Front Panel', 'cut_count': 2, 'kwargs': {'num_pleats': 0}},
+            {'module': 'trouser_back',  'name': 'Back Panel',  'cut_count': 2, 'kwargs': {'num_pleats': 0}},
         ],
     },
     {
@@ -17,8 +17,8 @@ GARMENTS = [
     {
         'name': '2-Pleat Trouser (MM&S)',
         'pieces': [
-            {'module': 'trouser_front', 'name': 'Front Panel', 'kwargs': {'num_pleats': 2}},
-            {'module': 'trouser_back',  'name': 'Back Panel',  'kwargs': {'num_pleats': 2}},
+            {'module': 'trouser_front', 'name': 'Front Panel', 'cut_count': 2, 'kwargs': {'num_pleats': 2}},
+            {'module': 'trouser_back',  'name': 'Back Panel',  'cut_count': 2, 'kwargs': {'num_pleats': 2}},
         ],
     },
 ]

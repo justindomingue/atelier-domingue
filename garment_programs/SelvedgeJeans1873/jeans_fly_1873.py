@@ -17,7 +17,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 
-from garment_programs.plot_utils import SEAMLINE, CUTLINE, draw_seam_allowance
+from garment_programs.plot_utils import (
+    SEAMLINE, CUTLINE, draw_seam_allowance, display_scale, setup_figure, finalize_figure,
+)
 from .jeans_front import (
     INCH, load_measurements, draft_jeans_front,
     _bezier_cubic, _curve_length, _annotate_segment,
@@ -88,16 +90,13 @@ def draft_jeans_fly_1873(m, front):
 
 def plot_jeans_fly_1873(fly, output_path='Logs/jeans_fly_1873.svg',
                         debug=False, units='cm', pdf_pages=None, ax=None):
-    s = 1 / INCH if units == 'inch' else 1.0
-    unit_label = 'in' if units == 'inch' else 'cm'
+    s, unit_label = display_scale(units)
 
     pts = {k: v * s for k, v in fly['points'].items()}
     curves = {k: v * s for k, v in fly['curves'].items()}
     con = {k: v * s for k, v in fly['construction'].items()}
 
-    standalone = ax is None
-    if standalone:
-        fig, ax = plt.subplots(1, 1, figsize=(6, 12))
+    fig, ax, standalone = setup_figure(ax, figsize=(6, 12))
     SA = SEAM_ALLOWANCES['fly_1873']
 
     # Fold line (dashed — visual reference, not a cut edge)
@@ -163,16 +162,8 @@ def plot_jeans_fly_1873(fly, output_path='Logs/jeans_fly_1873.svg',
         _annotate_segment(ax, pts['fold_bottom'],
                           np.array([0, con['inlay_y']]), offset=(-14, 0))
 
-        ax.set_xlabel(unit_label)
-        ax.set_ylabel(unit_label)
-        ax.grid(True, alpha=0.2)
-    else:
-        ax.axis('off')
-
-    if standalone:
-        from garment_programs.plot_utils import save_pattern
-        save_pattern(fig, ax, output_path, units=units, calibration=not debug,
-                     pdf_pages=pdf_pages)
+    finalize_figure(ax, fig, standalone, output_path, units=units, debug=debug,
+                    pdf_pages=pdf_pages)
 
 
 # -- Entry point for generic runner ------------------------------------------

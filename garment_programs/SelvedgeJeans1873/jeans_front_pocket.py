@@ -25,7 +25,10 @@ from .jeans_front import (
     _curve_up_to_arclength,
 )
 from .seam_allowances import SEAM_ALLOWANCES
-from garment_programs.plot_utils import SEAMLINE, CUTLINE, offset_polyline, draw_seam_allowance
+from garment_programs.plot_utils import (
+    SEAMLINE, CUTLINE, offset_polyline, draw_seam_allowance,
+    display_scale, setup_figure, finalize_figure,
+)
 
 
 # -- Watch pocket helper -----------------------------------------------------
@@ -226,8 +229,7 @@ def plot_jeans_front_pocket(piece, output_path='Logs/jeans_front_pocket.svg',
     The bag extends from the waistband seam (pt1) down to the bag bottom,
     with the pocket opening shown as a dashed reference line.
     """
-    s = 1 / INCH if units == 'inch' else 1.0
-    unit_label = 'in' if units == 'inch' else 'cm'
+    s, unit_label = display_scale(units)
 
     # --- Build closed outline from draft curves ---
     rise_to_bag = piece['curves']['rise_to_bag']
@@ -285,9 +287,7 @@ def plot_jeans_front_pocket(piece, output_path='Logs/jeans_front_pocket.svg',
     rot_outline *= s
 
     # --- Draw ---
-    standalone = ax is None
-    if standalone:
-        fig, ax = plt.subplots(1, 1, figsize=(10, 14))
+    fig, ax, standalone = setup_figure(ax, figsize=(10, 14))
     ax.plot(rot_rise[:, 0], rot_rise[:, 1], **SEAMLINE)
     ax.plot(rot_inner[:, 0], rot_inner[:, 1], **SEAMLINE)
     ax.plot(rot_bottom[:, 0], rot_bottom[:, 1], **SEAMLINE)
@@ -321,17 +321,8 @@ def plot_jeans_front_pocket(piece, output_path='Logs/jeans_front_pocket.svg',
         draw_piece_label(ax, center, piece['metadata']['title'],
                          piece['metadata'].get('cut_count'))
 
-    if debug:
-        ax.set_xlabel(unit_label)
-        ax.set_ylabel(unit_label)
-        ax.grid(True, alpha=0.2)
-    else:
-        ax.axis('off')
-
-    if standalone:
-        from garment_programs.plot_utils import save_pattern
-        save_pattern(fig, ax, output_path, units=units, calibration=not debug,
-                     pdf_pages=pdf_pages)
+    finalize_figure(ax, fig, standalone, output_path, units=units, debug=debug,
+                    pdf_pages=pdf_pages)
 
 
 # -- Entry point for generic runner ------------------------------------------
