@@ -8,9 +8,10 @@ GARMENTS = [
     },
     {
         'name': '1-Pleat Trouser (MM&S)',
+        'fabric_width': 60,
         'pieces': [
-            {'module': 'trouser_front', 'name': 'Front Panel', 'kwargs': {'num_pleats': 1}},
-            {'module': 'trouser_back',  'name': 'Back Panel',  'kwargs': {'num_pleats': 1}},
+            {'module': 'trouser_front', 'name': 'Front Panel', 'cut_count': 2, 'kwargs': {'num_pleats': 1}},
+            {'module': 'trouser_back',  'name': 'Back Panel',  'cut_count': 2, 'kwargs': {'num_pleats': 1}},
         ],
     },
     {

@@ -9,9 +9,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 
+from garment_programs.plot_utils import SEAMLINE, draw_seam_allowance
 from .jeans_front import (
     INCH, load_measurements, draft_jeans_front,
-    _annotate_segment, _draw_seam_allowance,
+    _annotate_segment,
     _point_at_arclength, _curve_up_to_arclength,
 )
 from .jeans_back import draft_jeans_back
@@ -102,6 +103,7 @@ def draft_jeans_yoke(m, front, back, gathering_extension=0):
         },
         'metadata': {
             'title': 'Historical Jeans Yoke (1873)',
+            'cut_count': 2,
             'yoke_seat_dist': yoke_seat_dist,
         },
     }
@@ -110,7 +112,7 @@ def draft_jeans_yoke(m, front, back, gathering_extension=0):
 # -- Visualization -----------------------------------------------------------
 
 def plot_jeans_yoke(front, back, yoke, output_path='Logs/jeans_yoke.svg',
-                    debug=False, units='cm'):
+                    debug=False, units='cm', pdf_pages=None, ax=None):
     """Render the yoke overlaid on the back panel and save as PNG.
 
     Always draws the yoke outline and dart.
@@ -131,8 +133,10 @@ def plot_jeans_yoke(front, back, yoke, output_path='Logs/jeans_yoke.svg',
     yoke_seat_dist = yoke['metadata']['yoke_seat_dist']
     seat_seg = _curve_up_to_arclength(back['curves']['seat_upper'], yoke_seat_dist) * s
 
-    fig, ax = plt.subplots(1, 1, figsize=(16, 10))
-    OUTLINE  = dict(color='black', linewidth=1.5)
+    standalone = ax is None
+    if standalone:
+        fig, ax = plt.subplots(1, 1, figsize=(16, 10))
+    OUTLINE  = SEAMLINE
     CONTEXT  = dict(color='lightgray', linewidth=1, alpha=0.5)
     DART_STY = dict(color='black', linewidth=1.2, linestyle='--')
 
@@ -219,9 +223,11 @@ def plot_jeans_yoke(front, back, yoke, output_path='Logs/jeans_yoke.svg',
                         color='gray', alpha=0.4)
 
     # --- Seam allowances (always drawn) ---
-    SA_SEAT_YOKE  = 5/8 * INCH   # long side / seat seam
-    SA_SIDE_YOKE  = 3/4 * INCH   # short edge / side seam
-    SA_WAIST_YOKE = 3/8 * INCH   # waist and yoke seams
+    from .seam_allowances import SEAM_ALLOWANCES
+    _sa = SEAM_ALLOWANCES['yoke']
+    SA_SEAT_YOKE  = _sa['seat']
+    SA_SIDE_YOKE  = _sa['side']
+    SA_WAIST_YOKE = _sa['waist']
 
     # CW outline: outseam(1→yoke_side) → yoke_line(yoke_side→yoke_seat)
     #   → seat_seg reversed(yoke_seat→back_waist) → waist(back_waist→1)
@@ -231,7 +237,23 @@ def plot_jeans_yoke(front, back, yoke, output_path='Logs/jeans_yoke.svg',
         (seat_seg[::-1],                                         SA_SEAT_YOKE),   # seat seam segment (reversed)
         (np.array([bpts['back_waist'], fpts['1']]),              SA_WAIST_YOKE),  # waist
     ]
-    _draw_seam_allowance(ax, sa_edges, scale=s)
+    draw_seam_allowance(ax, sa_edges, scale=s)
+
+    # --- Grainline and piece label (pattern mode only) ---
+    if not debug:
+        from garment_programs.plot_utils import draw_grainline, draw_piece_label
+        # Grainline parallel to center back (along x-axis, perpendicular to waist)
+        grain_center = (fpts['1'] + bpts['back_waist'] + ypts['yoke_side'] + ypts['yoke_seat']) / 4
+        yoke_height = abs(fpts['1'][0] - ypts['yoke_side'][0])
+        grain_half = yoke_height * 0.3
+        grain_top = np.array([grain_center[0] + grain_half, grain_center[1]])
+        grain_bot = np.array([grain_center[0] - grain_half, grain_center[1]])
+        draw_grainline(ax, grain_top, grain_bot)
+
+        # Piece label
+        draw_piece_label(ax, (grain_center[0], grain_center[1]),
+                         yoke['metadata']['title'],
+                         yoke['metadata'].get('cut_count'))
 
     if not debug:
         ax.axis('off')
@@ -240,16 +262,21 @@ def plot_jeans_yoke(front, back, yoke, output_path='Logs/jeans_yoke.svg',
         ax.set_ylabel(unit_label)
         ax.grid(True, alpha=0.2)
 
-    from garment_programs.plot_utils import save_pattern
-    save_pattern(fig, ax, output_path, units=units, calibration=not debug)
+    if standalone:
+        from garment_programs.plot_utils import save_pattern
+        save_pattern(fig, ax, output_path, units=units, calibration=not debug,
+                     pdf_pages=pdf_pages)
 
 
 # -- Entry point for generic runner ------------------------------------------
 
-def run(measurements_path, output_path, debug=False, units='cm'):
+def run(measurements_path, output_path, debug=False, units='cm', pdf_pages=None,
+        gathering_extension=0):
     """Uniform interface called by the generic runner."""
     m = load_measurements(measurements_path)
     front = draft_jeans_front(m)
     back = draft_jeans_back(m, front)
-    yoke = draft_jeans_yoke(m, front, back)
-    plot_jeans_yoke(front, back, yoke, output_path, debug=debug, units=units)
+    yoke = draft_jeans_yoke(m, front, back,
+                            gathering_extension=gathering_extension)
+    plot_jeans_yoke(front, back, yoke, output_path, debug=debug, units=units,
+                    pdf_pages=pdf_pages)

@@ -9,6 +9,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 
+from garment_programs.plot_utils import SEAMLINE, CUTLINE, offset_polyline, draw_seam_allowance
+
 INCH = 2.54  # cm per inch
 
 
@@ -95,97 +97,6 @@ def _annotate_segment(ax, p0, p1, offset=(0, 6)):
     ax.annotate(f'{length:.1f}', mid, textcoords="offset points",
                 xytext=offset, fontsize=6, color='darkblue', ha='center',
                 bbox=dict(boxstyle='round,pad=0.2', fc='white', ec='none', alpha=0.7))
-
-
-# -- Seam-allowance offset helper -------------------------------------------
-
-def _offset_polyline(pts, distance):
-    """Offset a polyline by *distance* to the left of the travel direction.
-
-    For a clockwise outline, positive *distance* pushes outward.
-
-    Parameters
-    ----------
-    pts : ndarray, shape (N, 2)
-        Ordered polyline vertices.
-    distance : float
-        Offset distance (positive = left of travel = outward for CW).
-
-    Returns
-    -------
-    ndarray, shape (N, 2)
-        Offset polyline (same number of points, miter-joined).
-    """
-    pts = np.asarray(pts, dtype=float)
-    n = len(pts)
-    if n < 2:
-        return pts.copy()
-
-    # Per-segment unit normals (left of travel direction)
-    seg = np.diff(pts, axis=0)                       # (N-1, 2)
-    lengths = np.sqrt(seg[:, 0]**2 + seg[:, 1]**2)
-    lengths = np.where(lengths == 0, 1e-12, lengths)  # avoid div-by-zero
-    normals = np.column_stack([-seg[:, 1], seg[:, 0]]) / lengths[:, None]
-
-    out = np.empty_like(pts)
-
-    # First and last points: simple normal offset
-    out[0] = pts[0] + normals[0] * distance
-    out[-1] = pts[-1] + normals[-1] * distance
-
-    # Interior points: average of adjacent normals (miter)
-    for i in range(1, n - 1):
-        avg = normals[i - 1] + normals[i]
-        length = np.linalg.norm(avg)
-        if length < 1e-12:
-            avg = normals[i]
-        else:
-            avg = avg / length
-        # Miter scale: project onto either normal
-        cos_half = np.dot(avg, normals[i])
-        if abs(cos_half) < 0.1:
-            cos_half = 0.1  # cap for very sharp corners
-        out[i] = pts[i] + avg * (distance / cos_half)
-
-    return out
-
-
-def _draw_seam_allowance(ax, edges, scale=1.0):
-    """Draw a continuous seam-allowance boundary for an ordered list of edges.
-
-    Edges must be ordered so that they form a continuous CW perimeter
-    (each edge's last point ≈ the next edge's first point).  The function
-    offsets each edge by its SA, then connects adjacent offset segments at
-    their intersection (miter point) to produce one unbroken cutting line.
-
-    Parameters
-    ----------
-    ax : matplotlib Axes
-    edges : list of (pts, sa_distance) tuples
-        *pts* is an (N,2) ndarray (already display-scaled),
-        *sa_distance* is the seam allowance in **cm** (pre-scaling).
-    scale : float
-        Display scale factor (e.g. 1/INCH for inch mode).
-    """
-    SA_STYLE = dict(color='gray', linewidth=0.6, linestyle='--', alpha=0.5)
-
-    # Offset each edge independently
-    offsets = []
-    for pts, sa_cm in edges:
-        sa = sa_cm * scale
-        offsets.append(_offset_polyline(pts, sa))
-
-    # Build continuous SA path by connecting offset segments at corners
-    sa_pts = list(offsets[0])
-    for i in range(1, len(offsets)):
-        # Connect: add the first point of the next segment
-        # (creates a short connecting line at the SA transition)
-        sa_pts.extend(offsets[i].tolist())
-
-    # Close the loop back to the starting point
-    sa_pts.append(sa_pts[0])
-    sa_path = np.array(sa_pts)
-    ax.plot(sa_path[:, 0], sa_path[:, 1], **SA_STYLE)
 
 
 # -- Drafting ----------------------------------------------------------------
@@ -324,13 +235,15 @@ def draft_jeans_front(m):
         },
         'metadata': {
             'title': 'Historical Jeans Front Panel (1873)',
+            'cut_count': 2,
         },
     }
 
 
 # -- Visualization -----------------------------------------------------------
 
-def plot_jeans_front(draft, output_path='Logs/jeans_front.svg', debug=False, units='cm'):
+def plot_jeans_front(draft, output_path='Logs/jeans_front.svg', debug=False, units='cm',
+                     pocket=None, pdf_pages=None, ax=None):
     """Render the draft to a matplotlib figure and save as PNG.
 
     Always draws the pattern outline and internal reference lines (hip, knee, CF).
@@ -345,7 +258,9 @@ def plot_jeans_front(draft, output_path='Logs/jeans_front.svg', debug=False, uni
     con = {k: v * s for k, v in draft['construction'].items()}
     REF = dict(color='gray', linewidth=0.8, linestyle='--', alpha=0.4)
 
-    fig, ax = plt.subplots(1, 1, figsize=(16, 10))
+    standalone = ax is None
+    if standalone:
+        fig, ax = plt.subplots(1, 1, figsize=(16, 10))
 
     # --- Debug-only: construction scaffolding ---
     if debug:
@@ -396,9 +311,12 @@ def plot_jeans_front(draft, output_path='Logs/jeans_front.svg', debug=False, uni
                 'k-', linewidth=1.5)
 
     # --- Internal reference lines (always shown) ---
-    # y-range for vertical lines (span the full width of the pattern)
-    y_lo = min(pts['6'][1], pts['5'][1]) - 2
-    y_hi = 2
+    # Clip to pattern outline bounding box (don't inflate SVG dimensions)
+    outline_keys = ['0', "0'", "3'", '4', "1'", "7'", '8', '6']
+    y_lo = min(pts[k][1] for k in outline_keys)
+    y_hi = max(pts[k][1] for k in outline_keys)
+    x_lo = min(pts[k][0] for k in outline_keys)
+    x_hi = max(pts[k][0] for k in outline_keys)
 
     # Seat line — vertical at pt4 x-level (just above crotch fork)
     seat_x = pts['4'][0]
@@ -419,9 +337,8 @@ def plot_jeans_front(draft, output_path='Logs/jeans_front.svg', debug=False, uni
                 xytext=(4, 4), fontsize=7, color='gray')
 
     # Center front line — horizontal at CF y-offset
-    x_left, x_right = pts['1'][0] - 3, pts['0'][0] + 3
-    cf_mid = (x_left + x_right) / 2
-    ax.plot([x_left, x_right], [pts['10'][1], pts['10'][1]], **REF)
+    cf_mid = (x_lo + x_hi) / 2
+    ax.plot([x_lo, x_hi], [pts['10'][1], pts['10'][1]], **REF)
     ax.annotate('center front', (cf_mid, pts['10'][1]), textcoords="offset points",
                 xytext=(0, 4), fontsize=7, color='gray', ha='center')
 
@@ -448,14 +365,58 @@ def plot_jeans_front(draft, output_path='Logs/jeans_front.svg', debug=False, uni
         _annotate_segment(ax, pts["3'"], pts["0'"], offset=(10, 0))
         _annotate_segment(ax, pts["0'"], pts['0'], offset=(8, 0))
 
+    # --- Pocket internal lines (if provided) ---
+    if pocket is not None:
+        ppts = {k: v * s for k, v in pocket['points'].items()}
+        pcurves = {k: v * s for k, v in pocket['curves'].items()}
+
+        POCKET_OPEN = dict(color='black', linewidth=1.5, zorder=3)
+        POCKET_BAG = dict(color='green', linewidth=1, linestyle='--', alpha=0.6, zorder=3)
+        WATCH = dict(color='steelblue', linewidth=1.2, zorder=3)
+
+        # Pocket opening (solid)
+        ax.plot(pcurves['opening'][:, 0], pcurves['opening'][:, 1], **POCKET_OPEN)
+
+        # Pocket bag (dashed)
+        ax.plot([ppts['bag_inner_top'][0], ppts['bag_inner_bottom'][0]],
+                [ppts['bag_inner_top'][1], ppts['bag_inner_bottom'][1]], **POCKET_BAG)
+        ax.plot(pcurves['bag_bottom'][:, 0], pcurves['bag_bottom'][:, 1], **POCKET_BAG)
+        ax.plot([ppts['bag_sideseam'][0], ppts['pocket_lower'][0]],
+                [ppts['bag_sideseam'][1], ppts['pocket_lower'][1]], **POCKET_BAG)
+        ax.plot([ppts['pocket_upper'][0], ppts['bag_inner_top'][0]],
+                [ppts['pocket_upper'][1], ppts['bag_inner_top'][1]], **POCKET_BAG)
+
+        # Facing: not drawn on the front overlay — the facing is traced from
+        # the opening and gets extra SA at the bottom when cut as a separate
+        # piece (data stored in pocket dict for later extraction).
+
+        # Watch pocket (steelblue)
+        watch = pocket['watch_pocket']
+        wp = watch['outline'] * s
+        # Close the pentagon by appending the first point
+        wp_closed = np.vstack([wp, wp[0:1]])
+        ax.plot(wp_closed[:, 0], wp_closed[:, 1], **WATCH)
+
+        if debug:
+            for name, pt in ppts.items():
+                ax.plot(pt[0], pt[1], 'o', color='darkorange', markersize=4, zorder=5)
+                ax.annotate(name, pt, textcoords="offset points",
+                            xytext=(6, 4), ha='left', fontsize=6, color='darkorange')
+            wpts = {k: v * s for k, v in watch['points'].items()}
+            for name, pt in wpts.items():
+                ax.plot(pt[0], pt[1], 'o', color='steelblue', markersize=3, zorder=5)
+                ax.annotate(name, pt, textcoords="offset points",
+                            xytext=(6, -8), ha='left', fontsize=5, color='steelblue')
+
     # --- Seam allowances (always drawn) ---
-    # SA values in cm (from the Seam Allowances lesson)
-    SA_SIDE   = 3/4 * INCH    # side seam
-    SA_HEM    = (1.5 + 7/8) * INCH  # 2 3/8" (1 1/2" turn-up + 7/8" hem)
-    SA_INSEAM = 3/8 * INCH    # inseam
-    SA_CROTCH = 3/8 * INCH    # crotch / fly
-    SA_FLY    = 3/4 * INCH    # fly extension (3/8" crotch + 3/8" additional)
-    SA_WAIST  = 3/8 * INCH    # waist
+    from .seam_allowances import SEAM_ALLOWANCES
+    SA = SEAM_ALLOWANCES['front']
+    SA_SIDE   = SA['side']
+    SA_HEM    = SA['hem']
+    SA_INSEAM = SA['inseam']
+    SA_CROTCH = SA['crotch']
+    SA_FLY    = SA['fly']
+    SA_WAIST  = SA['waist']
 
     # SA transition: 3/4" kicks in 1/2" before pt8 on the crotch curve
     _crotch_rev = curves['crotch'][::-1]          # scaled, pt6 → pt8
@@ -478,19 +439,40 @@ def plot_jeans_front(draft, output_path='Logs/jeans_front.svg', debug=False, uni
         (np.array([pts['8'], pts["7'"]]),                        SA_FLY),     # fly: full 3/4"
         (curves['rise'][::-1],                                   SA_WAIST),   # rise / waist (7'→1')
     ]
-    _draw_seam_allowance(ax, sa_edges, scale=s)
+    draw_seam_allowance(ax, sa_edges, scale=s)
+
+    # --- Grainline and piece label (pattern mode only) ---
+    if not debug:
+        from garment_programs.plot_utils import draw_grainline, draw_piece_label
+        # Grainline along center-front x, spanning waist to near hem
+        cf_x = pts['10'][1]  # center-front y-offset used as grainline x
+        grain_top = np.array([pts['1'][0] * 0.85 + pts['0'][0] * 0.15, cf_x])
+        grain_bottom = np.array([pts['1'][0] * 0.15 + pts['0'][0] * 0.85, cf_x])
+        draw_grainline(ax, grain_top, grain_bottom)
+
+        # Piece label at bounding-box center
+        all_x = [pts[k][0] for k in ('0', "1'", "7'", '6')]
+        all_y = [pts[k][1] for k in ('0', "1'", "7'", '6')]
+        center = ((min(all_x) + max(all_x)) / 2, (min(all_y) + max(all_y)) / 2)
+        draw_piece_label(ax, center, draft['metadata']['title'],
+                         draft['metadata'].get('cut_count'))
 
     if not debug:
         ax.axis('off')
 
-    from garment_programs.plot_utils import save_pattern
-    save_pattern(fig, ax, output_path, units=units, calibration=not debug)
+    if standalone:
+        from garment_programs.plot_utils import save_pattern
+        save_pattern(fig, ax, output_path, units=units, calibration=not debug,
+                     pdf_pages=pdf_pages)
 
 
 # -- Entry point for generic runner ------------------------------------------
 
-def run(measurements_path, output_path, debug=False, units='cm'):
+def run(measurements_path, output_path, debug=False, units='cm', pdf_pages=None):
     """Uniform interface called by the generic runner."""
     m = load_measurements(measurements_path)
     draft = draft_jeans_front(m)
-    plot_jeans_front(draft, output_path, debug=debug, units=units)
+    from .jeans_front_pocket import draft_jeans_front_pocket
+    pocket = draft_jeans_front_pocket(m, draft)
+    plot_jeans_front(draft, output_path, debug=debug, units=units, pocket=pocket,
+                     pdf_pages=pdf_pages)

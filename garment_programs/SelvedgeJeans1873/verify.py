@@ -222,7 +222,7 @@ def verify_draft(measurements_path):
 
 # -- Entry point for the generic runner -------------------------------------
 
-def run(measurements_path, output_path=None, debug=False, units='inch'):
+def run(measurements_path, output_path=None, debug=False, units='inch', **kwargs):
     """Uniform interface: runs verification and writes report to output_path.
 
     The runner may pass a .svg path; we replace the extension with .txt.

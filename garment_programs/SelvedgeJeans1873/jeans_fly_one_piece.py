@@ -19,6 +19,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 
+from garment_programs.plot_utils import SEAMLINE
 from .jeans_front import (
     INCH, load_measurements, draft_jeans_front,
     _curve_length, _annotate_segment,
@@ -45,7 +46,8 @@ def draft_jeans_fly_one_piece(m, front):
     length = 2 * fly_extension + 2 * INCH
     width = 4.5 * INCH
 
-    sa = 0.5 * INCH             # seam allowance on each side
+    from .seam_allowances import SEAM_ALLOWANCES
+    sa = SEAM_ALLOWANCES['fly_one_piece']['side']
     front_half = 1.75 * INCH    # front half width
     fold_x = sa + front_half    # fold line position
 
@@ -66,6 +68,7 @@ def draft_jeans_fly_one_piece(m, front):
         },
         'metadata': {
             'title': 'One-Piece Fly',
+            'cut_count': 1,
             'length': length,
             'width': width,
             'fly_extension': fly_extension,
@@ -76,7 +79,7 @@ def draft_jeans_fly_one_piece(m, front):
 # -- Visualization -----------------------------------------------------------
 
 def plot_jeans_fly_one_piece(fly, output_path='Logs/jeans_fly_one_piece.svg',
-                          debug=False, units='cm'):
+                          debug=False, units='cm', pdf_pages=None, ax=None):
     s = 1 / INCH if units == 'inch' else 1.0
     unit_label = 'in' if units == 'inch' else 'cm'
 
@@ -85,8 +88,10 @@ def plot_jeans_fly_one_piece(fly, output_path='Logs/jeans_fly_one_piece.svg',
     length_s = fly['metadata']['length'] * s
     width_s = fly['metadata']['width'] * s
 
-    fig, ax = plt.subplots(1, 1, figsize=(6, 14))
-    OUTLINE = dict(color='black', linewidth=1.5)
+    standalone = ax is None
+    if standalone:
+        fig, ax = plt.subplots(1, 1, figsize=(6, 14))
+    OUTLINE = SEAMLINE
 
     # Rectangle
     xs = [0, width_s, width_s, 0, 0]
@@ -99,6 +104,20 @@ def plot_jeans_fly_one_piece(fly, output_path='Logs/jeans_fly_one_piece.svg',
     ax.annotate('FOLD', (con['fold_x'], length_s / 2),
                 textcoords="offset points", xytext=(4, 0),
                 fontsize=8, ha='left', rotation=90)
+
+    # --- Grainline and piece label (pattern mode only) ---
+    if not debug:
+        from garment_programs.plot_utils import draw_grainline, draw_piece_label
+        # Grainline parallel to fold line (vertical)
+        grain_x = con['fold_x']
+        grain_top_pt = np.array([grain_x + width_s * 0.15, length_s * 0.85])
+        grain_bot_pt = np.array([grain_x + width_s * 0.15, length_s * 0.15])
+        draw_grainline(ax, grain_top_pt, grain_bot_pt)
+
+        # Piece label
+        center = (width_s / 2, length_s / 2)
+        draw_piece_label(ax, center, fly['metadata']['title'],
+                         fly['metadata'].get('cut_count'))
 
     if debug:
         # Seam allowance lines
@@ -130,14 +149,17 @@ def plot_jeans_fly_one_piece(fly, output_path='Logs/jeans_fly_one_piece.svg',
     else:
         ax.axis('off')
 
-    from garment_programs.plot_utils import save_pattern
-    save_pattern(fig, ax, output_path, units=units, calibration=not debug)
+    if standalone:
+        from garment_programs.plot_utils import save_pattern
+        save_pattern(fig, ax, output_path, units=units, calibration=not debug,
+                     pdf_pages=pdf_pages)
 
 
 # -- Entry point for generic runner ------------------------------------------
 
-def run(measurements_path, output_path, debug=False, units='cm'):
+def run(measurements_path, output_path, debug=False, units='cm', pdf_pages=None):
     m = load_measurements(measurements_path)
     front = draft_jeans_front(m)
     fly = draft_jeans_fly_one_piece(m, front)
-    plot_jeans_fly_one_piece(fly, output_path, debug=debug, units=units)
+    plot_jeans_fly_one_piece(fly, output_path, debug=debug, units=units,
+                             pdf_pages=pdf_pages)
