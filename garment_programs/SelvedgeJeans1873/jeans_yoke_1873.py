@@ -20,7 +20,7 @@ from .jeans_back import draft_jeans_back
 
 # -- Drafting ----------------------------------------------------------------
 
-def draft_jeans_yoke(m, front, back, gathering_extension=0):
+def draft_jeans_yoke(m, front, back):
     """
     Compute yoke geometry from the completed front and back drafts.
 
@@ -32,10 +32,6 @@ def draft_jeans_yoke(m, front, back, gathering_extension=0):
         Result of ``draft_jeans_front(m)``.
     back : dict
         Result of ``draft_jeans_back(m, front)``.
-    gathering_extension : float, optional
-        Extra length (in cm) to extend the yoke_seat point further along
-        the seat_upper curve, creating gathering on the seat-seam side.
-        Typical range: 0.5*INCH to 1*INCH.  Default 0 (no gathering).
 
     Returns
     -------
@@ -52,7 +48,7 @@ def draft_jeans_yoke(m, front, back, gathering_extension=0):
 
     # -- 2. Yoke point on seat seam --
     # Walk the seat_upper curve (back_waist → 8') from the start by 2.75"
-    yoke_seat_dist = 2.75 * INCH + gathering_extension
+    yoke_seat_dist = 2.75 * INCH
     yoke_seat = _point_at_arclength(back['curves']['seat_upper'], yoke_seat_dist)
 
     # -- 3. Dart position — 1/3 of waist from pt 1 toward back_waist --
@@ -270,13 +266,11 @@ def plot_jeans_yoke(front, back, yoke, output_path='Logs/jeans_yoke.svg',
 
 # -- Entry point for generic runner ------------------------------------------
 
-def run(measurements_path, output_path, debug=False, units='cm', pdf_pages=None,
-        gathering_extension=0):
+def run(measurements_path, output_path, debug=False, units='cm', pdf_pages=None):
     """Uniform interface called by the generic runner."""
     m = load_measurements(measurements_path)
     front = draft_jeans_front(m)
     back = draft_jeans_back(m, front)
-    yoke = draft_jeans_yoke(m, front, back,
-                            gathering_extension=gathering_extension)
+    yoke = draft_jeans_yoke(m, front, back)
     plot_jeans_yoke(front, back, yoke, output_path, debug=debug, units=units,
                     pdf_pages=pdf_pages)

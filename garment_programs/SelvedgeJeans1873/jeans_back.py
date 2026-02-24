@@ -20,7 +20,7 @@ from .jeans_front import (
 
 # -- Drafting ----------------------------------------------------------------
 
-def draft_jeans_back(m, front):
+def draft_jeans_back(m, front, gathering_amount=0):
     """
     Compute back panel geometry, built on top of the front draft.
 
@@ -30,6 +30,10 @@ def draft_jeans_back(m, front):
         Measurements in cm.
     front : dict
         Result of draft_jeans_front(m).
+    gathering_amount : float, optional
+        Extra width (in cm) to add at the yoke/seat junction, tapering
+        to zero at pt 8'.  Creates gathering on the 1873 backs.
+        Default 0 (no gathering).
 
     Returns
     -------
@@ -170,6 +174,30 @@ def draft_jeans_back(m, front):
     # sub-curve of seat_upper from back_waist to yoke_seat
     yoke_seat_curve = _curve_up_to_arclength(curve_seat_upper, 2.75 * INCH)
 
+    # -- Gathering taper (1873 variant) --
+    # MHTML: "extend the yoke seam on the seat seam side by 1/2" to 1"
+    # and taper that into the seat seam just above the crotch curve."
+    # This adds a wedge of extra fabric between the yoke seam and pt 8'
+    # on the back body; the extra width gets gathered into the yoke.
+    gathering = None
+    if gathering_amount > 0:
+        yoke_seam_dir = yoke_seat - yoke_side
+        yoke_seam_dir_norm = yoke_seam_dir / np.linalg.norm(yoke_seam_dir)
+        gathering_ext_pt = yoke_seat + yoke_seam_dir_norm * gathering_amount
+        # Smooth taper from the extension back to pt 8' (top of crotch curve)
+        taper_dist = np.linalg.norm(new_pt8 - gathering_ext_pt)
+        gathering_taper = _bezier_cubic(
+            gathering_ext_pt,
+            gathering_ext_pt + (new_pt8 - gathering_ext_pt) / 3,
+            new_pt8 + seat_angle_dir_norm * (taper_dist / 4),
+            new_pt8,
+        )
+        gathering = {
+            'ext_pt': gathering_ext_pt,
+            'taper': gathering_taper,
+            'amount': gathering_amount,
+        }
+
     return {
         'points': {
             'back_hem': back_hem,
@@ -198,6 +226,7 @@ def draft_jeans_back(m, front):
             'waist_line_start': fpts['1'],
             'waist_line_end': fpts['1'] + waist_line_dir * 40,
         },
+        'gathering': gathering,
         'metadata': {
             'title': 'Historical Jeans Back Panel (1873)',
             'cut_count': 2,
@@ -298,6 +327,24 @@ def plot_jeans_back(front, back, output_path='Logs/jeans_back.svg', debug=False,
     ax.plot([yoke_mid[0] - _perp[0]*_nsize, yoke_mid[0] + _perp[0]*_nsize],
             [yoke_mid[1] - _perp[1]*_nsize, yoke_mid[1] + _perp[1]*_nsize],
             color='steelblue', linewidth=1.2)
+
+    # -- Gathering taper (1873 variant, shown in red) --
+    gathering = back.get('gathering')
+    if gathering is not None:
+        g_ext = gathering['ext_pt'] * s
+        g_taper = gathering['taper'] * s
+        GATHER = dict(color='red', linewidth=1.2)
+        # Extension: yoke_seat → gathering extension point
+        ax.plot([bpts['yoke_seat'][0], g_ext[0]],
+                [bpts['yoke_seat'][1], g_ext[1]], **GATHER)
+        # Taper curve back to seat seam at 8'
+        ax.plot(g_taper[:, 0], g_taper[:, 1], **GATHER)
+        # Label
+        g_mid = (g_ext + bpts["8'"]) / 2
+        ax.annotate('gathering', g_mid, textcoords="offset points",
+                    xytext=(-12, -8), fontsize=7, color='red', ha='center',
+                    bbox=dict(boxstyle='round,pad=0.2', fc='white',
+                              ec='none', alpha=0.8))
 
     # -- Reference lines (clipped to pattern outline bounding box) --
     outline_pts = [fpts['1'], fpts['4'], fpts['0'], bpts['back_hem'],
@@ -420,11 +467,12 @@ def plot_jeans_back(front, back, output_path='Logs/jeans_back.svg', debug=False,
 
 # -- Entry point for generic runner ------------------------------------------
 
-def run(measurements_path, output_path, debug=False, units='cm', pdf_pages=None):
+def run(measurements_path, output_path, debug=False, units='cm', pdf_pages=None,
+        gathering_amount=0):
     """Uniform interface called by the generic runner."""
     m = load_measurements(measurements_path)
     front = draft_jeans_front(m)
-    back = draft_jeans_back(m, front)
+    back = draft_jeans_back(m, front, gathering_amount=gathering_amount)
     # Draft pocket so we can show its placement on the back panel
     from .jeans_yoke_1873 import draft_jeans_yoke
     from .jeans_back_pocket import draft_jeans_back_pocket
