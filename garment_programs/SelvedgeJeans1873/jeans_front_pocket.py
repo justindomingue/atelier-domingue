@@ -122,16 +122,15 @@ def draft_jeans_front_pocket(m, front):
     dict with keys: points, curves, construction, metadata
     """
     fpts = front['points']
-    pt1 = fpts['1']
+    pt1 = fpts["1'"]
 
-    # -- 1. Lower pocket opening: 3 1/4" along the outseam from pt1 --
-    # The outseam runs: pt1 → 1' → hip curve → pt4.
-    # Build a combined polyline and walk it by arc-length.
+    # -- 1. Lower pocket opening: 3 1/4" along the outseam from pt1' --
+    # The outseam (hip curve) starts at pt1'; walk arc-length from there.
     outseam_path = np.vstack([pt1.reshape(1, 2), front['curves']['hip']])
     pocket_lower = _point_at_arclength(outseam_path, 3.25 * INCH)
 
-    # -- 2. Upper pocket opening: 4 3/4" along the waist/rise from pt1 --
-    # The waist/fly edge runs: pt1 → 1' → rise curve → 7'.
+    # -- 2. Upper pocket opening: 4 3/4" along the waist/rise from pt1' --
+    # The rise curve starts at pt1'; walk arc-length from there.
     rise_path = np.vstack([pt1.reshape(1, 2), front['curves']['rise']])
     pocket_upper = _point_at_arclength(rise_path, 4.75 * INCH)
 

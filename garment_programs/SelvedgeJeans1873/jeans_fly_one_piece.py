@@ -13,7 +13,7 @@ Layout (left to right):
   Total width = 4 1/2"
 
 Length = 2 × fly_extension + 2"
-  where fly_extension is the rise curve length from the front panel.
+  where fly_extension is the fly extension segment (7'→8) from the front panel.
 """
 import numpy as np
 import matplotlib.pyplot as plt
@@ -42,7 +42,7 @@ def draft_jeans_fly_one_piece(m, front):
     -------
     dict with keys: points, curves, construction, metadata
     """
-    fly_extension = _curve_length(front['curves']['rise'])
+    fly_extension = np.linalg.norm(front['points']["7'"] - front['points']['8'])
     length = 2 * fly_extension + 2 * INCH
     width = 4.5 * INCH
 
