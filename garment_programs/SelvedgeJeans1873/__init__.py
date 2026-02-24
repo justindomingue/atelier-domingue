@@ -4,7 +4,7 @@ _SHARED_PIECES = [
     # --- Main fabric (denim) ---
     {'module': 'jeans_front',         'name': 'Front Panel',          'cut_count': 2, 'selvedge_edge': 'top'},
     {'module': 'jeans_back',          'name': 'Back Panel',           'cut_count': 2, 'selvedge_edge': 'top'},
-    {'module': 'jeans_waistband',     'name': 'Waistband',            'cut_count': 1, 'interfacing': True},
+    {'module': 'jeans_waistband',     'name': 'Waistband',            'cut_count': 1, 'selvedge_edge': 'top', 'interfacing': True},
     {'module': 'jeans_front_facing',  'name': 'Front Pocket Facing',  'cut_count': 2, 'grain_axis': 'y'},
     # Watch pocket — same dimensions for both variants.
     # Historically the 1873 version is ~1" longer (top at waistband center,

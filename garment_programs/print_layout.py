@@ -341,6 +341,33 @@ def _transform_polygon(polygon, transform, w_inches, h_inches):
         min_y = min(p[1] for p in rotated)
         return [(p[0] - min_x, p[1] - min_y) for p in rotated]
 
+    if transform == 'cw':
+        # 90° CW rotation: (x, y) → (h - y, x)
+        rotated = [(h_inches - y, x) for x, y in polygon]
+        min_x = min(p[0] for p in rotated)
+        min_y = min(p[1] for p in rotated)
+        return [(p[0] - min_x, p[1] - min_y) for p in rotated]
+
+    if transform == 'flip_h':
+        # Horizontal mirror: (x, y) → (w - x, y)
+        flipped = [(w_inches - x, y) for x, y in polygon]
+        min_x = min(p[0] for p in flipped)
+        return [(p[0] - min_x, p[1]) for p in flipped]
+
+    if transform == 'ccw_flip_h':
+        # CCW rotation + horizontal flip: (x, y) → (h - y, w - x)
+        transformed = [(h_inches - y, w_inches - x) for x, y in polygon]
+        min_x = min(p[0] for p in transformed)
+        min_y = min(p[1] for p in transformed)
+        return [(p[0] - min_x, p[1] - min_y) for p in transformed]
+
+    if transform == 'ccw_flip_v':
+        # CCW rotation + vertical flip: (x, y) → (y, x)
+        transformed = [(y, x) for x, y in polygon]
+        min_x = min(p[0] for p in transformed)
+        min_y = min(p[1] for p in transformed)
+        return [(p[0] - min_x, p[1] - min_y) for p in transformed]
+
     if transform == 'flip_v':
         # Vertical mirror: (x, y) → (x, h - y)
         flipped = [(x, h_inches - y) for x, y in polygon]
@@ -606,9 +633,14 @@ def polygon_nest(pieces, fabric_width, gap=0.25):
 
     remaining_input = [(name, gl, cw, None)
                        for name, gl, cw, _, _, _, _ in remaining]
-    remaining_sky_pos, vf_total = skyline_pack(
-        remaining_input, fabric_width, gap=gap,
-        initial_skyline=vf_skyline)
+    if remaining_input:
+        remaining_sky_pos, vf_total = skyline_pack(
+            remaining_input, fabric_width, gap=gap,
+            initial_skyline=vf_skyline)
+    else:
+        # All free pieces void-filled — total length is the skyline extent
+        remaining_sky_pos = {}
+        vf_total = max(s[2] for s in vf_skyline)
 
     vf_positions = {}
     vf_positions.update(sel_positions)
@@ -722,7 +754,15 @@ def generate_cutting_layout(svg_paths, fabric_width, output_path,
                 pieces.append((name, grain_len, cross_w,
                                svg_path, base_transform, None))
             else:
-                for i in range(cut_count):
+                # Mirror transform for the second copy (vertical flip):
+                #   grain_axis='x' (none) → flip_v
+                #   grain_axis='y' (ccw)  → ccw_flip_v (rotate then flip)
+                mirror_transform = 'flip_v' if base_transform == 'none' else 'ccw_flip_v'
+                pieces.append((f'{name}_1', grain_len, cross_w,
+                               svg_path, base_transform, None))
+                pieces.append((f'{name}_2', grain_len, cross_w,
+                               svg_path, mirror_transform, None))
+                for i in range(2, cut_count):
                     pieces.append((f'{name}_{i+1}', grain_len, cross_w,
                                    svg_path, base_transform, None))
 
@@ -743,6 +783,23 @@ def generate_cutting_layout(svg_paths, fabric_width, output_path,
             poly_w_orig = max(p[0] for p in poly) if poly else 0
             layout_pad_x = pad_y
             layout_pad_y = svg_w - pad_x - poly_w_orig
+        elif transform == 'cw':
+            poly_h_orig = max(p[1] for p in poly) if poly else 0
+            layout_pad_x = svg_h - pad_y - poly_h_orig
+            layout_pad_y = pad_x
+        elif transform == 'flip_h':
+            poly_w_orig = max(p[0] for p in poly) if poly else 0
+            layout_pad_x = svg_w - pad_x - poly_w_orig
+            layout_pad_y = pad_y
+        elif transform == 'ccw_flip_h':
+            poly_w_orig = max(p[0] for p in poly) if poly else 0
+            poly_h_orig = max(p[1] for p in poly) if poly else 0
+            layout_pad_x = svg_h - pad_y - poly_h_orig
+            layout_pad_y = svg_w - pad_x - poly_w_orig
+        elif transform == 'ccw_flip_v':
+            # (x,y) → (y, x): pad maps as (pad_y, pad_x) → layout (pad_x, pad_y)
+            layout_pad_x = pad_y
+            layout_pad_y = pad_x
         elif transform == 'flip_v':
             poly_h_orig = max(p[1] for p in poly) if poly else 0
             layout_pad_x = pad_x
@@ -934,6 +991,35 @@ def generate_cutting_layout(svg_paths, fabric_width, output_path,
             nested.set('viewBox', f'0 0 {vh} {vw}')
             wrapper = ET.SubElement(nested, _tag('g'), {
                 'transform': f'translate(0, {vw}) rotate(-90)',
+            })
+            for child in piece_root:
+                wrapper.append(child)
+        elif transform == 'flip_h':
+            # Horizontal flip: left ↔ right mirror.
+            nested.set('viewBox', viewBox)
+            wrapper = ET.SubElement(nested, _tag('g'), {
+                'transform': f'translate({vw}, 0) scale(-1, 1)',
+            })
+            for child in piece_root:
+                wrapper.append(child)
+        elif transform == 'ccw_flip_h':
+            # CCW rotation + horizontal flip (mirror of CCW-rotated piece).
+            nested.set('viewBox', f'0 0 {vh} {vw}')
+            wrapper = ET.SubElement(nested, _tag('g'), {
+                'transform':
+                    f'translate({vh}, 0) scale(-1, 1) '
+                    f'translate(0, {vw}) rotate(-90)',
+            })
+            for child in piece_root:
+                wrapper.append(child)
+        elif transform == 'ccw_flip_v':
+            # CCW rotation + vertical flip (mirror of CCW-rotated piece).
+            # (x,y) → rotate(-90) → (y, vw-x) → flip_v → (y, x)
+            nested.set('viewBox', f'0 0 {vh} {vw}')
+            wrapper = ET.SubElement(nested, _tag('g'), {
+                'transform':
+                    f'translate(0, {vw}) scale(1, -1) '
+                    f'translate(0, {vw}) rotate(-90)',
             })
             for child in piece_root:
                 wrapper.append(child)
