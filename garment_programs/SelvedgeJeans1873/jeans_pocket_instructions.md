@@ -129,3 +129,13 @@ allowance line. Save the cutoff piece.
   crossgrain.
 - **Option 2:** grainline along the side, better fabric match but opening
   prone to stretching.
+
+---
+
+## 1873 vs Modern variant
+
+- **Back pocket:** 1873 jeans have **1** back pocket (right side only); modern
+  jeans have **2** (one on each side).
+- **Watch pocket:** Included in both variants with the same dimensions.
+  Historically the 1873 version is ~1" longer (top falls at the waistband
+  center, bottom just below the pocket opening).

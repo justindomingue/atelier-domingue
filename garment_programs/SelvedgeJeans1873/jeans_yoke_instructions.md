@@ -71,3 +71,11 @@ stitched dart. The waist size was adjusted by varying the pleat width.
 - The dart/pleat provides shaping to accommodate the curve from waist to hip.
 - The 3/4" dart accounts for the **3/4" ease** added to the back waist width
   in the back panel drafting step (step 14 in back instructions).
+
+## 1873 vs Modern variant
+
+- **1873:** Straight yoke line with a single dart/pleat. The yoke seat point is
+  extended an additional **3/4"** along the seat seam curve to create gathering
+  on the seat-seam side.
+- **Modern:** Curved yoke via slash-and-spread of two darts, producing smooth
+  curved waist and yoke lines (no gathering extension).

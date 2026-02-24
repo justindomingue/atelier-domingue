@@ -270,11 +270,13 @@ def plot_jeans_yoke(front, back, yoke, output_path='Logs/jeans_yoke.svg',
 
 # -- Entry point for generic runner ------------------------------------------
 
-def run(measurements_path, output_path, debug=False, units='cm', pdf_pages=None):
+def run(measurements_path, output_path, debug=False, units='cm', pdf_pages=None,
+        gathering_extension=0):
     """Uniform interface called by the generic runner."""
     m = load_measurements(measurements_path)
     front = draft_jeans_front(m)
     back = draft_jeans_back(m, front)
-    yoke = draft_jeans_yoke(m, front, back)
+    yoke = draft_jeans_yoke(m, front, back,
+                            gathering_extension=gathering_extension)
     plot_jeans_yoke(front, back, yoke, output_path, debug=debug, units=units,
                     pdf_pages=pdf_pages)
