@@ -136,20 +136,20 @@ def draft_jeans_back(m, front):
 
     # -- Final seat seam (back_waist_pt → 8' → 11) --
 
-    # Smooth curve from back_waist to 8' (Bezier, not straight line).
-    # The curve bows slightly outward to follow the hip/seat contour.
-    seat_upper_chord = new_pt8 - back_waist_pt
-    seat_upper_len = np.linalg.norm(seat_upper_chord)
-    seat_upper_perp = np.array([-seat_upper_chord[1], seat_upper_chord[0]])
-    seat_upper_perp = seat_upper_perp / np.linalg.norm(seat_upper_perp)
-    # Ensure perpendicular points outward (toward inseam / away from outseam)
-    if np.dot(seat_upper_perp, pt11 - back_waist_pt) < 0:
-        seat_upper_perp = -seat_upper_perp
-    bow = seat_upper_len * 0.06
+    # Upper seat: gentle curve from back_waist to 8', departing at 90° to waist
+    # MHTML: "starting at 90 degrees to the waist, gently curving into point 8"
+    # The waist direction is waist_line_dir; perpendicular (toward 8') is the
+    # seat angle direction.  We use that as the departure tangent at back_waist.
+    dist_bw_8 = np.linalg.norm(new_pt8 - back_waist_pt)
+    # At back_waist: depart perpendicular to waist (= along seat_angle direction)
+    bw_tangent = -seat_angle_dir_norm  # toward 8', away from waist
+    if np.dot(bw_tangent, new_pt8 - back_waist_pt) < 0:
+        bw_tangent = seat_angle_dir_norm
+    # At 8': arrive along the seat angle direction (blending into seat_lower)
     curve_seat_upper = _bezier_cubic(
         back_waist_pt,
-        back_waist_pt + seat_upper_chord / 3 + seat_upper_perp * bow,
-        new_pt8 - seat_upper_chord / 3 + seat_upper_perp * bow,
+        back_waist_pt + bw_tangent * (dist_bw_8 / 3),
+        new_pt8 + seat_angle_dir_norm * (dist_bw_8 / 3),
         new_pt8,
     )
 
