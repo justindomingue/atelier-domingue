@@ -21,11 +21,10 @@ import matplotlib.pyplot as plt
 
 from .jeans_front import (
     INCH, load_measurements, draft_jeans_front,
-    _offset_polyline, _draw_seam_allowance,
     _annotate_segment,
 )
 from .jeans_front_pocket import draft_jeans_front_pocket
-from garment_programs.plot_utils import SEAMLINE, CUTLINE
+from garment_programs.plot_utils import SEAMLINE, CUTLINE, draw_seam_allowance
 
 
 # -- Drafting ----------------------------------------------------------------
@@ -75,7 +74,7 @@ def draft_jeans_watch_pocket(m):
     # After rotation the pocket hangs in +y (v_point at large y, top edge
     # near y=0).  Negate y so the flat top edge sits at the TOP of the
     # figure and v_point at the bottom.  This also flips the winding from
-    # CCW to CW, which makes _draw_seam_allowance offset outward with
+    # CCW to CW, which makes draw_seam_allowance offset outward with
     # positive SA values.
     for k in new_pts:
         new_pts[k] = np.array([new_pts[k][0], -new_pts[k][1]])
@@ -143,7 +142,7 @@ def plot_jeans_watch_pocket(piece, output_path='Logs/jeans_watch_pocket.svg',
     outline_closed = np.vstack([outline, outline[0:1]])
     ax.plot(outline_closed[:, 0], outline_closed[:, 1], **OUTLINE)
 
-    # Seam allowances via _draw_seam_allowance
+    # Seam allowances via draw_seam_allowance
     # Pentagon order: top_left → top_right → bottom_right → v_point → bottom_left
     # Edges: top, right side, lower-right, lower-left, left side
     sa_top = meta['sa_top']
@@ -157,7 +156,7 @@ def plot_jeans_watch_pocket(piece, output_path='Logs/jeans_watch_pocket.svg',
         (np.array([pts['v_point'], pts['bottom_left']]),      sa_bottom),  # lower-left
         (np.array([pts['bottom_left'], pts['top_left']]),     sa_sides),   # left side
     ]
-    _draw_seam_allowance(ax, sa_edges, scale=s)
+    draw_seam_allowance(ax, sa_edges, scale=s)
 
     # Grain line arrow (double-headed)
     from garment_programs.plot_utils import draw_grainline, draw_piece_label

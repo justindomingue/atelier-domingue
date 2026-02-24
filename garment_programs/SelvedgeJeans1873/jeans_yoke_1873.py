@@ -9,10 +9,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 
-from garment_programs.plot_utils import SEAMLINE
+from garment_programs.plot_utils import SEAMLINE, draw_seam_allowance
 from .jeans_front import (
     INCH, load_measurements, draft_jeans_front,
-    _annotate_segment, _draw_seam_allowance,
+    _annotate_segment,
     _point_at_arclength, _curve_up_to_arclength,
 )
 from .jeans_back import draft_jeans_back
@@ -237,7 +237,7 @@ def plot_jeans_yoke(front, back, yoke, output_path='Logs/jeans_yoke.svg',
         (seat_seg[::-1],                                         SA_SEAT_YOKE),   # seat seam segment (reversed)
         (np.array([bpts['back_waist'], fpts['1']]),              SA_WAIST_YOKE),  # waist
     ]
-    _draw_seam_allowance(ax, sa_edges, scale=s)
+    draw_seam_allowance(ax, sa_edges, scale=s)
 
     # --- Grainline and piece label (pattern mode only) ---
     if not debug:

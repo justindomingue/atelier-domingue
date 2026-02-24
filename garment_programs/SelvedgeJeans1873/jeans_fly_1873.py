@@ -17,11 +17,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 
-from garment_programs.plot_utils import SEAMLINE, CUTLINE
+from garment_programs.plot_utils import SEAMLINE, CUTLINE, draw_seam_allowance
 from .jeans_front import (
     INCH, load_measurements, draft_jeans_front,
     _bezier_cubic, _curve_length, _annotate_segment,
-    _draw_seam_allowance,
 )
 from .seam_allowances import SEAM_ALLOWANCES
 
@@ -123,7 +122,7 @@ def plot_jeans_fly_1873(fly, output_path='Logs/jeans_fly_1873.svg',
         (curves['bottom'],                                     SA['bottom']),
         (np.array([pts['fold_bottom'], pts['fold_top']]),     SA['fold']),
     ]
-    _draw_seam_allowance(ax, sa_edges, scale=s)
+    draw_seam_allowance(ax, sa_edges, scale=s)
 
     # Thin boundary line at the trim/inlay separation
     ax.plot([0, pts['outer_top'][0]],

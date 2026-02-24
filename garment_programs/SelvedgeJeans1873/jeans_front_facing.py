@@ -25,12 +25,11 @@ import matplotlib.pyplot as plt
 
 from .jeans_front import (
     INCH, load_measurements, draft_jeans_front,
-    _offset_polyline, _draw_seam_allowance,
     _annotate_segment, _annotate_curve, _curve_length,
     _curve_up_to_arclength,
 )
 from .jeans_front_pocket import draft_jeans_front_pocket
-from garment_programs.plot_utils import SEAMLINE
+from garment_programs.plot_utils import SEAMLINE, draw_seam_allowance
 
 
 # -- Drafting ----------------------------------------------------------------
@@ -182,7 +181,7 @@ def plot_jeans_front_facing(piece, output_path='Logs/jeans_front_facing.svg',
         (opening, -sa_opening),    # pocket opening (cut edge)
         (hip,     -sa_sideseam),   # side seam
     ]
-    _draw_seam_allowance(ax, sa_edges, scale=s)
+    draw_seam_allowance(ax, sa_edges, scale=s)
 
     # Grain line arrow (double-headed)
     from garment_programs.plot_utils import draw_grainline, draw_piece_label

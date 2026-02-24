@@ -21,11 +21,11 @@ from pathlib import Path
 from .jeans_front import (
     INCH, load_measurements, draft_jeans_front,
     _bezier_cubic, _curve_length, _annotate_segment,
-    _point_at_arclength, _offset_polyline,
-    _curve_up_to_arclength, _draw_seam_allowance,
+    _point_at_arclength,
+    _curve_up_to_arclength,
 )
 from .seam_allowances import SEAM_ALLOWANCES
-from garment_programs.plot_utils import SEAMLINE, CUTLINE
+from garment_programs.plot_utils import SEAMLINE, CUTLINE, offset_polyline, draw_seam_allowance
 
 
 # -- Watch pocket helper -----------------------------------------------------
@@ -178,7 +178,7 @@ def draft_jeans_front_pocket(m, front):
     facing_offset = 0.5 * INCH
     # Offset the opening inward. Travel is pocket_upper → pocket_lower;
     # negative offset = right of travel = toward body center (inward).
-    facing_inner = _offset_polyline(opening_curve, -facing_offset)
+    facing_inner = offset_polyline(opening_curve, -facing_offset)
 
     # Facing extends ~1.5" below pocket_lower along the side seam.
     facing_sideseam = _point_at_arclength(outseam_path, (3.25 + 1.5) * INCH)
@@ -306,7 +306,7 @@ def plot_jeans_front_pocket(piece, output_path='Logs/jeans_front_pocket.svg',
         (rot_bottom, -_sa['bottom']),
         (rot_hip,    -_sa['sideseam']),
     ]
-    _draw_seam_allowance(ax, sa_edges, scale=s)
+    draw_seam_allowance(ax, sa_edges, scale=s)
 
     # --- Grainline (vertical, centered) ---
     from garment_programs.plot_utils import draw_grainline, draw_piece_label

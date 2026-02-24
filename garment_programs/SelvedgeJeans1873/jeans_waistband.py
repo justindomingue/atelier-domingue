@@ -22,9 +22,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 
-from garment_programs.plot_utils import SEAMLINE
+from garment_programs.plot_utils import SEAMLINE, draw_seam_allowance
 from .jeans_front import (
-    INCH, load_measurements, _annotate_segment, _draw_seam_allowance,
+    INCH, load_measurements, _annotate_segment,
 )
 from .seam_allowances import SEAM_ALLOWANCES
 
@@ -104,7 +104,7 @@ def plot_jeans_waistband(wb, output_path='Logs/jeans_waistband.svg',
         (np.array([pts['br'], pts['bl']]),  SA['bottom']),   # bottom seam
         (np.array([pts['bl'], pts['tl']]),  SA['end']),      # left end
     ]
-    _draw_seam_allowance(ax, sa_edges, scale=s)
+    draw_seam_allowance(ax, sa_edges, scale=s)
 
     # --- Reference lines ---
 

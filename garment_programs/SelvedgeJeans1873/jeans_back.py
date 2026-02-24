@@ -8,12 +8,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 
-from garment_programs.plot_utils import SEAMLINE
+from garment_programs.plot_utils import SEAMLINE, draw_seam_allowance
 from .jeans_front import (
     INCH, load_measurements, draft_jeans_front,
     _bezier_cubic, _bezier_quad,
     _annotate_curve, _annotate_segment,
-    _draw_seam_allowance,
     _point_at_arclength, _curve_up_to_arclength,
 )
 
@@ -356,7 +355,7 @@ def plot_jeans_back(front, back, output_path='Logs/jeans_back.svg', debug=False,
         (bcurves['seat_upper'][::-1],                            SA_SEAT),    # seat upper (8'→back_waist)
         (np.array([bpts['back_waist'], fpts['1']]),              SA_YOKE),    # waist
     ]
-    _draw_seam_allowance(ax, sa_edges, scale=s)
+    draw_seam_allowance(ax, sa_edges, scale=s)
 
     # --- Back pocket placement outline ---
     if pocket is not None:

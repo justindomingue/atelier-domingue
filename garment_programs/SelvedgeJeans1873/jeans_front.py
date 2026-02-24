@@ -9,7 +9,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 
-from garment_programs.plot_utils import SEAMLINE, CUTLINE
+from garment_programs.plot_utils import SEAMLINE, CUTLINE, offset_polyline, draw_seam_allowance
 
 INCH = 2.54  # cm per inch
 
@@ -97,95 +97,6 @@ def _annotate_segment(ax, p0, p1, offset=(0, 6)):
     ax.annotate(f'{length:.1f}', mid, textcoords="offset points",
                 xytext=offset, fontsize=6, color='darkblue', ha='center',
                 bbox=dict(boxstyle='round,pad=0.2', fc='white', ec='none', alpha=0.7))
-
-
-# -- Seam-allowance offset helper -------------------------------------------
-
-def _offset_polyline(pts, distance):
-    """Offset a polyline by *distance* to the left of the travel direction.
-
-    For a clockwise outline, positive *distance* pushes outward.
-
-    Parameters
-    ----------
-    pts : ndarray, shape (N, 2)
-        Ordered polyline vertices.
-    distance : float
-        Offset distance (positive = left of travel = outward for CW).
-
-    Returns
-    -------
-    ndarray, shape (N, 2)
-        Offset polyline (same number of points, miter-joined).
-    """
-    pts = np.asarray(pts, dtype=float)
-    n = len(pts)
-    if n < 2:
-        return pts.copy()
-
-    # Per-segment unit normals (left of travel direction)
-    seg = np.diff(pts, axis=0)                       # (N-1, 2)
-    lengths = np.sqrt(seg[:, 0]**2 + seg[:, 1]**2)
-    lengths = np.where(lengths == 0, 1e-12, lengths)  # avoid div-by-zero
-    normals = np.column_stack([-seg[:, 1], seg[:, 0]]) / lengths[:, None]
-
-    out = np.empty_like(pts)
-
-    # First and last points: simple normal offset
-    out[0] = pts[0] + normals[0] * distance
-    out[-1] = pts[-1] + normals[-1] * distance
-
-    # Interior points: average of adjacent normals (miter)
-    for i in range(1, n - 1):
-        avg = normals[i - 1] + normals[i]
-        length = np.linalg.norm(avg)
-        if length < 1e-12:
-            avg = normals[i]
-        else:
-            avg = avg / length
-        # Miter scale: project onto either normal
-        cos_half = np.dot(avg, normals[i])
-        if abs(cos_half) < 0.1:
-            cos_half = 0.1  # cap for very sharp corners
-        out[i] = pts[i] + avg * (distance / cos_half)
-
-    return out
-
-
-def _draw_seam_allowance(ax, edges, scale=1.0):
-    """Draw a continuous seam-allowance boundary for an ordered list of edges.
-
-    Edges must be ordered so that they form a continuous CW perimeter
-    (each edge's last point ≈ the next edge's first point).  The function
-    offsets each edge by its SA, then connects adjacent offset segments at
-    their intersection (miter point) to produce one unbroken cutting line.
-
-    Parameters
-    ----------
-    ax : matplotlib Axes
-    edges : list of (pts, sa_distance) tuples
-        *pts* is an (N,2) ndarray (already display-scaled),
-        *sa_distance* is the seam allowance in **cm** (pre-scaling).
-    scale : float
-        Display scale factor (e.g. 1/INCH for inch mode).
-    """
-    # Offset each edge independently
-    offsets = []
-    for pts, sa_cm in edges:
-        sa = sa_cm * scale
-        offsets.append(_offset_polyline(pts, sa))
-
-    # Build continuous SA path by connecting offset segments at corners
-    sa_pts = list(offsets[0])
-    for i in range(1, len(offsets)):
-        # Connect: add the first point of the next segment
-        # (creates a short connecting line at the SA transition)
-        sa_pts.extend(offsets[i].tolist())
-
-    # Close the loop back to the starting point
-    sa_pts.append(sa_pts[0])
-    sa_path = np.array(sa_pts)
-    ax.plot(sa_path[:, 0], sa_path[:, 1], **CUTLINE)
 
 
 # -- Drafting ----------------------------------------------------------------
@@ -526,7 +437,7 @@ def plot_jeans_front(draft, output_path='Logs/jeans_front.svg', debug=False, uni
         (np.array([pts['8'], pts["7'"]]),                        SA_FLY),     # fly: full 3/4"
         (curves['rise'][::-1],                                   SA_WAIST),   # rise / waist (7'→1')
     ]
-    _draw_seam_allowance(ax, sa_edges, scale=s)
+    draw_seam_allowance(ax, sa_edges, scale=s)
 
     # --- Grainline and piece label (pattern mode only) ---
     if not debug:
