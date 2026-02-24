@@ -77,15 +77,17 @@ def draft_jeans_back_cinch(m):
 # -- Visualization -----------------------------------------------------------
 
 def plot_jeans_back_cinch(cinch, output_path='Logs/jeans_back_cinch.svg',
-                          debug=False, units='cm'):
+                          debug=False, units='cm', pdf_pages=None, ax=None):
     s = 1 / INCH if units == 'inch' else 1.0
     unit_label = 'in' if units == 'inch' else 'cm'
 
     pts = {k: v * s for k, v in cinch['points'].items()}
 
-    fig, ax = plt.subplots(1, 1, figsize=(12, 4))
+    standalone = ax is None
+    if standalone:
+        fig, ax = plt.subplots(1, 1, figsize=(12, 4))
     LINE = dict(color='black', linewidth=1.5)
-    SA_END = dict(color='red', linewidth=1.5)
+    SA_END = dict(color='black', linewidth=1.5)
 
     length_s = cinch['metadata']['length'] * s
 
@@ -103,13 +105,13 @@ def plot_jeans_back_cinch(cinch, output_path='Logs/jeans_back_cinch.svg',
     ax.plot([pts['f_tr'][0], pts['f_tr'][0]],
             [pts['sa_tr'][1], pts['sa_br'][1]], **LINE)
 
-    # -- 1/2" end SA verticals (red) --
+    # -- 1/2" end SA verticals --
     ax.plot([pts['sa_tl'][0], pts['sa_tl'][0]],
             [pts['sa_tl'][1], pts['sa_bl'][1]], **SA_END)
     ax.plot([pts['sa_tr'][0], pts['sa_tr'][0]],
             [pts['sa_tr'][1], pts['sa_br'][1]], **SA_END)
 
-    # 1/2" labels beside the red end SA lines
+    # 1/2" labels beside the end SA lines
     mid_y_left = (pts['sa_tl'][1] + pts['sa_bl'][1]) / 2
     ax.text(pts['sa_tl'][0] - 0.15 * s, mid_y_left, '1/2"',
             fontsize=12, ha='right', va='center')
@@ -150,13 +152,16 @@ def plot_jeans_back_cinch(cinch, output_path='Logs/jeans_back_cinch.svg',
     else:
         ax.axis('off')
 
-    from garment_programs.plot_utils import save_pattern
-    save_pattern(fig, ax, output_path, units=units, calibration=not debug)
+    if standalone:
+        from garment_programs.plot_utils import save_pattern
+        save_pattern(fig, ax, output_path, units=units, calibration=not debug,
+                     pdf_pages=pdf_pages)
 
 
 # -- Entry point for generic runner ------------------------------------------
 
-def run(measurements_path, output_path, debug=False, units='cm'):
+def run(measurements_path, output_path, debug=False, units='cm', pdf_pages=None):
     m = load_measurements(measurements_path)
     cinch = draft_jeans_back_cinch(m)
-    plot_jeans_back_cinch(cinch, output_path, debug=debug, units=units)
+    plot_jeans_back_cinch(cinch, output_path, debug=debug, units=units,
+                          pdf_pages=pdf_pages)

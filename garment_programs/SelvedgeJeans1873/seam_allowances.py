@@ -49,6 +49,12 @@ SEAM_ALLOWANCES = {
         'sideseam': S['simple'],
         'opening': S['flat_fell'],
     },
+    'front_pocket_bag': {
+        'waist':    S['flat_fell'],     # top edge, caught in waistband
+        'sideseam': S['flat_fell'],     # side, caught in side seam
+        'inner':    S['flat_fell'],     # inner edge
+        'bottom':   S['flat_fell'],     # bottom curve
+    },
     'fly_one_piece': {
         'side':    S['narrow'],
     },

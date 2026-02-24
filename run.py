@@ -73,6 +73,8 @@ def main():
                         help='display units for the plot (default: prompt via fzf)')
     parser.add_argument('--format', '-f', choices=['svg', 'pdf'], default=None,
                         help='output format (default: prompt via fzf)')
+    parser.add_argument('--fabric-width', type=float, default=None,
+                        help='fabric width in inches (overrides garment default)')
     args = parser.parse_args()
 
     # --- measurements selection ---
@@ -141,14 +143,70 @@ def main():
         Path(output_dir).mkdir(parents=True, exist_ok=True)
         print(f"\n--- {garment['name']} ---")
         print(f"Output: {output_dir}/")
+
         outputs = []
+        svg_pieces = []  # (svg_path, cut_count) for cutting layout
+
         for piece in garment['pieces']:
             print(f"  Drafting {piece['name']}...")
-            out = _run_piece(pkg, piece, measurements_path, debug, units, fmt=fmt, output_dir=output_dir)
+
+            # Always generate SVG (intermediate for layout)
+            svg_path = _run_piece(pkg, piece, measurements_path, debug, units,
+                                  fmt='svg', output_dir=output_dir)
+
+            # Also generate requested format if not SVG
+            if fmt != 'svg':
+                out = _run_piece(pkg, piece, measurements_path, debug, units,
+                                 fmt=fmt, output_dir=output_dir)
+            else:
+                out = svg_path
+
             outputs.append((piece['name'], out))
+
+            # Collect main-fabric pieces for cutting layout (skip verify, pocketing, etc.)
+            cut_count = piece.get('cut_count', 0)
+            fabric = piece.get('fabric', 'main')
+            if cut_count > 0 and fabric == 'main':
+                svg_pieces.append((svg_path, cut_count,
+                                   piece.get('selvedge_edge'),
+                                   piece.get('grain_axis', 'x')))
+
         print(f"\nGenerated {len(outputs)} pieces:")
         for name, path in outputs:
             print(f"  {name} -> {path}")
+
+        # Generate cutting layout SVG
+        if svg_pieces:
+            from garment_programs.print_layout import generate_cutting_layout
+            fabric_width = args.fabric_width or garment.get('fabric_width', 60)
+            layout_path = f'{output_dir}/cutting_layout.svg'
+            print(f"\n  Generating cutting layout ({fabric_width}\" fabric)...")
+            generate_cutting_layout(svg_pieces, fabric_width, layout_path,
+                                    units=units)
+
+        # Summarize non-main fabric and interfacing requirements
+        other_fabrics = {}  # fabric_name -> [(piece_name, cut_count), ...]
+        interfacing_pieces = []
+        for piece in garment['pieces']:
+            cut_count = piece.get('cut_count', 0)
+            if cut_count <= 0:
+                continue
+            fabric = piece.get('fabric', 'main')
+            if fabric != 'main':
+                other_fabrics.setdefault(fabric, []).append(
+                    (piece['name'], cut_count))
+            if piece.get('interfacing'):
+                interfacing_pieces.append((piece['name'], cut_count))
+
+        if other_fabrics or interfacing_pieces:
+            print("\nAdditional cutting notes:")
+            for fab, items in other_fabrics.items():
+                parts_str = ', '.join(f"{n} (cut {c})" for n, c in items)
+                print(f"  {fab.title()}: {parts_str}")
+            if interfacing_pieces:
+                parts_str = ', '.join(f"{n} (cut {c})"
+                                      for n, c in interfacing_pieces)
+                print(f"  Interfacing: {parts_str}")
     else:
         # Single piece — may be dotted (pkg.module) or standalone
         parts = program_name.split('.', 1)

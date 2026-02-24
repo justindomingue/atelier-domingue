@@ -9,6 +9,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 
+from garment_programs.plot_utils import SEAMLINE, CUTLINE
+
 INCH = 2.54  # cm per inch
 
 
@@ -167,8 +169,6 @@ def _draw_seam_allowance(ax, edges, scale=1.0):
     scale : float
         Display scale factor (e.g. 1/INCH for inch mode).
     """
-    SA_STYLE = dict(color='gray', linewidth=0.6, linestyle='--', alpha=0.5)
-
     # Offset each edge independently
     offsets = []
     for pts, sa_cm in edges:
@@ -185,7 +185,7 @@ def _draw_seam_allowance(ax, edges, scale=1.0):
     # Close the loop back to the starting point
     sa_pts.append(sa_pts[0])
     sa_path = np.array(sa_pts)
-    ax.plot(sa_path[:, 0], sa_path[:, 1], **SA_STYLE)
+    ax.plot(sa_path[:, 0], sa_path[:, 1], **CUTLINE)
 
 
 # -- Drafting ----------------------------------------------------------------
@@ -330,7 +330,7 @@ def draft_jeans_front(m):
 # -- Visualization -----------------------------------------------------------
 
 def plot_jeans_front(draft, output_path='Logs/jeans_front.svg', debug=False, units='cm',
-                     pocket=None):
+                     pocket=None, pdf_pages=None, ax=None):
     """Render the draft to a matplotlib figure and save as PNG.
 
     Always draws the pattern outline and internal reference lines (hip, knee, CF).
@@ -345,7 +345,9 @@ def plot_jeans_front(draft, output_path='Logs/jeans_front.svg', debug=False, uni
     con = {k: v * s for k, v in draft['construction'].items()}
     REF = dict(color='gray', linewidth=0.8, linestyle='--', alpha=0.4)
 
-    fig, ax = plt.subplots(1, 1, figsize=(16, 10))
+    standalone = ax is None
+    if standalone:
+        fig, ax = plt.subplots(1, 1, figsize=(16, 10))
 
     # --- Debug-only: construction scaffolding ---
     if debug:
@@ -396,9 +398,12 @@ def plot_jeans_front(draft, output_path='Logs/jeans_front.svg', debug=False, uni
                 'k-', linewidth=1.5)
 
     # --- Internal reference lines (always shown) ---
-    # y-range for vertical lines (span the full width of the pattern)
-    y_lo = min(pts['6'][1], pts['5'][1]) - 2
-    y_hi = 2
+    # Clip to pattern outline bounding box (don't inflate SVG dimensions)
+    outline_keys = ['0', "0'", "3'", '4', "1'", "7'", '8', '6']
+    y_lo = min(pts[k][1] for k in outline_keys)
+    y_hi = max(pts[k][1] for k in outline_keys)
+    x_lo = min(pts[k][0] for k in outline_keys)
+    x_hi = max(pts[k][0] for k in outline_keys)
 
     # Seat line — vertical at pt4 x-level (just above crotch fork)
     seat_x = pts['4'][0]
@@ -419,9 +424,8 @@ def plot_jeans_front(draft, output_path='Logs/jeans_front.svg', debug=False, uni
                 xytext=(4, 4), fontsize=7, color='gray')
 
     # Center front line — horizontal at CF y-offset
-    x_left, x_right = pts['1'][0] - 3, pts['0'][0] + 3
-    cf_mid = (x_left + x_right) / 2
-    ax.plot([x_left, x_right], [pts['10'][1], pts['10'][1]], **REF)
+    cf_mid = (x_lo + x_hi) / 2
+    ax.plot([x_lo, x_hi], [pts['10'][1], pts['10'][1]], **REF)
     ax.annotate('center front', (cf_mid, pts['10'][1]), textcoords="offset points",
                 xytext=(0, 4), fontsize=7, color='gray', ha='center')
 
@@ -543,16 +547,19 @@ def plot_jeans_front(draft, output_path='Logs/jeans_front.svg', debug=False, uni
     if not debug:
         ax.axis('off')
 
-    from garment_programs.plot_utils import save_pattern
-    save_pattern(fig, ax, output_path, units=units, calibration=not debug)
+    if standalone:
+        from garment_programs.plot_utils import save_pattern
+        save_pattern(fig, ax, output_path, units=units, calibration=not debug,
+                     pdf_pages=pdf_pages)
 
 
 # -- Entry point for generic runner ------------------------------------------
 
-def run(measurements_path, output_path, debug=False, units='cm'):
+def run(measurements_path, output_path, debug=False, units='cm', pdf_pages=None):
     """Uniform interface called by the generic runner."""
     m = load_measurements(measurements_path)
     draft = draft_jeans_front(m)
     from .jeans_front_pocket import draft_jeans_front_pocket
     pocket = draft_jeans_front_pocket(m, draft)
-    plot_jeans_front(draft, output_path, debug=debug, units=units, pocket=pocket)
+    plot_jeans_front(draft, output_path, debug=debug, units=units, pocket=pocket,
+                     pdf_pages=pdf_pages)

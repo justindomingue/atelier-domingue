@@ -6,6 +6,12 @@ import matplotlib.patches as mpatches
 
 CM_PER_INCH = 2.54
 
+# -- Standard line styles for pattern pieces --------------------------------
+# Seamline: the finished sewing line (thinner)
+SEAMLINE = dict(color='blue', linewidth=1.0)
+# Cutline: the seam-allowance / cutting line (thicker)
+CUTLINE = dict(color='black', linewidth=1.5)
+
 
 def draw_piece_label(ax, center, title, cut_count=None, fontsize=9):
     """Render piece name and cut count at center of the pattern piece."""
@@ -52,13 +58,15 @@ def draw_calibration_square(ax, size_cm=5.0):
             ha='center', va='center', color='black', zorder=5)
 
 
-def save_pattern(fig, ax, output_path, units='cm', pad_cm=1.0, calibration=False):
+def save_pattern(fig, ax, output_path, units='cm', pad_cm=1.0, calibration=False,
+                 pdf_pages=None):
     """Save a pattern figure at 1:1 real-world scale.
 
     Sets figure dimensions so that 1 data-unit maps to 1 physical unit
     in the output file (1 cm on screen = 1 cm in reality).
 
     If calibration=True, draws a 5 cm calibration square in the corner.
+    If pdf_pages is provided, also adds the figure to the multi-page PDF.
     """
     ax.set_aspect('equal')
     ax.margins(0)
@@ -68,7 +76,11 @@ def save_pattern(fig, ax, output_path, units='cm', pad_cm=1.0, calibration=False
     xmin, xmax = ax.get_xlim()
     ymin, ymax = ax.get_ylim()
 
-    pad = pad_cm if units == 'cm' else pad_cm / CM_PER_INCH
+    # Minimal padding for SVG intermediates; full padding for printed formats
+    if str(output_path).endswith('.svg'):
+        pad = 0.1 if units == 'cm' else 0.1 / CM_PER_INCH
+    else:
+        pad = pad_cm if units == 'cm' else pad_cm / CM_PER_INCH
     xmin -= pad
     xmax += pad
     ymin -= pad
@@ -76,7 +88,7 @@ def save_pattern(fig, ax, output_path, units='cm', pad_cm=1.0, calibration=False
     ax.set_xlim(xmin, xmax)
     ax.set_ylim(ymin, ymax)
 
-    if calibration:
+    if calibration and not str(output_path).endswith('.svg'):
         draw_calibration_square(ax)
 
     data_w = xmax - xmin
@@ -88,5 +100,7 @@ def save_pattern(fig, ax, output_path, units='cm', pad_cm=1.0, calibration=False
 
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
     plt.savefig(output_path, dpi=150)
+    if pdf_pages is not None:
+        pdf_pages.savefig(fig)
     plt.close(fig)
     print(f"Saved visualization to {output_path}")

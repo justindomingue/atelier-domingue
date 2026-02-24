@@ -8,6 +8,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 
+from garment_programs.plot_utils import SEAMLINE
 from .jeans_front import (
     INCH, load_measurements, draft_jeans_front,
     _bezier_cubic, _bezier_quad,
@@ -190,11 +191,13 @@ def draft_jeans_back(m, front):
 
 # -- Visualization -----------------------------------------------------------
 
-def plot_jeans_back(front, back, output_path='Logs/jeans_back.svg', debug=False, units='cm'):
+def plot_jeans_back(front, back, output_path='Logs/jeans_back.svg', debug=False, units='cm',
+                    pdf_pages=None, ax=None, pocket=None):
     """Render the back panel and save as PNG.
 
     Always draws the pattern outline and internal reference lines.
     With debug=True, adds construction lines, point labels, and grid.
+    If pocket is provided, draws the pocket placement outline.
 
     units : 'cm' or 'inch' — display unit for axes and annotations.
     """
@@ -206,8 +209,10 @@ def plot_jeans_back(front, back, output_path='Logs/jeans_back.svg', debug=False,
     bcurves = {k: v * s for k, v in back['curves'].items()}
     bcon = {k: v * s for k, v in back['construction'].items()}
 
-    fig, ax = plt.subplots(1, 1, figsize=(16, 10))
-    OUTLINE = dict(color='black', linewidth=1.5)
+    standalone = ax is None
+    if standalone:
+        fig, ax = plt.subplots(1, 1, figsize=(16, 10))
+    OUTLINE = SEAMLINE
     REF = dict(color='gray', linewidth=0.8, linestyle='--', alpha=0.4)
     CON_STYLE = dict(color='gray', linewidth=0.5, linestyle='--', alpha=0.3)
 
@@ -278,9 +283,13 @@ def plot_jeans_back(front, back, output_path='Logs/jeans_back.svg', debug=False,
             [yoke_mid[1] - _perp[1]*_nsize, yoke_mid[1] + _perp[1]*_nsize],
             color='steelblue', linewidth=1.2)
 
-    # -- Reference lines --
-    y_lo = min(bpts['11'][1], fpts['6'][1]) - 3
-    y_hi = 2
+    # -- Reference lines (clipped to pattern outline bounding box) --
+    outline_pts = [fpts['1'], fpts['4'], fpts['0'], bpts['back_hem'],
+                   bpts['12'], bpts['11'], bpts["8'"], bpts['back_waist']]
+    y_lo = min(p[1] for p in outline_pts)
+    y_hi = max(p[1] for p in outline_pts)
+    x_lo = min(p[0] for p in outline_pts)
+    x_hi = max(p[0] for p in outline_pts)
 
     seat_x = fpts['4'][0]
     ax.plot([seat_x, seat_x], [y_lo, y_hi], **REF)
@@ -297,9 +306,8 @@ def plot_jeans_back(front, back, output_path='Logs/jeans_back.svg', debug=False,
     ax.annotate('knee', (knee_x, y_hi), textcoords="offset points",
                 xytext=(4, 4), fontsize=7, color='gray')
 
-    x_left, x_right = fpts['1'][0] - 3, fpts['0'][0] + 3
-    cf_mid = (x_left + x_right) / 2
-    ax.plot([x_left, x_right], [fpts['10'][1], fpts['10'][1]], **REF)
+    cf_mid = (x_lo + x_hi) / 2
+    ax.plot([x_lo, x_hi], [fpts['10'][1], fpts['10'][1]], **REF)
     ax.annotate('center front', (cf_mid, fpts['10'][1]), textcoords="offset points",
                 xytext=(0, 4), fontsize=7, color='gray', ha='center')
 
@@ -350,6 +358,20 @@ def plot_jeans_back(front, back, output_path='Logs/jeans_back.svg', debug=False,
     ]
     _draw_seam_allowance(ax, sa_edges, scale=s)
 
+    # --- Back pocket placement outline ---
+    if pocket is not None:
+        POCKET_STYLE = dict(color='steelblue', linewidth=1.0, linestyle='--', alpha=0.6)
+        ppts = {k: v * s for k, v in pocket['points'].items()}
+        p_order = ['f_tl', 'f_tr', 'f_ref_r', 'f_bottom', 'f_ref_l', 'f_tl']
+        px = [ppts[k][0] for k in p_order]
+        py = [ppts[k][1] for k in p_order]
+        ax.plot(px, py, **POCKET_STYLE)
+        p_mid = (ppts['f_tl'] + ppts['f_tr']) / 2
+        ax.annotate('back pocket', p_mid, textcoords="offset points",
+                    xytext=(0, 8), fontsize=7, color='steelblue', ha='center',
+                    bbox=dict(boxstyle='round,pad=0.2', fc='white', ec='none', alpha=0.8))
+
+
     # --- Grainline and piece label (pattern mode only) ---
     if not debug:
         from garment_programs.plot_utils import draw_grainline, draw_piece_label
@@ -374,15 +396,23 @@ def plot_jeans_back(front, back, output_path='Logs/jeans_back.svg', debug=False,
         ax.set_ylabel(unit_label)
         ax.grid(True, alpha=0.2)
 
-    from garment_programs.plot_utils import save_pattern
-    save_pattern(fig, ax, output_path, units=units, calibration=not debug)
+    if standalone:
+        from garment_programs.plot_utils import save_pattern
+        save_pattern(fig, ax, output_path, units=units, calibration=not debug,
+                     pdf_pages=pdf_pages)
 
 
 # -- Entry point for generic runner ------------------------------------------
 
-def run(measurements_path, output_path, debug=False, units='cm'):
+def run(measurements_path, output_path, debug=False, units='cm', pdf_pages=None):
     """Uniform interface called by the generic runner."""
     m = load_measurements(measurements_path)
     front = draft_jeans_front(m)
     back = draft_jeans_back(m, front)
-    plot_jeans_back(front, back, output_path, debug=debug, units=units)
+    # Draft pocket so we can show its placement on the back panel
+    from .jeans_yoke_1873 import draft_jeans_yoke
+    from .jeans_back_pocket import draft_jeans_back_pocket
+    yoke = draft_jeans_yoke(m, front, back)
+    pocket = draft_jeans_back_pocket(m, front, back, yoke)
+    plot_jeans_back(front, back, output_path, debug=debug, units=units,
+                    pdf_pages=pdf_pages, pocket=pocket)

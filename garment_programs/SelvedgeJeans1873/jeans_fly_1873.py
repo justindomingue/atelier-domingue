@@ -17,6 +17,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 
+from garment_programs.plot_utils import SEAMLINE
 from .jeans_front import (
     INCH, load_measurements, draft_jeans_front,
     _bezier_cubic, _curve_length, _annotate_segment,
@@ -85,7 +86,7 @@ def draft_jeans_fly_1873(m, front):
 # -- Visualization -----------------------------------------------------------
 
 def plot_jeans_fly_1873(fly, output_path='Logs/jeans_fly_1873.svg',
-                        debug=False, units='cm'):
+                        debug=False, units='cm', pdf_pages=None, ax=None):
     s = 1 / INCH if units == 'inch' else 1.0
     unit_label = 'in' if units == 'inch' else 'cm'
 
@@ -93,8 +94,10 @@ def plot_jeans_fly_1873(fly, output_path='Logs/jeans_fly_1873.svg',
     curves = {k: v * s for k, v in fly['curves'].items()}
     con = {k: v * s for k, v in fly['construction'].items()}
 
-    fig, ax = plt.subplots(1, 1, figsize=(6, 12))
-    OUTLINE = dict(color='black', linewidth=1.5)
+    standalone = ax is None
+    if standalone:
+        fig, ax = plt.subplots(1, 1, figsize=(6, 12))
+    OUTLINE = SEAMLINE
 
     # Fold line (dashed)
     ax.plot([pts['fold_bottom'][0], pts['fold_top'][0]],
@@ -157,14 +160,17 @@ def plot_jeans_fly_1873(fly, output_path='Logs/jeans_fly_1873.svg',
     else:
         ax.axis('off')
 
-    from garment_programs.plot_utils import save_pattern
-    save_pattern(fig, ax, output_path, units=units, calibration=not debug)
+    if standalone:
+        from garment_programs.plot_utils import save_pattern
+        save_pattern(fig, ax, output_path, units=units, calibration=not debug,
+                     pdf_pages=pdf_pages)
 
 
 # -- Entry point for generic runner ------------------------------------------
 
-def run(measurements_path, output_path, debug=False, units='cm'):
+def run(measurements_path, output_path, debug=False, units='cm', pdf_pages=None):
     m = load_measurements(measurements_path)
     front = draft_jeans_front(m)
     fly = draft_jeans_fly_1873(m, front)
-    plot_jeans_fly_1873(fly, output_path, debug=debug, units=units)
+    plot_jeans_fly_1873(fly, output_path, debug=debug, units=units,
+                        pdf_pages=pdf_pages)

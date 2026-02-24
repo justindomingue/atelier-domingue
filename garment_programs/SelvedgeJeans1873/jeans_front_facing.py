@@ -30,6 +30,7 @@ from .jeans_front import (
     _curve_up_to_arclength,
 )
 from .jeans_front_pocket import draft_jeans_front_pocket
+from garment_programs.plot_utils import SEAMLINE
 
 
 # -- Drafting ----------------------------------------------------------------
@@ -147,7 +148,7 @@ def draft_jeans_front_facing(m):
 # -- Visualization -----------------------------------------------------------
 
 def plot_jeans_front_facing(piece, output_path='Logs/jeans_front_facing.svg',
-                            debug=False, units='cm'):
+                            debug=False, units='cm', pdf_pages=None, ax=None):
     s = 1 / INCH if units == 'inch' else 1.0
     unit_label = 'in' if units == 'inch' else 'cm'
 
@@ -155,17 +156,17 @@ def plot_jeans_front_facing(piece, output_path='Logs/jeans_front_facing.svg',
     curves = {k: v * s for k, v in piece['curves'].items()}
     meta = piece['metadata']
 
-    fig, ax = plt.subplots(1, 1, figsize=(10, 8))
-    OUTLINE = dict(color='black', linewidth=1.5)
-
+    standalone = ax is None
+    if standalone:
+        fig, ax = plt.subplots(1, 1, figsize=(10, 8))
     # Finished outline: rise → opening → hip (all continuous)
     rise = curves['rise']
     opening = curves['opening']
     hip = curves['hip']
 
-    ax.plot(rise[:, 0], rise[:, 1], **OUTLINE)
-    ax.plot(opening[:, 0], opening[:, 1], **OUTLINE)
-    ax.plot(hip[:, 0], hip[:, 1], **OUTLINE)
+    ax.plot(rise[:, 0], rise[:, 1], **SEAMLINE)
+    ax.plot(opening[:, 0], opening[:, 1], **SEAMLINE)
+    ax.plot(hip[:, 0], hip[:, 1], **SEAMLINE)
 
     # Seam allowances
     # Edges travel CW (after 90° rotation):
@@ -214,13 +215,16 @@ def plot_jeans_front_facing(piece, output_path='Logs/jeans_front_facing.svg',
     else:
         ax.axis('off')
 
-    from garment_programs.plot_utils import save_pattern
-    save_pattern(fig, ax, output_path, units=units, calibration=not debug)
+    if standalone:
+        from garment_programs.plot_utils import save_pattern
+        save_pattern(fig, ax, output_path, units=units, calibration=not debug,
+                     pdf_pages=pdf_pages)
 
 
 # -- Entry point for generic runner ------------------------------------------
 
-def run(measurements_path, output_path, debug=False, units='cm'):
+def run(measurements_path, output_path, debug=False, units='cm', pdf_pages=None):
     m = load_measurements(measurements_path)
     piece = draft_jeans_front_facing(m)
-    plot_jeans_front_facing(piece, output_path, debug=debug, units=units)
+    plot_jeans_front_facing(piece, output_path, debug=debug, units=units,
+                            pdf_pages=pdf_pages)

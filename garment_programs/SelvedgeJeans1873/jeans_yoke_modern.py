@@ -21,6 +21,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 
+from garment_programs.plot_utils import SEAMLINE
 from .jeans_front import (
     INCH, load_measurements, draft_jeans_front,
     _bezier_cubic, _annotate_segment, _annotate_curve,
@@ -212,7 +213,7 @@ def draft_jeans_yoke_modern(m, front, back):
 
 def plot_jeans_yoke_modern(front, back, yoke,
                            output_path='Logs/jeans_yoke_modern.svg',
-                           debug=False, units='cm'):
+                           debug=False, units='cm', pdf_pages=None, ax=None):
     """Render the modern curved yoke overlaid on the back panel.
 
     Always draws the final smooth yoke outline.
@@ -231,8 +232,10 @@ def plot_jeans_yoke_modern(front, back, yoke,
     # Seat-seam curve segment for yoke right side
     seat_seg = _curve_up_to_arclength(back['curves']['seat_upper'], 2.75 * INCH) * s
 
-    fig, ax = plt.subplots(1, 1, figsize=(16, 10))
-    OUTLINE  = dict(color='black', linewidth=1.5)
+    standalone = ax is None
+    if standalone:
+        fig, ax = plt.subplots(1, 1, figsize=(16, 10))
+    OUTLINE  = SEAMLINE
     CONTEXT  = dict(color='lightgray', linewidth=1, alpha=0.5)
     FLAT_DART = dict(color='orange', linewidth=0.8, linestyle='--', alpha=0.6)
 
@@ -320,15 +323,14 @@ def plot_jeans_yoke_modern(front, back, yoke,
     # --- Grainline and piece label (pattern mode only) ---
     if not debug:
         from garment_programs.plot_utils import draw_grainline, draw_piece_label
-        # Grainline parallel to waist curve (from near side to near seat)
-        waist_dir = ypts['back_waist_rot'] - ypts['pt1_rot']
-        waist_dir_norm = waist_dir / np.linalg.norm(waist_dir)
+        # Grainline parallel to center back (along x-axis, perpendicular to waist)
         grain_center = (ypts['pt1_rot'] + ypts['back_waist_rot'] +
                         ypts['yoke_side_rot'] + ypts['yoke_seat_rot']) / 4
-        grain_half = np.linalg.norm(waist_dir) * 0.3
-        grain_left = grain_center - waist_dir_norm * grain_half
-        grain_right = grain_center + waist_dir_norm * grain_half
-        draw_grainline(ax, grain_right, grain_left)
+        yoke_height = abs(ypts['pt1_rot'][0] - ypts['yoke_side_rot'][0])
+        grain_half = yoke_height * 0.3
+        grain_top = np.array([grain_center[0] + grain_half, grain_center[1]])
+        grain_bot = np.array([grain_center[0] - grain_half, grain_center[1]])
+        draw_grainline(ax, grain_top, grain_bot)
 
         # Piece label
         draw_piece_label(ax, (grain_center[0], grain_center[1]),
@@ -342,16 +344,19 @@ def plot_jeans_yoke_modern(front, back, yoke,
         ax.set_ylabel(unit_label)
         ax.grid(True, alpha=0.2)
 
-    from garment_programs.plot_utils import save_pattern
-    save_pattern(fig, ax, output_path, units=units, calibration=not debug)
+    if standalone:
+        from garment_programs.plot_utils import save_pattern
+        save_pattern(fig, ax, output_path, units=units, calibration=not debug,
+                     pdf_pages=pdf_pages)
 
 
 # -- Entry point for generic runner ------------------------------------------
 
-def run(measurements_path, output_path, debug=False, units='cm'):
+def run(measurements_path, output_path, debug=False, units='cm', pdf_pages=None):
     """Uniform interface called by the generic runner."""
     m = load_measurements(measurements_path)
     front = draft_jeans_front(m)
     back = draft_jeans_back(m, front)
     yoke = draft_jeans_yoke_modern(m, front, back)
-    plot_jeans_yoke_modern(front, back, yoke, output_path, debug=debug, units=units)
+    plot_jeans_yoke_modern(front, back, yoke, output_path, debug=debug, units=units,
+                           pdf_pages=pdf_pages)

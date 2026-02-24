@@ -19,6 +19,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 
+from garment_programs.plot_utils import SEAMLINE
 from .jeans_front import INCH, load_measurements, _annotate_segment
 
 
@@ -75,7 +76,7 @@ def draft_jeans_waistband(m):
 # -- Visualization -----------------------------------------------------------
 
 def plot_jeans_waistband(wb, output_path='Logs/jeans_waistband.svg',
-                         debug=False, units='cm'):
+                         debug=False, units='cm', pdf_pages=None, ax=None):
     s = 1 / INCH if units == 'inch' else 1.0
     unit_label = 'in' if units == 'inch' else 'cm'
 
@@ -84,8 +85,10 @@ def plot_jeans_waistband(wb, output_path='Logs/jeans_waistband.svg',
     length_s = wb['metadata']['length'] * s
     width_s  = wb['metadata']['width'] * s
 
-    fig, ax = plt.subplots(1, 1, figsize=(18, 4))
-    OUTLINE = dict(color='black', linewidth=1.5)
+    standalone = ax is None
+    if standalone:
+        fig, ax = plt.subplots(1, 1, figsize=(18, 4))
+    OUTLINE = SEAMLINE
     REF     = dict(color='dimgray', linewidth=0.8, linestyle='--', alpha=0.6)
 
     # --- Rectangle outline ---
@@ -147,13 +150,16 @@ def plot_jeans_waistband(wb, output_path='Logs/jeans_waistband.svg',
     else:
         ax.axis('off')
 
-    from garment_programs.plot_utils import save_pattern
-    save_pattern(fig, ax, output_path, units=units, calibration=not debug)
+    if standalone:
+        from garment_programs.plot_utils import save_pattern
+        save_pattern(fig, ax, output_path, units=units, calibration=not debug,
+                     pdf_pages=pdf_pages)
 
 
 # -- Entry point for generic runner ------------------------------------------
 
-def run(measurements_path, output_path, debug=False, units='cm'):
+def run(measurements_path, output_path, debug=False, units='cm', pdf_pages=None):
     m = load_measurements(measurements_path)
     wb = draft_jeans_waistband(m)
-    plot_jeans_waistband(wb, output_path, debug=debug, units=units)
+    plot_jeans_waistband(wb, output_path, debug=debug, units=units,
+                         pdf_pages=pdf_pages)

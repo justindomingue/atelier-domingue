@@ -25,6 +25,7 @@ from .jeans_front import (
     _annotate_segment,
 )
 from .jeans_front_pocket import draft_jeans_front_pocket
+from garment_programs.plot_utils import SEAMLINE, CUTLINE
 
 
 # -- Drafting ----------------------------------------------------------------
@@ -124,7 +125,7 @@ def draft_jeans_watch_pocket(m):
 # -- Visualization -----------------------------------------------------------
 
 def plot_jeans_watch_pocket(piece, output_path='Logs/jeans_watch_pocket.svg',
-                            debug=False, units='cm'):
+                            debug=False, units='cm', pdf_pages=None, ax=None):
     s = 1 / INCH if units == 'inch' else 1.0
     unit_label = 'in' if units == 'inch' else 'cm'
 
@@ -132,9 +133,11 @@ def plot_jeans_watch_pocket(piece, output_path='Logs/jeans_watch_pocket.svg',
     outline = piece['outline'] * s
     meta = piece['metadata']
 
-    fig, ax = plt.subplots(1, 1, figsize=(8, 10))
-    OUTLINE = dict(color='black', linewidth=1.5)
-    SA_STYLE = dict(color='gray', linewidth=0.6, linestyle='--', alpha=0.5)
+    standalone = ax is None
+    if standalone:
+        fig, ax = plt.subplots(1, 1, figsize=(8, 10))
+    OUTLINE = SEAMLINE
+    SA_STYLE = CUTLINE
 
     # Finished outline (closed pentagon)
     outline_closed = np.vstack([outline, outline[0:1]])
@@ -197,13 +200,16 @@ def plot_jeans_watch_pocket(piece, output_path='Logs/jeans_watch_pocket.svg',
     else:
         ax.axis('off')
 
-    from garment_programs.plot_utils import save_pattern
-    save_pattern(fig, ax, output_path, units=units, calibration=not debug)
+    if standalone:
+        from garment_programs.plot_utils import save_pattern
+        save_pattern(fig, ax, output_path, units=units, calibration=not debug,
+                     pdf_pages=pdf_pages)
 
 
 # -- Entry point for generic runner ------------------------------------------
 
-def run(measurements_path, output_path, debug=False, units='cm'):
+def run(measurements_path, output_path, debug=False, units='cm', pdf_pages=None):
     m = load_measurements(measurements_path)
     piece = draft_jeans_watch_pocket(m)
-    plot_jeans_watch_pocket(piece, output_path, debug=debug, units=units)
+    plot_jeans_watch_pocket(piece, output_path, debug=debug, units=units,
+                            pdf_pages=pdf_pages)
