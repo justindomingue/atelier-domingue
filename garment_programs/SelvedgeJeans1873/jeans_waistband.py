@@ -5,12 +5,15 @@ Based on: Historical Tailoring Masterclasses - Drafting the Fly and Waistband
 Simple rectangular strip, one long edge on the selvedge.
 No fold — the piece is cut as a single layer.
 
-Width breakdown (bottom to top):
-  3/8"  — selvedge edge (bottom)
+Seamline width breakdown (bottom to top):
   1 1/2" — inside of waistband
   1 1/2" — outside of waistband
-  3/8"  — seam allowance (top)
-  Total = 3 3/4"
+  Total = 3"
+
+Seam allowances (added by visualization):
+  Top:    0     — selvedge edge (no SA needed)
+  Bottom: 3/8"  — seam to jeans body
+  Ends:   3/8"  — for finishing
 
 Length = waist measurement + 3"–4" extra on each side (for turning under ends
 and room for error).
@@ -20,13 +23,16 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 
 from garment_programs.plot_utils import SEAMLINE
-from .jeans_front import INCH, load_measurements, _annotate_segment
+from .jeans_front import (
+    INCH, load_measurements, _annotate_segment, _draw_seam_allowance,
+)
+from .seam_allowances import SEAM_ALLOWANCES
 
 
 # -- Drafting ----------------------------------------------------------------
 
 def draft_jeans_waistband(m):
-    """Draft the waistband as a rectangular strip.
+    """Draft the waistband as a rectangular strip (seamline only, no SA).
 
     Parameters
     ----------
@@ -39,15 +45,11 @@ def draft_jeans_waistband(m):
     """
     extra = 3 * INCH   # extra on each side (3" min per instructions)
     length = m['waist'] + 2 * extra
-    width = 3.75 * INCH
+    width = 3.0 * INCH  # 1 1/2" inside + 1 1/2" outside
 
-    # Section boundaries (bottom → top)
-    selvedge_y = 3/8 * INCH          # selvedge edge line
-    center_y   = selvedge_y + 1.5 * INCH   # inside / outside division
-    sa_y       = center_y   + 1.5 * INCH   # seam-allowance line (3/8" from top)
-    # sa_y + 3/8" == width  ✓
+    center_y = 1.5 * INCH   # inside / outside division
 
-    # Corner points
+    # Corner points (seamline boundary)
     bl = np.array([0.0, 0.0])
     br = np.array([length, 0.0])
     tr = np.array([length, width])
@@ -59,9 +61,7 @@ def draft_jeans_waistband(m):
         },
         'curves': {},
         'construction': {
-            'selvedge_y':  np.float64(selvedge_y),
             'center_y':    np.float64(center_y),
-            'sa_y':        np.float64(sa_y),
             'extra':       np.float64(extra),
         },
         'metadata': {
@@ -88,43 +88,46 @@ def plot_jeans_waistband(wb, output_path='Logs/jeans_waistband.svg',
     standalone = ax is None
     if standalone:
         fig, ax = plt.subplots(1, 1, figsize=(18, 4))
-    OUTLINE = SEAMLINE
-    REF     = dict(color='dimgray', linewidth=0.8, linestyle='--', alpha=0.6)
+    SA = SEAM_ALLOWANCES['waistband']
+    REF = dict(color='dimgray', linewidth=0.8, linestyle='--', alpha=0.6)
 
-    # --- Rectangle outline ---
+    # --- Seamline (finished waistband outline) ---
     xs = [0, length_s, length_s, 0, 0]
     ys = [0, 0, width_s, width_s, 0]
-    ax.plot(xs, ys, **OUTLINE)
+    ax.plot(xs, ys, **SEAMLINE)
 
-    # --- Always-visible reference lines ---
+    # --- Seam allowance outline (CUTLINE) ---
+    # CW edge order: top → right → bottom → left
+    sa_edges = [
+        (np.array([pts['tl'], pts['tr']]),  SA['top']),      # selvedge — SA=0
+        (np.array([pts['tr'], pts['br']]),  SA['end']),      # right end
+        (np.array([pts['br'], pts['bl']]),  SA['bottom']),   # bottom seam
+        (np.array([pts['bl'], pts['tl']]),  SA['end']),      # left end
+    ]
+    _draw_seam_allowance(ax, sa_edges, scale=s)
 
-    # Selvedge line (3/8" from bottom)
-    ax.plot([0, length_s], [con['selvedge_y'], con['selvedge_y']], **REF)
-    ax.annotate('selvedge edge  3/8"',
-                (length_s / 2, con['selvedge_y'] / 2),
-                fontsize=7, ha='center', va='center', color='dimgray')
+    # --- Reference lines ---
 
-    # Inside / outside division (center of visible waistband)
+    # Inside / outside division
     ax.plot([0, length_s], [con['center_y'], con['center_y']], **REF)
-    ax.annotate('inside  1½"',
-                (length_s / 2, (con['selvedge_y'] + con['center_y']) / 2),
+    ax.annotate('inside  1\u00bd"',
+                (length_s / 2, con['center_y'] / 2),
                 fontsize=7, ha='center', va='center', color='dimgray')
-    ax.annotate('outside  1½"',
-                (length_s / 2, (con['center_y'] + con['sa_y']) / 2),
+    ax.annotate('outside  1\u00bd"',
+                (length_s / 2, (con['center_y'] + width_s) / 2),
                 fontsize=7, ha='center', va='center', color='dimgray')
 
-    # SA line (3/8" from top) — "extra 3/4"" region made visible
-    ax.plot([0, length_s], [con['sa_y'], con['sa_y']], **REF)
-    ax.annotate('SA  3/8"',
-                (length_s / 2, (con['sa_y'] + width_s) / 2),
-                fontsize=7, ha='center', va='center', color='dimgray')
+    # Selvedge label on top edge
+    ax.annotate('SELVEDGE', (length_s / 2, width_s),
+                textcoords="offset points", xytext=(0, 5),
+                fontsize=7, ha='center', va='bottom', color='dimgray')
 
     # --- End extent marks — show where the waist measurement runs ---
     extra_s = con['extra']
     for x in [extra_s, length_s - extra_s]:
         ax.plot([x, x], [0, width_s],
                 color='steelblue', linewidth=0.9, linestyle='--', alpha=0.7)
-    ax.annotate('← waist →',
+    ax.annotate('\u2190 waist \u2192',
                 (length_s / 2, width_s + 0.15 * s),
                 fontsize=7, ha='center', va='bottom', color='steelblue')
 

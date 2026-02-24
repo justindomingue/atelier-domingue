@@ -17,11 +17,13 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 
-from garment_programs.plot_utils import SEAMLINE
+from garment_programs.plot_utils import SEAMLINE, CUTLINE
 from .jeans_front import (
     INCH, load_measurements, draft_jeans_front,
     _bezier_cubic, _curve_length, _annotate_segment,
+    _draw_seam_allowance,
 )
+from .seam_allowances import SEAM_ALLOWANCES
 
 
 # -- Drafting ----------------------------------------------------------------
@@ -97,23 +99,31 @@ def plot_jeans_fly_1873(fly, output_path='Logs/jeans_fly_1873.svg',
     standalone = ax is None
     if standalone:
         fig, ax = plt.subplots(1, 1, figsize=(6, 12))
-    OUTLINE = SEAMLINE
+    SA = SEAM_ALLOWANCES['fly_1873']
 
-    # Fold line (dashed)
+    # Fold line (dashed — visual reference, not a cut edge)
     ax.plot([pts['fold_bottom'][0], pts['fold_top'][0]],
             [pts['fold_bottom'][1], pts['fold_top'][1]],
             color='black', linewidth=1.5, linestyle='--')
 
-    # Top edge
+    # Finished outline (individual segments for the seamline)
+    OUTLINE = SEAMLINE
     ax.plot([pts['fold_top'][0], pts['outer_top'][0]],
             [pts['fold_top'][1], pts['outer_top'][1]], **OUTLINE)
-
-    # Outer edge (straight portion)
     ax.plot([pts['outer_top'][0], pts['curve_start'][0]],
             [pts['outer_top'][1], pts['curve_start'][1]], **OUTLINE)
-
-    # Bottom curve
     ax.plot(curves['bottom'][:, 0], curves['bottom'][:, 1], **OUTLINE)
+
+    # Seam allowance outline — single closed CUTLINE path.
+    # Edges ordered CW (in matplotlib Y-up coords: top→right→bottom→left).
+    # The fold edge (left side) gets SA=0 since the piece is cut on fold.
+    sa_edges = [
+        (np.array([pts['fold_top'], pts['outer_top']]),       SA['top']),
+        (np.array([pts['outer_top'], pts['curve_start']]),    SA['outer']),
+        (curves['bottom'],                                     SA['bottom']),
+        (np.array([pts['fold_bottom'], pts['fold_top']]),     SA['fold']),
+    ]
+    _draw_seam_allowance(ax, sa_edges, scale=s)
 
     # Thin boundary line at the trim/inlay separation
     ax.plot([0, pts['outer_top'][0]],

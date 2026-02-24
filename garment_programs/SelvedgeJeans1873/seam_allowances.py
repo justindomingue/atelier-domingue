@@ -55,7 +55,18 @@ SEAM_ALLOWANCES = {
         'inner':    S['flat_fell'],     # inner edge
         'bottom':   S['flat_fell'],     # bottom curve
     },
+    'waistband': {
+        'top':     0,                   # selvedge edge — no SA
+        'bottom':  S['flat_fell'],      # 3/8" — seam to jeans body
+        'end':     S['flat_fell'],      # 3/8" — end finish
+    },
     'fly_one_piece': {
         'side':    S['narrow'],
+    },
+    'fly_1873': {
+        'fold':    0,                   # cut on fold — no SA
+        'top':     S['narrow'],         # 1/2" — top edge
+        'outer':   S['narrow'],         # 1/2" — outer/side edge
+        'bottom':  S['narrow'],         # 1/2" — bottom curve
     },
 }

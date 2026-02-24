@@ -14,6 +14,9 @@ pieces are forced against the top/bottom edges of the layout so the
 outseam sits on the selvedge.
 """
 
+import math
+import re
+import warnings
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -55,7 +58,8 @@ def parse_svg_dimensions(svg_path):
     return _to_inches(w_str), _to_inches(h_str)
 
 
-def skyline_pack(pieces, fabric_width, gap=0.25):
+def skyline_pack(pieces, fabric_width, gap=0.25, initial_skyline=None,
+                 return_skyline=False):
     """Skyline packing — horizontal layout within a fixed fabric width.
 
     Pieces grow along x (fabric length) and are constrained to
@@ -72,6 +76,11 @@ def skyline_pack(pieces, fabric_width, gap=0.25):
         Available width in inches (y-axis constraint).
     gap : float
         Spacing between pieces in inches.
+    initial_skyline : list of (y_start, y_end, x_right), optional
+        Pre-existing skyline state (e.g. from a previous selvedge pack).
+        Allows continuing packing into existing gaps.
+    return_skyline : bool
+        If True, return the skyline state as a third element.
 
     Returns
     -------
@@ -79,8 +88,12 @@ def skyline_pack(pieces, fabric_width, gap=0.25):
         {name: (x, y)} placement positions (top-left corner, y-down).
     total_length : float
         Total fabric length needed (inches, x-extent).
+    skyline : list, optional
+        Final skyline state (only if ``return_skyline=True``).
     """
     if not pieces:
+        if return_skyline:
+            return {}, 0.0, initial_skyline or [(0.0, fabric_width, 0.0)]
         return {}, 0.0
 
     # Normalize to 4-tuples
@@ -126,7 +139,7 @@ def skyline_pack(pieces, fabric_width, gap=0.25):
 
     # Skyline: list of (y_start, y_end, x_right) segments.
     # Tracks how far right (x) pieces extend at each y position.
-    skyline = [(0.0, fabric_width, 0.0)]
+    skyline = initial_skyline or [(0.0, fabric_width, 0.0)]
     positions = {}
 
     for name, grain_len, cross_w, edge in ordered:
@@ -193,7 +206,441 @@ def skyline_pack(pieces, fabric_width, gap=0.25):
         skyline = sorted(new_skyline, key=lambda s: s[0])
 
     total_length = max(s[2] for s in skyline)
+    if return_skyline:
+        return positions, total_length, skyline
     return positions, total_length
+
+
+# ---------------------------------------------------------------------------
+# Polygon extraction from piece SVGs
+# ---------------------------------------------------------------------------
+
+def _parse_svg_path_data(d_string):
+    """Parse an SVG path ``d`` attribute (M/L commands only) into vertices.
+
+    Handles whitespace/newline variations in matplotlib's SVG output.
+    Returns a list of (x, y) float tuples.  Ignores Q/C/z commands
+    (quadratic/cubic beziers, closepath) — those appear in grainline arrows
+    and font glyphs, not in piece outlines.
+    """
+    vertices = []
+    # Tokenize: find all M or L commands followed by two numbers
+    for m in re.finditer(
+        r'([ML])\s+([-\d.eE]+)\s*[,\s]\s*([-\d.eE]+)', d_string
+    ):
+        vertices.append((float(m.group(2)), float(m.group(3))))
+    return vertices
+
+
+def _shoelace_area(pts):
+    """Signed area of a polygon via the shoelace formula."""
+    n = len(pts)
+    if n < 3:
+        return 0.0
+    area = 0.0
+    for i in range(n):
+        j = (i + 1) % n
+        area += pts[i][0] * pts[j][1]
+        area -= pts[j][0] * pts[i][1]
+    return area / 2.0
+
+
+def _extract_outline_polygon(svg_path):
+    """Extract the cut-boundary polygon from a piece SVG.
+
+    Finds all ``<path>`` elements inside the drawing area (``g#axes_1``),
+    parses their M/L vertices, and selects the path with the largest
+    absolute area — this is the seam-allowance or cut outline.
+
+    Returns
+    -------
+    polygon : list of (float, float)
+        Vertices in inches, normalized to origin.  If no suitable closed
+        path is found, falls back to a bounding-box rectangle.
+    pad_x : float
+        Horizontal offset from SVG origin to polygon min-x, in inches.
+    pad_y : float
+        Vertical offset from SVG origin to polygon min-y, in inches.
+    """
+    tree = ET.parse(svg_path)
+    root = tree.getroot()
+    ns = {'svg': SVG_NS}
+
+    # Get SVG bounding box for fallback
+    w_in, h_in = parse_svg_dimensions(svg_path)
+
+    # Search inside axes_1 for drawing paths (not font glyphs in <defs>)
+    axes = root.find(f'.//{_tag("g")}[@id="axes_1"]')
+    if axes is None:
+        # Fallback: bounding-box rectangle
+        return [(0, 0), (w_in, 0), (w_in, h_in), (0, h_in)], 0.0, 0.0
+
+    best_poly = None
+    best_area = 0.0
+
+    for g in axes.iter(_tag('g')):
+        gid = g.get('id', '')
+        if not gid.startswith('line2d_'):
+            continue
+        for path_el in g.findall(_tag('path')):
+            style = path_el.get('style', '')
+            if not style:
+                continue  # skip glyph definitions (no inline style)
+            d = path_el.get('d', '')
+            verts = _parse_svg_path_data(d)
+            if len(verts) < 3:
+                continue
+            area = abs(_shoelace_area(verts))
+            if area > best_area:
+                best_area = area
+                best_poly = verts
+
+    # Minimum area threshold: must be at least 1% of bounding box area (in pts²)
+    bbox_area_pts = (w_in * PTS_PER_INCH) * (h_in * PTS_PER_INCH)
+    if best_poly is None or best_area < bbox_area_pts * 0.01:
+        # Fallback to bounding-box rectangle
+        return [(0, 0), (w_in, 0), (w_in, h_in), (0, h_in)], 0.0, 0.0
+
+    # Normalize to origin and convert pts → inches
+    min_x = min(p[0] for p in best_poly)
+    min_y = min(p[1] for p in best_poly)
+    poly_inches = [
+        ((p[0] - min_x) / PTS_PER_INCH, (p[1] - min_y) / PTS_PER_INCH)
+        for p in best_poly
+    ]
+    pad_x = min_x / PTS_PER_INCH
+    pad_y = min_y / PTS_PER_INCH
+
+    return poly_inches, pad_x, pad_y
+
+
+def _transform_polygon(polygon, transform, w_inches, h_inches):
+    """Apply a layout transform to polygon vertices.
+
+    Mirrors the SVG embedding transforms used in generate_cutting_layout().
+
+    Parameters
+    ----------
+    polygon : list of (float, float)
+        Vertices in the piece's local coordinate space (inches).
+    transform : str
+        'none', 'ccw' (90° counter-clockwise), or 'flip_v' (vertical mirror).
+    w_inches, h_inches : float
+        Original SVG dimensions in inches (before transform).
+    """
+    if transform == 'none':
+        return polygon
+
+    if transform == 'ccw':
+        # 90° CCW rotation: (x, y) → (y, w - x)
+        # SVG height becomes layout width, SVG width becomes layout height.
+        # After rotation, the piece's x-extent = h_inches, y-extent = w_inches.
+        rotated = [(y, w_inches - x) for x, y in polygon]
+        # Re-normalize to origin
+        min_x = min(p[0] for p in rotated)
+        min_y = min(p[1] for p in rotated)
+        return [(p[0] - min_x, p[1] - min_y) for p in rotated]
+
+    if transform == 'flip_v':
+        # Vertical mirror: (x, y) → (x, h - y)
+        flipped = [(x, h_inches - y) for x, y in polygon]
+        min_y = min(p[1] for p in flipped)
+        return [(p[0], p[1] - min_y) for p in flipped]
+
+    return polygon
+
+
+# ---------------------------------------------------------------------------
+# Void filling — place free pieces in curved voids within selvedge zone
+# ---------------------------------------------------------------------------
+
+def _polygon_y_range_at_x(polygon, x):
+    """Find the y-extent of a closed polygon at a given x coordinate.
+
+    Returns (y_min, y_max) or None if x is outside the polygon's x-range.
+    Works by finding all edge–vertical-line intersections and returning
+    the outermost y values.
+    """
+    intersections = []
+    n = len(polygon)
+    for i in range(n):
+        x1, y1 = polygon[i]
+        x2, y2 = polygon[(i + 1) % n]
+        if abs(x2 - x1) < 1e-10:
+            # Vertical edge — include both endpoints if at this x
+            if abs(x - x1) < 0.05:
+                intersections.extend([y1, y2])
+            continue
+        t = (x - x1) / (x2 - x1)
+        if -0.001 <= t <= 1.001:
+            intersections.append(y1 + t * (y2 - y1))
+    if len(intersections) >= 2:
+        return min(intersections), max(intersections)
+    return None
+
+
+def _intersect_ranges(ranges_a, ranges_b):
+    """Compute intersection of two sorted lists of (lo, hi) ranges."""
+    result = []
+    i = j = 0
+    while i < len(ranges_a) and j < len(ranges_b):
+        lo = max(ranges_a[i][0], ranges_b[j][0])
+        hi = min(ranges_a[i][1], ranges_b[j][1])
+        if lo < hi - 0.01:
+            result.append((lo, hi))
+        if ranges_a[i][1] < ranges_b[j][1]:
+            i += 1
+        else:
+            j += 1
+    return result
+
+
+def _void_fill(selvedge_pieces, sel_positions, free_pieces, fabric_width,
+               gap=0.25, step=0.5):
+    """Place free pieces into curved voids within the selvedge zone.
+
+    Scans the selvedge region with a polygon-aware profile: at each
+    x-column, compute the y-ranges actually occupied by selvedge piece
+    polygons (not bounding boxes).  The void is the complement within
+    [0, fabric_width].  Free pieces are greedily placed (largest area
+    first) into the widest contiguous rectangular voids.
+
+    Parameters
+    ----------
+    selvedge_pieces : list of (name, grain_len, cross_w, edge, poly, pad_x, pad_y)
+    sel_positions : dict  {name: (svg_x, svg_y)}
+    free_pieces : list of (name, grain_len, cross_w, edge, poly, pad_x, pad_y)
+    fabric_width : float
+    gap : float
+    step : float
+        X-discretization step in inches.
+
+    Returns
+    -------
+    placed : dict  {name: (svg_x, svg_y)}
+    remaining : list of unplaced free piece tuples
+    """
+    # Build absolute polygons for selvedge pieces
+    abs_polys = []
+    for name, gl, cw, edge, poly, px, py in selvedge_pieces:
+        if name not in sel_positions:
+            continue
+        sx, sy = sel_positions[name]
+        abs_polys.append([(vx + sx + px, vy + sy + py) for vx, vy in poly])
+
+    if not abs_polys:
+        return {}, list(free_pieces)
+
+    sel_x_max = max(max(vx for vx, vy in p) for p in abs_polys)
+
+    # Build void profile: at each x-column, available (y_lo, y_hi) ranges
+    x_cols = []
+    x = 0.0
+    while x <= sel_x_max:
+        x_cols.append(x)
+        x += step
+
+    void_profile = {}
+    for xc in x_cols:
+        occupied = []
+        for poly in abs_polys:
+            yr = _polygon_y_range_at_x(poly, xc)
+            if yr:
+                occupied.append((max(0, yr[0] - gap / 2),
+                                 min(fabric_width, yr[1] + gap / 2)))
+        occupied.sort()
+        # Merge overlapping occupied ranges
+        merged = []
+        for ylo, yhi in occupied:
+            if merged and ylo <= merged[-1][1] + 0.01:
+                merged[-1] = (merged[-1][0], max(merged[-1][1], yhi))
+            else:
+                merged.append((ylo, yhi))
+        # Void = complement within [0, fabric_width]
+        voids = []
+        prev = 0.0
+        for ylo, yhi in merged:
+            if ylo > prev + 0.01:
+                voids.append((prev, ylo))
+            prev = max(prev, yhi)
+        if prev < fabric_width - 0.01:
+            voids.append((prev, fabric_width))
+        void_profile[xc] = voids
+
+    # Sort free pieces by area (largest first) for greedy placement
+    remaining = sorted(free_pieces, key=lambda p: p[1] * p[2], reverse=True)
+    placed = {}
+
+    for piece in remaining[:]:
+        name, gl, cw, edge, poly, px, py = piece
+        best_pos = None
+
+        for si in range(len(x_cols)):
+            sx = x_cols[si]
+            if sx + gl > sel_x_max + 0.01:
+                break
+
+            # Find common void across all x-columns spanned by [sx, sx+gl]
+            common = list(void_profile.get(x_cols[si], []))
+            for ci in range(si + 1, len(x_cols)):
+                if x_cols[ci] > sx + gl:
+                    break
+                common = _intersect_ranges(common,
+                                           void_profile.get(x_cols[ci], []))
+                if not common:
+                    break
+
+            # Check if any common void fits the SVG bounding box
+            for vy0, vy1 in common:
+                if vy1 - vy0 >= cw + gap:
+                    svg_x = sx + gap / 2
+                    svg_y = vy0 + gap / 2
+                    if svg_x >= -0.01 and svg_y >= -0.01:
+                        best_pos = (svg_x, svg_y)
+                        break
+            if best_pos:
+                break
+
+        if best_pos:
+            placed[name] = best_pos
+
+            # Block this SVG bounding box in the void profile
+            bx, by = best_pos
+            for ci, xc in enumerate(x_cols):
+                if xc < bx - gap - 0.01 or xc > bx + gl + 0.01:
+                    continue
+                blocked = (max(0, by - gap / 2),
+                           min(fabric_width, by + cw + gap / 2))
+                new_voids = []
+                for v0, v1 in void_profile[xc]:
+                    if blocked[1] <= v0 + 0.01 or blocked[0] >= v1 - 0.01:
+                        new_voids.append((v0, v1))
+                    else:
+                        if v0 < blocked[0] - 0.01:
+                            new_voids.append((v0, blocked[0]))
+                        if v1 > blocked[1] + 0.01:
+                            new_voids.append((blocked[1], v1))
+                void_profile[xc] = new_voids
+
+            remaining.remove(piece)
+
+    return placed, remaining
+
+
+def polygon_nest(pieces, fabric_width, gap=0.25):
+    """Polygon-aware nesting with void filling and skyline fallback.
+
+    Strategy:
+    1. Always compute baseline via skyline_pack (handles selvedge pinning
+       and interleaving perfectly).
+    2. Place selvedge pieces via skyline, then run a void-fill pass to
+       tuck free pieces into the curved voids within selvedge bounding boxes.
+    3. Remaining free pieces go through skyline continuation.
+    4. If spyrrow is available, also try polygon nesting as an alternative.
+    5. Use whichever strategy produces the shortest total length.
+
+    Same return signature as skyline_pack() plus a ``use_polygons`` flag.
+
+    Parameters
+    ----------
+    pieces : list of tuples
+        (name, grain_len, cross_w, edge, polygon, pad_x, pad_y)
+    fabric_width : float
+    gap : float
+
+    Returns
+    -------
+    positions : dict  {name: (x, y)}
+    total_length : float
+    use_polygons : bool
+        True if polygon nesting was used (caller should strip backgrounds).
+    """
+    if not pieces:
+        return {}, 0.0, False
+
+    # --- Baseline: skyline_pack for ALL pieces (interleaved) ---
+    all_input = [(name, gl, cw, edge)
+                 for name, gl, cw, edge, _, _, _ in pieces]
+    sky_positions, sky_length = skyline_pack(all_input, fabric_width, gap=gap)
+
+    selvedge = [p for p in pieces if p[3] in ('top', 'bottom')]
+    free = [p for p in pieces if p[3] not in ('top', 'bottom')]
+
+    if not free:
+        return sky_positions, sky_length, False
+
+    # --- Selvedge skyline with state export ---
+    sel_input = [(name, gl, cw, edge)
+                 for name, gl, cw, edge, _, _, _ in selvedge]
+    sel_positions, sel_length, sel_skyline = skyline_pack(
+        sel_input, fabric_width, gap=gap, return_skyline=True)
+
+    # --- Strategy A: Void fill + skyline continuation ---
+    void_placed, remaining = _void_fill(
+        selvedge, sel_positions, free, fabric_width, gap=gap)
+
+    if void_placed:
+        print(f"    Void fill: placed {len(void_placed)} piece(s) "
+              f"in selvedge voids")
+
+    # Update skyline to account for void-filled pieces so that
+    # remaining pieces don't overlap them.
+    vf_skyline = list(sel_skyline)
+    for vname, (vx, vy) in void_placed.items():
+        vpiece = next(p for p in free if p[0] == vname)
+        vgl, vcw = vpiece[1], vpiece[2]
+        new_right = vx + vgl + gap
+        ptop = vy
+        pbot = vy + vcw + gap
+        new_sky = []
+        for sy0, sy1, sx in vf_skyline:
+            if sy1 <= ptop or sy0 >= pbot:
+                new_sky.append((sy0, sy1, sx))
+            else:
+                if sy0 < ptop:
+                    new_sky.append((sy0, ptop, sx))
+                if sy1 > pbot:
+                    new_sky.append((pbot, sy1, sx))
+        new_sky.append((ptop, pbot, new_right))
+        vf_skyline = sorted(new_sky, key=lambda s: s[0])
+
+    remaining_input = [(name, gl, cw, None)
+                       for name, gl, cw, _, _, _, _ in remaining]
+    remaining_sky_pos, vf_total = skyline_pack(
+        remaining_input, fabric_width, gap=gap,
+        initial_skyline=vf_skyline)
+
+    vf_positions = {}
+    vf_positions.update(sel_positions)
+    vf_positions.update(void_placed)
+    vf_positions.update(remaining_sky_pos)
+
+    # --- Strategy B: Pure skyline continuation (no void fill) ---
+    all_free_input = [(name, gl, cw, None)
+                      for name, gl, cw, _, _, _, _ in free]
+    all_free_sky_pos, sky_cont_total = skyline_pack(
+        all_free_input, fabric_width, gap=gap,
+        initial_skyline=sel_skyline)
+
+    sky_cont_positions = {}
+    sky_cont_positions.update(sel_positions)
+    sky_cont_positions.update(all_free_sky_pos)
+
+    # --- Pick the best strategy (prefer void fill on ties) ---
+    candidates = [
+        (vf_total, 0, vf_positions, True, "void fill + skyline"),
+        (sky_length, 1, sky_positions, False, "baseline skyline"),
+        (sky_cont_total, 2, sky_cont_positions, False, "skyline continuation"),
+    ]
+    best_total, _, best_pos, best_poly, best_label = min(
+        candidates, key=lambda c: (c[0], c[1]))
+
+    # Report
+    others = [(t, l) for t, _, _, _, l in candidates if l != best_label]
+    other_str = ", ".join(f"{l}={t:.1f}\"" for t, l in others)
+    print(f"  Best: {best_label} = {best_total:.1f}\" ({other_str})")
+
+    return best_pos, best_total, best_poly
 
 
 def generate_cutting_layout(svg_paths, fabric_width, output_path,
@@ -255,9 +702,10 @@ def generate_cutting_layout(svg_paths, fabric_width, output_path,
                   f"exceeds fabric width ({fabric_width:.1f}\")")
 
         if selvedge_edge:
-            # Selvedge piece — outseam is at SVG top (y=0).
-            # First copy: top edge on top selvedge (y=0) — no flip.
-            # Second copy: flipped vertically so outseam is at bottom selvedge.
+            # Selvedge piece — for 'top' pieces the outseam is at SVG top (y=0);
+            # for 'bottom' pieces the selvedge edge is at SVG bottom.
+            # First copy: placed at the configured edge, no flip.
+            # Second copy: flipped vertically for the opposite edge.
             if cut_count >= 2:
                 pieces.append((f'{name}_L', grain_len, cross_w,
                                svg_path, base_transform, 'top'))
@@ -268,7 +716,7 @@ def generate_cutting_layout(svg_paths, fabric_width, output_path,
                                    svg_path, base_transform, None))
             else:
                 pieces.append((name, grain_len, cross_w,
-                               svg_path, base_transform, 'top'))
+                               svg_path, base_transform, selvedge_edge))
         else:
             if cut_count <= 1:
                 pieces.append((name, grain_len, cross_w,
@@ -282,10 +730,46 @@ def generate_cutting_layout(svg_paths, fabric_width, output_path,
         print("No pieces to lay out.")
         return
 
-    # --- Pack ---
-    pack_input = [(name, grain_len, cross_w, edge)
-                  for name, grain_len, cross_w, _, _, edge in pieces]
-    positions, total_length = skyline_pack(pack_input, fabric_width, gap=gap)
+    # --- Extract polygons and pack ---
+    pieces_with_polys = []
+    for name, grain_len, cross_w, svg_path, transform, edge in pieces:
+        poly, pad_x, pad_y = _extract_outline_polygon(svg_path)
+        svg_w, svg_h = parse_svg_dimensions(svg_path)
+
+        # Transform padding to layout space (matching the polygon transform).
+        # pad_x/pad_y are the polygon's offset from SVG origin in SVG coords.
+        # After rotation, the offset within the layout box changes.
+        if transform == 'ccw':
+            poly_w_orig = max(p[0] for p in poly) if poly else 0
+            layout_pad_x = pad_y
+            layout_pad_y = svg_w - pad_x - poly_w_orig
+        elif transform == 'flip_v':
+            poly_h_orig = max(p[1] for p in poly) if poly else 0
+            layout_pad_x = pad_x
+            layout_pad_y = svg_h - pad_y - poly_h_orig
+        else:
+            layout_pad_x = pad_x
+            layout_pad_y = pad_y
+
+        poly = _transform_polygon(poly, transform, svg_w, svg_h)
+
+        # Debug: compare polygon extent vs SVG bounding box
+        if poly:
+            poly_w = max(p[0] for p in poly) - min(p[0] for p in poly)
+            poly_h = max(p[1] for p in poly) - min(p[1] for p in poly)
+            waste_x = grain_len - poly_w
+            waste_y = cross_w - poly_h
+            if waste_x > 0.5 or waste_y > 0.5:
+                print(f"    {name:20s}  SVG: {grain_len:5.1f}×{cross_w:5.1f}  "
+                      f"poly: {poly_w:5.1f}×{poly_h:5.1f}  "
+                      f"waste: {waste_x:+.1f}×{waste_y:+.1f}")
+
+        pieces_with_polys.append(
+            (name, grain_len, cross_w, edge, poly,
+             layout_pad_x, layout_pad_y))
+
+    positions, total_length, use_polygons = polygon_nest(
+        pieces_with_polys, fabric_width, gap=gap)
 
     # --- Build composite SVG (horizontal) ---
     # x = fabric length, y = fabric width
@@ -406,6 +890,16 @@ def generate_cutting_layout(svg_paths, fabric_width, output_path,
 
         piece_tree = ET.parse(svg_path)
         piece_root = piece_tree.getroot()
+
+        # Strip the white background rectangle (patch_1) so overlapping
+        # bounding boxes don't hide adjacent pieces in the cutting layout.
+        patch1 = piece_root.find(
+            f'.//{_tag("g")}[@id="patch_1"]')
+        if patch1 is not None:
+            parent = piece_root.find(
+                f'.//{_tag("g")}[@id="figure_1"]')
+            if parent is not None:
+                parent.remove(patch1)
 
         viewBox = piece_root.get('viewBox')
         if not viewBox:
