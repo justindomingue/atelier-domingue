@@ -359,10 +359,6 @@ def plot_jeans_back(front, back, output_path='Logs/jeans_back.svg', debug=False,
     SA_SEAT    = SA['seat']
     SA_YOKE    = SA['yoke']
 
-    # Extra cutting width at the yoke seam for gathering/easing into the yoke
-    EASE_YOKE = 3/4 * INCH
-    SA_YOKE_TOTAL = SA_YOKE + EASE_YOKE
-
     # CW outline: outseam(1→4→0) → hem(0→back_hem) → lower_inseam(back_hem→12)
     #   → back_inseam(12→11) → seat_lower(11→8') → seat_upper(8'→back_waist)
     #   → waist(back_waist→1)
@@ -374,22 +370,9 @@ def plot_jeans_back(front, back, output_path='Logs/jeans_back.svg', debug=False,
         (bcurves['back_inseam'][::-1],                           SA_INSEAM),  # back inseam curve (12→11)
         (bcurves['seat_lower'][::-1],                            SA_SEAT),    # seat lower (11→8')
         (bcurves['seat_upper'][::-1],                            SA_SEAT),    # seat upper (8'→back_waist)
-        (np.array([bpts['back_waist'], fpts['1']]),              SA_YOKE_TOTAL),  # waist (SA + ease)
+        (np.array([bpts['back_waist'], fpts['1']]),              SA_YOKE),    # waist
     ]
     draw_seam_allowance(ax, sa_edges, scale=s)
-
-    # Annotate the ease at yoke seam
-    yoke_ease_pt = (bpts['back_waist'] + fpts['1']) / 2
-    _ease_dir = fpts['1'] - bpts['back_waist']
-    _ease_perp = np.array([-_ease_dir[1], _ease_dir[0]])
-    _ease_perp = _ease_perp / np.linalg.norm(_ease_perp)
-    # Point away from the pattern (same side as the SA)
-    if _ease_perp[0] > 0:
-        _ease_perp = -_ease_perp
-    ax.annotate('\u00be" SA + \u00be" ease \u2014 gather to fit yoke',
-                yoke_ease_pt + _ease_perp * SA_YOKE_TOTAL * s * 1.3,
-                fontsize=6, ha='center', va='center', color='steelblue',
-                bbox=dict(boxstyle='round,pad=0.2', fc='white', ec='none', alpha=0.8))
 
     # --- Back pocket placement outline ---
     if pocket is not None:
