@@ -163,10 +163,6 @@ def draft_jeans_yoke_modern(m, front, back):
     back_waist_rot = _rotate_point(back_waist, dart2_yoke, angle2)
     yoke_seat_rot  = _rotate_point(yoke_seat,  dart2_yoke, angle2)
 
-    # Seat-seam sub-curve (back_waist → yoke_seat), then rotate by angle2
-    seat_sub = _curve_up_to_arclength(back['curves']['seat_upper'], 2.75 * INCH)
-    seat_edge_rot = np.array([_rotate_point(p, dart2_yoke, angle2) for p in seat_sub])
-
     # ------------------------------------------------------------------ #
     # 7. Smooth curves through the manipulated points                      #
     # ------------------------------------------------------------------ #
@@ -206,7 +202,6 @@ def draft_jeans_yoke_modern(m, front, back):
         'curves': {
             'yoke_line':  yoke_curve,
             'waist_line': waist_curve,
-            'seat_edge':  seat_edge_rot,
         },
         'construction': {
             'waist_thirds_1': dart1_waist,
@@ -273,8 +268,9 @@ def plot_jeans_yoke_modern(front, back, yoke,
     # -- Yoke outline (black, smooth curves) --
     # Top: waist curve
     ax.plot(ycurves['waist_line'][:, 0], ycurves['waist_line'][:, 1], **OUTLINE)
-    # Right side: seat seam curve (back_waist_rot → yoke_seat_rot)
-    ax.plot(ycurves['seat_edge'][:, 0], ycurves['seat_edge'][:, 1], **OUTLINE)
+    # Right side: seat seam segment (back_waist_rot → yoke_seat_rot)
+    ax.plot([ypts['back_waist_rot'][0], ypts['yoke_seat_rot'][0]],
+            [ypts['back_waist_rot'][1], ypts['yoke_seat_rot'][1]], **OUTLINE)
     # Bottom: yoke curve (reversed so we go right→left)
     ax.plot(ycurves['yoke_line'][::-1, 0], ycurves['yoke_line'][::-1, 1], **OUTLINE)
     # Left side: outseam segment (yoke_side_rot → pt1_rot)
@@ -288,13 +284,14 @@ def plot_jeans_yoke_modern(front, back, yoke,
     SA_YOKE  = 3/4 * INCH
     SA_SEAT  = 5/8 * INCH
 
-    # Edges CW: waist curve (top) → seat straight (right) →
-    #           yoke curve reversed (bottom) → outseam straight (left)
+    # Edges CW (matching 1873 yoke convention):
+    #   outseam(1→yoke_side) → yoke_line(yoke_side→yoke_seat) →
+    #   seat(yoke_seat→back_waist) → waist reversed(back_waist→1)
     sa_edges = [
-        (ycurves['waist_line'],                                            SA_WAIST),
-        (ycurves['seat_edge'],                                              SA_SEAT),
-        (ycurves['yoke_line'][::-1],                                       SA_YOKE),
-        (np.array([ypts['yoke_side_rot'], ypts['pt1_rot']]),               SA_SIDE),
+        (np.array([ypts['pt1_rot'], ypts['yoke_side_rot']]),              SA_SIDE),
+        (ycurves['yoke_line'],                                             SA_YOKE),
+        (np.array([ypts['yoke_seat_rot'], ypts['back_waist_rot']]),       SA_SEAT),
+        (ycurves['waist_line'][::-1],                                      SA_WAIST),
     ]
     draw_seam_allowance(ax, sa_edges, scale=s)
 
