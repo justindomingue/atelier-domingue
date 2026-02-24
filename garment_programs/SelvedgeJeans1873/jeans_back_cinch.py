@@ -83,53 +83,55 @@ def plot_jeans_back_cinch(cinch, output_path='Logs/jeans_back_cinch.svg',
 
     pts = {k: v * s for k, v in cinch['points'].items()}
 
+    # Rotate the whole piece so the bottom SA edge is horizontal (grainline
+    # parallel to the selvedge).  Applied here so the draft stays clean.
+    sel_dir = pts['sa_br'] - pts['sa_bl']
+    angle = np.arctan2(sel_dir[1], sel_dir[0])
+    ca, sn = np.cos(-angle), np.sin(-angle)
+    R = np.array([[ca, -sn], [sn, ca]])
+    pivot = pts['f_bl'].copy()
+    pts = {k: pivot + R @ (v - pivot) for k, v in pts.items()}
+
     standalone = ax is None
     if standalone:
         fig, ax = plt.subplots(1, 1, figsize=(12, 4))
     LINE = dict(color='black', linewidth=1.5)
-    SA_END = dict(color='black', linewidth=1.5)
 
-    length_s = cinch['metadata']['length'] * s
-
-    # -- Horizontal lines (5 levels: SA top, finished top, center,
-    #    finished bottom, SA bottom) --
+    # -- Long edges (SA top, finished top, center, finished bottom, SA bottom) --
     for a, b in [('sa_tl', 'sa_tr'), ('f_tl', 'f_tr'),
                  ('f_bl', 'f_br'), ('sa_bl', 'sa_br')]:
         ax.plot([pts[a][0], pts[b][0]], [pts[a][1], pts[b][1]], **LINE)
-    # Center line
-    ax.plot([0, length_s], [0, 0], **LINE)
+    # Center line (midpoints of finished ends)
+    center_l = (pts['f_tl'] + pts['f_bl']) / 2
+    center_r = (pts['f_tr'] + pts['f_br']) / 2
+    ax.plot([center_l[0], center_r[0]], [center_l[1], center_r[1]], **LINE)
 
-    # -- Vertical lines at wide end (point 0) and narrow end (point 5) --
-    ax.plot([pts['f_tl'][0], pts['f_tl'][0]],
-            [pts['sa_tl'][1], pts['sa_bl'][1]], **LINE)
-    ax.plot([pts['f_tr'][0], pts['f_tr'][0]],
-            [pts['sa_tr'][1], pts['sa_br'][1]], **LINE)
-
-    # -- 1/2" end SA verticals --
-    ax.plot([pts['sa_tl'][0], pts['sa_tl'][0]],
-            [pts['sa_tl'][1], pts['sa_bl'][1]], **SA_END)
-    ax.plot([pts['sa_tr'][0], pts['sa_tr'][0]],
-            [pts['sa_tr'][1], pts['sa_br'][1]], **SA_END)
+    # -- End lines at wide end and narrow end --
+    for t, b in [('f_tl', 'f_bl'), ('f_tr', 'f_br'),
+                 ('sa_tl', 'sa_bl'), ('sa_tr', 'sa_br')]:
+        ax.plot([pts[t][0], pts[b][0]], [pts[t][1], pts[b][1]], **LINE)
 
     # 1/2" labels beside the end SA lines
-    mid_y_left = (pts['sa_tl'][1] + pts['sa_bl'][1]) / 2
-    ax.text(pts['sa_tl'][0] - 0.15 * s, mid_y_left, '1/2"',
+    mid_left = (pts['sa_tl'] + pts['sa_bl']) / 2
+    ax.text(mid_left[0] - 0.15 * s, mid_left[1], '1/2"',
             fontsize=12, ha='right', va='center')
-    mid_y_right = (pts['sa_tr'][1] + pts['sa_br'][1]) / 2
-    ax.text(pts['sa_tr'][0] + 0.15 * s, mid_y_right, '1/2"',
+    mid_right = (pts['sa_tr'] + pts['sa_br']) / 2
+    ax.text(mid_right[0] + 0.15 * s, mid_right[1], '1/2"',
             fontsize=12, ha='left', va='center')
 
     # --- Grainline and piece label (pattern mode only) ---
     if not debug:
         from garment_programs.plot_utils import draw_grainline, draw_piece_label
-        # Horizontal grainline along center line
-        grain_left = np.array([length_s * 0.15, 0])
-        grain_right = np.array([length_s * 0.85, 0])
+        # Grainline along the selvedge direction (now horizontal)
+        center = (center_l + center_r) / 2
+        sel_norm = sel_dir / np.linalg.norm(sel_dir)
+        grain_half = np.linalg.norm(center_r - center_l) * 0.35
+        grain_left = center - np.array([grain_half, 0])
+        grain_right = center + np.array([grain_half, 0])
         draw_grainline(ax, grain_right, grain_left)
 
         # Piece label
-        center = (length_s / 2, 0)
-        draw_piece_label(ax, center, cinch['metadata']['title'],
+        draw_piece_label(ax, (center[0], center[1]), cinch['metadata']['title'],
                          cinch['metadata'].get('cut_count'))
 
     if debug:
@@ -142,7 +144,8 @@ def plot_jeans_back_cinch(cinch, output_path='Logs/jeans_back_cinch.svg',
         _annotate_segment(ax, pts['f_tl'], pts['f_bl'], offset=(-14, 0))
         _annotate_segment(ax, pts['f_tr'], pts['f_br'], offset=(10, 0))
 
-        ax.annotate('selvedge edge', (length_s / 2, pts['f_bl'][1]),
+        sel_mid = (pts['f_bl'] + pts['f_br']) / 2
+        ax.annotate('selvedge edge', (sel_mid[0], sel_mid[1]),
                     textcoords="offset points", xytext=(0, -6),
                     fontsize=6, color='gray', ha='center')
 
