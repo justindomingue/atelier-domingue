@@ -152,8 +152,8 @@ def offset_polyline(pts, distance):
             avg = avg / length
         # Miter scale: project onto either normal
         cos_half = np.dot(avg, normals[i])
-        if abs(cos_half) < 0.1:
-            cos_half = 0.1  # cap for very sharp corners
+        if abs(cos_half) < 0.3:
+            cos_half = 0.3  # miter limit: max ~3.3× offset distance
         out[i] = pts[i] + avg * (distance / cos_half)
 
     return out
@@ -190,21 +190,27 @@ def draw_seam_allowance(ax, edges, scale=1.0):
     """
     # Offset each edge independently
     offsets = []
+    scaled_sas = []
     for pts, sa_cm in edges:
         sa = sa_cm * scale
+        scaled_sas.append(abs(sa))
         offsets.append(offset_polyline(pts, sa))
 
     n = len(offsets)
 
-    # Miter each junction: extend adjacent offset segments to their intersection
+    # Miter each junction: extend adjacent offset segments to their intersection.
+    # Cap the miter distance to prevent spikes at sharp corners.
     for i in range(n):
         j = (i + 1) % n
         cur, nxt = offsets[i], offsets[j]
         if len(cur) >= 2 and len(nxt) >= 2:
             ip = _line_line_intersect(cur[-2], cur[-1], nxt[0], nxt[1])
             if ip is not None:
-                cur[-1] = ip
-                nxt[0] = ip
+                max_sa = max(scaled_sas[i], scaled_sas[j])
+                miter_dist = np.linalg.norm(ip - cur[-1])
+                if max_sa < 1e-12 or miter_dist < 4 * max_sa:
+                    cur[-1] = ip
+                    nxt[0] = ip
 
     # Build continuous SA path from mitered segments
     sa_pts = list(offsets[0])

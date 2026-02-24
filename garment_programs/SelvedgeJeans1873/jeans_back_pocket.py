@@ -28,7 +28,7 @@ from pathlib import Path
 from .jeans_front import INCH, load_measurements, draft_jeans_front, _annotate_segment
 from .jeans_back import draft_jeans_back
 from .jeans_yoke_1873 import draft_jeans_yoke
-from garment_programs.plot_utils import SEAMLINE, CUTLINE
+from garment_programs.plot_utils import SEAMLINE, CUTLINE, draw_seam_allowance
 
 
 # -- Drafting ----------------------------------------------------------------
@@ -100,13 +100,6 @@ def draft_jeans_back_pocket(m, front, back, yoke):
     f_ref_r = mouth_center - mouth_dir * mid_half + depth_dir * mid_depth
     f_bottom = mouth_center + depth_dir * total_depth
 
-    # -- SA outline --
-    sa_tl    = f_tl    + mouth_dir * sa_side - depth_dir * sa_top
-    sa_tr    = f_tr    - mouth_dir * sa_side - depth_dir * sa_top
-    sa_ref_l = f_ref_l + mouth_dir * sa_side
-    sa_ref_r = f_ref_r - mouth_dir * sa_side
-    sa_bottom = f_bottom + depth_dir * sa_side
-
     # -- Grainline (along depth direction — parallel to CB) --
     grain_top    = mouth_center + depth_dir * (total_depth * 0.20)
     grain_bottom = mouth_center + depth_dir * (total_depth * 0.85)
@@ -116,9 +109,6 @@ def draft_jeans_back_pocket(m, front, back, yoke):
             'f_tl': f_tl, 'f_tr': f_tr,
             'f_ref_l': f_ref_l, 'f_ref_r': f_ref_r,
             'f_bottom': f_bottom,
-            'sa_tl': sa_tl, 'sa_tr': sa_tr,
-            'sa_ref_l': sa_ref_l, 'sa_ref_r': sa_ref_r,
-            'sa_bottom': sa_bottom,
             'grain_top': grain_top, 'grain_bottom': grain_bottom,
         },
         'curves': {},
@@ -167,20 +157,24 @@ def plot_jeans_back_pocket(pocket, output_path='Logs/jeans_back_pocket.svg',
     standalone = ax is None
     if standalone:
         fig, ax = plt.subplots(1, 1, figsize=(8, 10))
-    OUTLINE = SEAMLINE
-    SA_STYLE = CUTLINE
+    from .seam_allowances import SEAM_ALLOWANCES
+    SA = SEAM_ALLOWANCES['back_pocket']
 
     # Finished shape (pentagon: tl → tr → ref_r → bottom → ref_l → tl)
     f_order = ['f_tl', 'f_tr', 'f_ref_r', 'f_bottom', 'f_ref_l', 'f_tl']
     fx = [pts[k][0] for k in f_order]
     fy = [pts[k][1] for k in f_order]
-    ax.plot(fx, fy, **OUTLINE)
+    ax.plot(fx, fy, **SEAMLINE)
 
-    # SA outline
-    sa_order = ['sa_tl', 'sa_tr', 'sa_ref_r', 'sa_bottom', 'sa_ref_l', 'sa_tl']
-    sx = [pts[k][0] for k in sa_order]
-    sy = [pts[k][1] for k in sa_order]
-    ax.plot(sx, sy, **SA_STYLE)
+    # SA outline via draw_seam_allowance (CW edges)
+    sa_edges = [
+        (np.array([pts['f_tl'], pts['f_tr']]),         SA['top']),
+        (np.array([pts['f_tr'], pts['f_ref_r']]),      SA['side']),
+        (np.array([pts['f_ref_r'], pts['f_bottom']]),  SA['side']),
+        (np.array([pts['f_bottom'], pts['f_ref_l']]),  SA['side']),
+        (np.array([pts['f_ref_l'], pts['f_tl']]),      SA['side']),
+    ]
+    draw_seam_allowance(ax, sa_edges, scale=s)
 
     # Grain line arrow (double-headed, now vertical in local frame)
     from garment_programs.plot_utils import draw_grainline, draw_piece_label

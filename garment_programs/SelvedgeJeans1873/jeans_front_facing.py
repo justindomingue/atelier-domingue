@@ -52,19 +52,22 @@ def draft_jeans_front_facing(m):
     front = draft_jeans_front(m)
     pocket = draft_jeans_front_pocket(m, front)
 
-    pt1 = front['points']['1']
+    # Use pt1_adj ("1'") — the adjusted waist corner where rise & hip curves
+    # actually begin (pt1 is 3/8" above, before the waistband adjustment).
+    pt1 = front['points']["1'"]
     pocket_upper = pocket['points']['pocket_upper']
     pocket_lower = pocket['points']['pocket_lower']
     opening = pocket['curves']['opening']  # pocket_upper → pocket_lower
 
-    # Sub-curves from pt1 to the pocket endpoints
-    # Rise: pt1 → pocket_upper (4.75" along the rise)
-    rise_path = np.vstack([pt1.reshape(1, 2), front['curves']['rise']])
-    rise_to_upper = _curve_up_to_arclength(rise_path, 4.75 * INCH)
+    # Sub-curves from pt1_adj to the pocket endpoints.
+    # The rise and hip curves already start at pt1_adj, so no prepend needed.
+    # Pocket points were defined as 4.75"/3.25" from the original pt1, which
+    # includes a 3/8" segment from pt1 → pt1_adj, so subtract that here.
+    rise_to_upper = _curve_up_to_arclength(front['curves']['rise'],
+                                           (4.75 - 3/8) * INCH)
 
-    # Hip: pt1 → pocket_lower (3.25" along the outseam/hip)
-    outseam_path = np.vstack([pt1.reshape(1, 2), front['curves']['hip']])
-    hip_to_lower = _curve_up_to_arclength(outseam_path, 3.25 * INCH)
+    hip_to_lower = _curve_up_to_arclength(front['curves']['hip'],
+                                          (3.25 - 3/8) * INCH)
 
     # Closed outline (CW for correct SA offset):
     #   rise (pt1 → pocket_upper) → opening (pocket_upper → pocket_lower)
@@ -167,19 +170,14 @@ def plot_jeans_front_facing(piece, output_path='Logs/jeans_front_facing.svg',
     ax.plot(opening[:, 0], opening[:, 1], **SEAMLINE)
     ax.plot(hip[:, 0], hip[:, 1], **SEAMLINE)
 
-    # Seam allowances
-    # Edges travel CW (after 90° rotation):
-    #   rise (pt1 → pocket_upper), opening (pocket_upper → pocket_lower),
-    #   hip reversed (pocket_lower → pt1)
-    sa_waist = meta['sa_waist']
-    sa_sideseam = meta['sa_sideseam']
-    sa_opening = meta['sa_opening']
-
-    # Outline winds CCW after 90° rotation, so negate SA to push outward
+    # Seam allowances — per-edge values, CW edge order:
+    #   rise (pt1→pocket_upper) → opening (pocket_upper→pocket_lower)
+    #   → hip (pocket_lower→pt1)
+    from garment_programs.plot_utils import draw_seam_allowance
     sa_edges = [
-        (rise,    -sa_waist),      # waist / rise edge
-        (opening, -sa_opening),    # pocket opening (cut edge)
-        (hip,     -sa_sideseam),   # side seam
+        (rise,    -meta['sa_waist']),      # 3/8" waist
+        (opening, -meta['sa_opening']),    # 1¼" pocket opening
+        (hip,     -meta['sa_sideseam']),   # 3/4" side seam
     ]
     draw_seam_allowance(ax, sa_edges, scale=s)
 

@@ -45,9 +45,9 @@ SEAM_ALLOWANCES = {
         'bottom':  S['flat_fell'],
     },
     'front_facing': {
-        'waist':   S['flat_fell'],
-        'sideseam': S['simple'],
-        'opening': S['flat_fell'],
+        'waist':    S['flat_fell'],              # 3/8" — matches front panel waist SA
+        'sideseam': 2 * S['flat_fell'],          # 3/4" — matches front panel side seam SA
+        'opening':  (1 + 1/4) * INCH,            # 1¼" — 1" facing wrap + ¼" turnover
     },
     'front_pocket_bag': {
         'waist':    S['flat_fell'],     # top edge, caught in waistband
