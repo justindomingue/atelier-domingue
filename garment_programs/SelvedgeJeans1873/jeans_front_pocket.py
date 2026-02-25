@@ -27,7 +27,7 @@ from .jeans_front import (
 from .seam_allowances import SEAM_ALLOWANCES
 from garment_programs.plot_utils import (
     SEAMLINE, CUTLINE, offset_polyline, draw_seam_allowance,
-    display_scale, setup_figure, finalize_figure,
+    display_scale, setup_figure, finalize_figure, draw_fold_line,
 )
 
 
@@ -156,21 +156,27 @@ def draft_jeans_front_pocket(m, front):
     # bag_inner_top: 1" further along the rise from pocket_upper → ON the outline
     bag_inner_top = _point_at_arclength(rise_path, (4.75 + 1.0) * INCH)
 
-    # Bag extends toward the hem, roughly parallel to the fly line
-    fly_start = front['construction']['fly_start']
-    fly_end = front['construction']['fly_end']
-    fly_dir = fly_end - fly_start
-    fly_dir_norm = fly_dir / np.linalg.norm(fly_dir)
-    bag_inner_bottom = bag_inner_top + fly_dir_norm * bag_depth
+    # Inner edge perpendicular to the waist (for cut-on-fold)
+    waist_dir = fpts["7'"] - fpts["1'"]
+    perp = np.array([-waist_dir[1], waist_dir[0]])
+    if perp[0] < 0:              # ensure it points toward the hem
+        perp = -perp
+    perp_norm = perp / np.linalg.norm(perp)
+    bag_inner_bottom = bag_inner_top + perp_norm * bag_depth
 
     # Connection to side seam: ~2" below pocket opening along the outseam
     bag_sideseam = _point_at_arclength(outseam_path, (3.25 + 2.0) * INCH)
 
-    # Bag bottom curve: from inner bottom, angling back to the side seam
+    # Bag bottom curve: S-curve from inner bottom back to the side seam
+    chord = bag_sideseam - bag_inner_bottom
+    chord_perp = np.array([-chord[1], chord[0]])
+    chord_perp_norm = chord_perp / np.linalg.norm(chord_perp)
+    if np.dot(chord_perp_norm, perp_norm) < 0:   # ensure outward = toward hem
+        chord_perp_norm = -chord_perp_norm
     bag_bottom_curve = _bezier_cubic(
         bag_inner_bottom,
-        bag_inner_bottom + np.array([0, bag_depth * 0.08]),
-        bag_sideseam + fly_dir_norm * (1.5 * INCH),
+        bag_inner_bottom + chord * 0.50 + chord_perp_norm * (3.0 * INCH),
+        bag_sideseam   - chord * 0.35 - chord_perp_norm * (1.5 * INCH),
         bag_sideseam,
     )
 
@@ -194,6 +200,21 @@ def draft_jeans_front_pocket(m, front):
     rise_to_bag = _curve_up_to_arclength(rise_path, (4.75 + 1.0) * INCH)
     hip_to_bag = _curve_up_to_arclength(outseam_path, (3.25 + 2.0) * INCH)
 
+    # -- 8. Mirror across inner edge (cut-on-fold) --
+    def _reflect_across_line(pts, A, B):
+        """Reflect points across the line through A and B."""
+        d = (B - A)
+        d = d / np.linalg.norm(d)
+        diff = pts - A
+        proj = A + np.outer(diff @ d, d)
+        return 2 * proj - pts
+
+    mirror_rise_to_bag = _reflect_across_line(rise_to_bag, bag_inner_top, bag_inner_bottom)
+    mirror_hip_to_bag = _reflect_across_line(hip_to_bag, bag_inner_top, bag_inner_bottom)
+    mirror_bag_bottom = _reflect_across_line(bag_bottom_curve, bag_inner_top, bag_inner_bottom)
+    mirror_pt1 = _reflect_across_line(pt1.reshape(1, 2), bag_inner_top, bag_inner_bottom).ravel()
+    mirror_bag_sideseam = _reflect_across_line(bag_sideseam.reshape(1, 2), bag_inner_top, bag_inner_bottom).ravel()
+
     return {
         'points': {
             'pt1': pt1,
@@ -203,6 +224,8 @@ def draft_jeans_front_pocket(m, front):
             'bag_inner_bottom': bag_inner_bottom,
             'bag_sideseam': bag_sideseam,
             'facing_sideseam': facing_sideseam,
+            'mirror_pt1': mirror_pt1,
+            'mirror_bag_sideseam': mirror_bag_sideseam,
         },
         'curves': {
             'opening': opening_curve,
@@ -210,12 +233,16 @@ def draft_jeans_front_pocket(m, front):
             'facing_inner': facing_inner,
             'rise_to_bag': rise_to_bag,
             'hip_to_bag': hip_to_bag,
+            'mirror_rise_to_bag': mirror_rise_to_bag,
+            'mirror_hip_to_bag': mirror_hip_to_bag,
+            'mirror_bag_bottom': mirror_bag_bottom,
         },
         'construction': {},
         'watch_pocket': watch,
         'metadata': {
             'title': 'Front Pocket Bag',
-            'cut_count': 2,
+            'cut_count': 1,
+            'fold': True,
         },
     }
 
@@ -224,14 +251,14 @@ def draft_jeans_front_pocket(m, front):
 
 def plot_jeans_front_pocket(piece, output_path='Logs/jeans_front_pocket.svg',
                             debug=False, units='cm', pdf_pages=None, ax=None):
-    """Plot the front pocket bag as a standalone pattern piece.
+    """Plot the front pocket bag as a cut-on-fold butterfly pattern piece.
 
-    The bag extends from the waistband seam (pt1) down to the bag bottom,
-    with the pocket opening shown as a dashed reference line.
+    The butterfly outline mirrors the bag across the inner edge (fold line).
+    SA is drawn on all perimeter edges; the fold line is a dashed reference.
     """
     s, unit_label = display_scale(units)
 
-    # --- Build closed outline from draft curves ---
+    # --- Build butterfly outline from draft curves ---
     def _dedup(pts, tol=1e-10):
         """Remove consecutive near-duplicate points (avoids zero-length segs)."""
         keep = [0]
@@ -243,35 +270,53 @@ def plot_jeans_front_pocket(piece, output_path='Logs/jeans_front_pocket.svg',
     rise_to_bag = _dedup(piece['curves']['rise_to_bag'])
     hip_to_bag = _dedup(piece['curves']['hip_to_bag'])
     bag_bottom = piece['curves']['bag_bottom']
+    mirror_rise = _dedup(piece['curves']['mirror_rise_to_bag'])
+    mirror_hip = _dedup(piece['curves']['mirror_hip_to_bag'])
+    mirror_bottom = piece['curves']['mirror_bag_bottom']
     bag_inner_top = piece['points']['bag_inner_top']
     bag_inner_bottom = piece['points']['bag_inner_bottom']
     opening = piece['curves']['opening']
 
-    # Inner edge: straight line from bag_inner_top → bag_inner_bottom
-    inner_edge = np.vstack([bag_inner_top.reshape(1, 2),
-                            bag_inner_bottom.reshape(1, 2)])
-
-    # Outline: rise (pt1 → bag_inner_top) → inner → bottom → hip reversed
+    # Butterfly outline (CW): 6 edges
+    #   rise → mirror_rise(rev) → mirror_hip → mirror_bottom(rev)
+    #   → bottom → hip(rev)
     outline = np.vstack([
-        rise_to_bag,
-        inner_edge,
-        bag_bottom,
-        hip_to_bag[::-1],
+        rise_to_bag,              # pt1 → bag_inner_top
+        mirror_rise[::-1],        # bag_inner_top → mirror_pt1
+        mirror_hip,               # mirror_pt1 → mirror_bag_sideseam
+        mirror_bottom[::-1],      # mirror_bag_sideseam → bag_inner_bottom
+        bag_bottom,               # bag_inner_bottom → bag_sideseam
+        hip_to_bag[::-1],         # bag_sideseam → pt1
     ])
 
-    # --- Rotate 90° CW: (x, y) → (y, -x) ---
+    # --- Rotate so fold line is exactly vertical ---
+    fold_vec = bag_inner_bottom - bag_inner_top
+    fold_angle = np.arctan2(fold_vec[1], fold_vec[0])
+    rot_angle = -np.pi / 2 - fold_angle          # map fold_vec → straight down
+    cos_a, sin_a = np.cos(rot_angle), np.sin(rot_angle)
+
     def rotate(pts):
-        return np.column_stack([pts[:, 1], -pts[:, 0]])
+        return np.column_stack([
+            pts[:, 0] * cos_a - pts[:, 1] * sin_a,
+            pts[:, 0] * sin_a + pts[:, 1] * cos_a,
+        ])
 
     def rotate_pt(pt):
-        return np.array([pt[1], -pt[0]])
+        return np.array([
+            pt[0] * cos_a - pt[1] * sin_a,
+            pt[0] * sin_a + pt[1] * cos_a,
+        ])
 
     rot_rise = rotate(rise_to_bag)
-    rot_inner = rotate(inner_edge)
+    rot_mirror_rise = rotate(mirror_rise)
+    rot_mirror_hip = rotate(mirror_hip)
+    rot_mirror_bottom = rotate(mirror_bottom)
     rot_bottom = rotate(bag_bottom)
-    rot_hip = rotate(hip_to_bag[::-1])
+    rot_hip = rotate(hip_to_bag)
     rot_opening = rotate(opening)
     rot_outline = rotate(outline)
+    rot_fold_top = rotate_pt(bag_inner_top)
+    rot_fold_bottom = rotate_pt(bag_inner_bottom)
 
     # --- Shift so bounding-box starts at origin ---
     xy_min = rot_outline.min(axis=0)
@@ -279,55 +324,78 @@ def plot_jeans_front_pocket(piece, output_path='Logs/jeans_front_pocket.svg',
     def shift(c):
         return c - xy_min
 
+    def shift_pt(pt):
+        return pt - xy_min
+
     rot_rise = shift(rot_rise)
-    rot_inner = shift(rot_inner)
+    rot_mirror_rise = shift(rot_mirror_rise)
+    rot_mirror_hip = shift(rot_mirror_hip)
+    rot_mirror_bottom = shift(rot_mirror_bottom)
     rot_bottom = shift(rot_bottom)
     rot_hip = shift(rot_hip)
     rot_opening = shift(rot_opening)
     rot_outline = shift(rot_outline)
+    rot_fold_top = shift_pt(rot_fold_top)
+    rot_fold_bottom = shift_pt(rot_fold_bottom)
 
     # --- Scale ---
     rot_rise *= s
-    rot_inner *= s
+    rot_mirror_rise *= s
+    rot_mirror_hip *= s
+    rot_mirror_bottom *= s
     rot_bottom *= s
     rot_hip *= s
     rot_opening *= s
     rot_outline *= s
+    rot_fold_top = rot_fold_top * s
+    rot_fold_bottom = rot_fold_bottom * s
 
-    # --- Draw ---
-    fig, ax, standalone = setup_figure(ax, figsize=(10, 14))
+    # --- Draw seamlines (6 edges) ---
+    fig, ax, standalone = setup_figure(ax, figsize=(14, 14))
     ax.plot(rot_rise[:, 0], rot_rise[:, 1], **SEAMLINE)
-    ax.plot(rot_inner[:, 0], rot_inner[:, 1], **SEAMLINE)
+    ax.plot(rot_mirror_rise[::-1, 0], rot_mirror_rise[::-1, 1], **SEAMLINE)
+    ax.plot(rot_mirror_hip[:, 0], rot_mirror_hip[:, 1], **SEAMLINE)
+    ax.plot(rot_mirror_bottom[::-1, 0], rot_mirror_bottom[::-1, 1], **SEAMLINE)
     ax.plot(rot_bottom[:, 0], rot_bottom[:, 1], **SEAMLINE)
-    ax.plot(rot_hip[:, 0], rot_hip[:, 1], **SEAMLINE)
+    ax.plot(rot_hip[::-1, 0], rot_hip[::-1, 1], **SEAMLINE)
+
+    # Fold line — dash-dot center reference
+    draw_fold_line(ax, rot_fold_top, rot_fold_bottom)
 
     # Pocket opening — dashed reference line (shows where facing attaches)
     ax.plot(rot_opening[:, 0], rot_opening[:, 1],
             color='darkorange', linewidth=1.0, linestyle='--', alpha=0.7)
 
-    # --- Seam allowances ---
+    # --- Seam allowances (all edges except fold, CW winding) ---
     _sa = SEAM_ALLOWANCES['front_pocket_bag']
     sa_edges = [
-        (rot_hip[::-1],    _sa['sideseam']),
-        (rot_bottom[::-1], _sa['bottom']),
-        (rot_inner[::-1],  _sa['inner']),
-        (rot_rise[::-1],   _sa['waist']),
+        (rot_hip,                  _sa['sideseam']),
+        (rot_bottom[::-1],         _sa['bottom']),
+        (rot_mirror_bottom,        _sa['bottom']),
+        (rot_mirror_hip[::-1],     _sa['sideseam']),
+        (rot_mirror_rise,          _sa['waist']),
+        (rot_rise[::-1],           _sa['waist']),
     ]
     draw_seam_allowance(ax, sa_edges, scale=s)
 
-    # --- Grainline (vertical, centered) ---
+    # --- Grainline (parallel to fold line, centered on piece) ---
     from garment_programs.plot_utils import draw_grainline, draw_piece_label
     bbox_max = rot_outline.max(axis=0)
-    cx = bbox_max[0] / 2
-    grain_top = np.array([cx, bbox_max[1] * 0.85])
-    grain_bottom = np.array([cx, bbox_max[1] * 0.15])
+    fold_dir = rot_fold_bottom - rot_fold_top
+    fold_len = np.linalg.norm(fold_dir)
+    fold_unit = fold_dir / fold_len
+    center = bbox_max / 2
+    grain_half = fold_len * 0.35
+    grain_top = center - fold_unit * grain_half
+    grain_bottom = center + fold_unit * grain_half
     draw_grainline(ax, grain_top, grain_bottom)
 
     # --- Piece label ---
     if not debug:
         center = (bbox_max[0] / 2, bbox_max[1] / 2)
         draw_piece_label(ax, center, piece['metadata']['title'],
-                         piece['metadata'].get('cut_count'))
+                         piece['metadata'].get('cut_count'),
+                         fold=piece['metadata'].get('fold', False))
 
     finalize_figure(ax, fig, standalone, output_path, units=units, debug=debug,
                     pdf_pages=pdf_pages)

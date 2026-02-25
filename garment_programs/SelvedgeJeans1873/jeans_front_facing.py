@@ -184,6 +184,19 @@ def plot_jeans_front_facing(piece, output_path='Logs/jeans_front_facing.svg',
     ]
     draw_seam_allowance(ax, sa_edges, scale=s)
 
+    # --- Pocket notches ---
+    from garment_programs.plot_utils import draw_notch
+    # pocket_upper: at the end of the rise curve (matches front leg notch 1)
+    draw_notch(ax, rise, pts['pocket_upper'],
+               meta['sa_waist'], scale=s)
+    # pocket_lower: at the end of the hip curve (matches front leg notch 2)
+    draw_notch(ax, hip, pts['pocket_lower'],
+               meta['sa_sideseam'], scale=s)
+    # pt1: corner where rise meets hip (matches pt1' on front leg)
+    # Use the rise curve for tangent direction at pt1
+    draw_notch(ax, rise, pts['pt1'],
+               meta['sa_waist'], scale=s, count=2)
+
     # Grain line arrow (double-headed)
     from garment_programs.plot_utils import draw_grainline, draw_piece_label
     draw_grainline(ax, pts['grain_top'], pts['grain_bottom'])

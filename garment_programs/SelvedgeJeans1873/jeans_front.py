@@ -359,6 +359,32 @@ def plot_jeans_front(draft, output_path='Logs/jeans_front.svg', debug=False, uni
     ]
     draw_seam_allowance(ax, sa_edges, scale=s)
 
+    # --- Pocket notches (always drawn when pocket data is available) ---
+    if pocket is not None:
+        from garment_programs.plot_utils import draw_notch
+        ppts = {k: v * s for k, v in pocket['points'].items()}
+        pcurves = {k: v * s for k, v in pocket['curves'].items()}
+
+        # Notch 1: pocket_upper on the rise curve (waist edge)
+        #   rise curve travels 1'→7', pocket_upper is at 4.75" along it
+        draw_notch(ax, curves['rise'], ppts['pocket_upper'],
+                   SA_WAIST, scale=s)
+
+        # Notch 2: pocket_lower on the hip curve (side seam)
+        #   hip curve travels 1'→4, pocket_lower is at 3.25" along it
+        draw_notch(ax, curves['hip'], ppts['pocket_lower'],
+                   SA_SIDE, scale=s)
+
+        # Notch 3: bag_inner_top on the rise curve (waist edge)
+        #   5.75" from 1' along rise — where pocket bag inner edge meets waist
+        draw_notch(ax, curves['rise'], ppts['bag_inner_top'],
+                   SA_WAIST, scale=s, count=2)
+
+        # Notch 4: bag_sideseam on the hip curve (side seam)
+        #   5.25" from 1' along hip — where pocket bag meets side seam
+        draw_notch(ax, curves['hip'], ppts['bag_sideseam'],
+                   SA_SIDE, scale=s, count=2)
+
     # --- Grainline and piece label (pattern mode only) ---
     if not debug:
         from garment_programs.plot_utils import draw_grainline, draw_piece_label

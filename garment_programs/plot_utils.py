@@ -16,11 +16,24 @@ SEAMLINE = dict(color='blue', linewidth=1.0)
 CUTLINE = dict(color='black', linewidth=1.5)
 
 
-def draw_piece_label(ax, center, title, cut_count=None, fontsize=9):
+def draw_fold_line(ax, top, bottom):
+    """Draw a dash-dot fold line with centered 'FOLD' label."""
+    ax.plot([top[0], bottom[0]], [top[1], bottom[1]],
+            color='black', linewidth=0.8, linestyle='-.', alpha=0.6)
+    mid = ((top[0] + bottom[0]) / 2, (top[1] + bottom[1]) / 2)
+    angle = np.degrees(np.arctan2(top[1] - bottom[1], top[0] - bottom[0]))
+    ax.text(mid[0], mid[1], 'FOLD', fontsize=7, ha='center', va='center',
+            rotation=angle, color='black', alpha=0.6,
+            bbox=dict(boxstyle='round,pad=0.2', fc='white', ec='none', alpha=0.7))
+
+
+def draw_piece_label(ax, center, title, cut_count=None, fold=False, fontsize=9):
     """Render piece name and cut count at center of the pattern piece."""
     label = title
     if cut_count:
         label += f'\nCut {cut_count}'
+        if fold:
+            label += ' on fold'
     ax.text(center[0], center[1], label,
             fontsize=fontsize, ha='center', va='center',
             color='black', alpha=0.6,
@@ -36,6 +49,81 @@ def draw_grainline(ax, top, bottom, label='GRAIN'):
     ax.text(mid[0], mid[1], label, fontsize=7, ha='center', va='center',
             rotation=angle, color='black', alpha=0.6,
             bbox=dict(boxstyle='round,pad=0.2', fc='white', ec='none', alpha=0.7))
+
+
+def _tangent_at_point(curve, point):
+    """Find the unit tangent of a polyline/curve at the point nearest to *point*.
+
+    Parameters
+    ----------
+    curve : ndarray (N, 2)
+        Polyline vertices (already in display units).
+    point : ndarray (2,)
+        Query point (should lie on or very near the curve).
+
+    Returns
+    -------
+    ndarray (2,)  — unit tangent vector along the curve at *point*.
+    """
+    dists = np.linalg.norm(curve - point, axis=1)
+    idx = np.argmin(dists)
+    if idx == 0:
+        tangent = curve[1] - curve[0]
+    elif idx >= len(curve) - 1:
+        tangent = curve[-1] - curve[-2]
+    else:
+        tangent = curve[idx + 1] - curve[idx - 1]
+    length = np.linalg.norm(tangent)
+    if length < 1e-12:
+        return np.array([1.0, 0.0])
+    return tangent / length
+
+
+def draw_notch(ax, curve, point, sa_distance, scale=1.0, count=1, label=None):
+    """Draw a notch mark perpendicular to the cut line.
+
+    The notch is a short tick centered on the seam-allowance (cut) line,
+    perpendicular to the seamline at *point*.
+
+    Parameters
+    ----------
+    ax : matplotlib Axes
+    curve : ndarray (N, 2)
+        The seamline polyline (already display-scaled) that the notch sits on.
+    point : ndarray (2,)
+        Location on the seamline (already display-scaled).
+    sa_distance : float
+        Seam allowance in **cm** (pre-scaling), same convention as
+        ``draw_seam_allowance``.
+    scale : float
+        Display scale (e.g. 1/INCH for inch mode).
+    count : int
+        Number of ticks (1 = single notch, 2 = double, 3 = triple).
+    label : str or None
+        Optional small label drawn beside the notch.
+    """
+    tangent = _tangent_at_point(curve, point)
+    # Normal: left of travel direction (outward for CW winding)
+    normal = np.array([-tangent[1], tangent[0]])
+
+    sa = abs(sa_distance * scale)
+    tick_half = (3 / 16) * INCH * scale   # 3/16" each side of cut line
+
+    spacing = (1 / 8) * INCH * scale      # gap between multi-notch ticks
+
+    for i in range(count):
+        offset = (i - (count - 1) / 2) * spacing
+        base = point + tangent * offset
+        start = base + normal * (sa - tick_half)
+        end = base + normal * (sa + tick_half)
+        ax.plot([start[0], end[0]], [start[1], end[1]],
+                color='black', linewidth=1.2, solid_capstyle='butt', zorder=6)
+
+    if label is not None:
+        label_pt = point + normal * (sa + tick_half + 2 * scale)
+        ax.text(label_pt[0], label_pt[1], label,
+                fontsize=5, ha='center', va='center', color='black',
+                zorder=6)
 
 
 def draw_calibration_square(ax, size_cm=5.0):
