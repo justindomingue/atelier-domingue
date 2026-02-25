@@ -23,7 +23,7 @@ from .jeans_front import (
     INCH, load_measurements, draft_jeans_front,
     _annotate_segment,
 )
-from .jeans_front_pocket import draft_jeans_front_pocket
+from .jeans_front_pocket_bag import draft_jeans_front_pocket
 from garment_programs.plot_utils import (
     SEAMLINE, CUTLINE, draw_seam_allowance, display_scale, setup_figure, finalize_figure,
 )

@@ -19,6 +19,7 @@ SEAM_ALLOWANCES = {
         'crotch':  S['flat_fell'],
         'fly':     2 * S['flat_fell'],       # 3/8" crotch + 3/8" extension
         'waist':   S['flat_fell'],
+        'facing':  S['flat_fell'],       # 3/8" — facing attachment at pocket opening
     },
     'back': {
         'side':    2 * S['flat_fell'],       # 3/4" — outseam, flat-felled (wrap side)

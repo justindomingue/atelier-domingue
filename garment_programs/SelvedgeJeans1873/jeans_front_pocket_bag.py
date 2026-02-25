@@ -26,7 +26,7 @@ from .jeans_front import (
 )
 from .seam_allowances import SEAM_ALLOWANCES
 from garment_programs.plot_utils import (
-    SEAMLINE, CUTLINE, offset_polyline, draw_seam_allowance,
+    SEAMLINE, CUTLINE, offset_polyline, draw_seam_allowance, draw_notch,
     display_scale, setup_figure, finalize_figure, draw_fold_line,
 )
 
@@ -127,26 +127,53 @@ def draft_jeans_front_pocket(m, front):
     fpts = front['points']
     pt1 = fpts["1'"]
 
-    # -- 1. Lower pocket opening: 3 1/4" along the outseam from pt1' --
-    # The outseam (hip curve) starts at pt1'; walk arc-length from there.
+    # -- Graduated ruler scaling (Devere's method) --
+    # Base pocket dimensions are for a 38" hip.  Above that threshold,
+    # scale proportionally so the opening stays in proportion to the body.
+    BASE_HIP = 38.0 * INCH
+    pocket_scale = max(1.0, m['seat'] / BASE_HIP)
+    POCKET_LOWER_DIST = 3.25 * INCH * pocket_scale
+    POCKET_UPPER_DIST = 4.75 * INCH * pocket_scale
+
+    # -- 1. Lower pocket opening along the outseam from pt1' --
     outseam_path = np.vstack([pt1.reshape(1, 2), front['curves']['hip']])
-    pocket_lower = _point_at_arclength(outseam_path, 3.25 * INCH)
+    pocket_lower = _point_at_arclength(outseam_path, POCKET_LOWER_DIST)
 
-    # -- 2. Upper pocket opening: 4 3/4" along the waist/rise from pt1' --
-    # The rise curve starts at pt1'; walk arc-length from there.
+    # -- 2. Upper pocket opening along the waist/rise from pt1' --
     rise_path = np.vstack([pt1.reshape(1, 2), front['curves']['rise']])
-    pocket_upper = _point_at_arclength(rise_path, 4.75 * INCH)
+    pocket_upper = _point_at_arclength(rise_path, POCKET_UPPER_DIST)
 
-    # -- 3. Pocket opening curve --
+    # -- 3. Pocket opening curve (traditional J-shape) --
+    # Traditional pocket mouth: departs perpendicular to the waist (rise),
+    # arrives tangent to the side seam (hip).  Control-point directions
+    # are derived from the parent curves at the pocket endpoints.
     chord = pocket_lower - pocket_upper
     chord_len = np.linalg.norm(chord)
-    perp = np.array([chord[1], -chord[0]])
-    perp_norm = perp / np.linalg.norm(perp)
-    bow = chord_len * 0.15
+
+    # Tangent of rise at pocket_upper
+    rise_sub = _curve_up_to_arclength(rise_path, POCKET_UPPER_DIST)
+    rise_tan = rise_sub[-1] - rise_sub[-2]
+    rise_tan = rise_tan / np.linalg.norm(rise_tan)
+
+    # Tangent of hip at pocket_lower
+    hip_sub = _curve_up_to_arclength(outseam_path, POCKET_LOWER_DIST)
+    hip_tan = hip_sub[-1] - hip_sub[-2]
+    hip_tan = hip_tan / np.linalg.norm(hip_tan)
+
+    # Depart perpendicular to the rise, toward the side seam
+    depart = np.array([-rise_tan[1], rise_tan[0]])
+    if np.dot(depart, chord) < 0:
+        depart = -depart
+
+    # Arrive perpendicular to hip (from below) — right angle at side seam.
+    # 90° CW rotation of hip_tan points downward, placing P2 below
+    # pocket_lower so the curve arrives heading upward into the side seam.
+    arrive = np.array([hip_tan[1], -hip_tan[0]])
+
     opening_curve = _bezier_cubic(
         pocket_upper,
-        pocket_upper + (chord / 3) + perp_norm * bow,
-        pocket_lower - (chord / 3) + perp_norm * bow,
+        pocket_upper + depart * (chord_len * 0.50),
+        pocket_lower + arrive * (chord_len * 0.45),
         pocket_lower,
     )
 
@@ -154,7 +181,7 @@ def draft_jeans_front_pocket(m, front):
     bag_depth = 10.0 * INCH
 
     # bag_inner_top: 1" further along the rise from pocket_upper → ON the outline
-    bag_inner_top = _point_at_arclength(rise_path, (4.75 + 1.0) * INCH)
+    bag_inner_top = _point_at_arclength(rise_path, POCKET_UPPER_DIST + 1.0 * INCH)
 
     # Inner edge perpendicular to the waist (for cut-on-fold)
     waist_dir = fpts["7'"] - fpts["1'"]
@@ -165,7 +192,7 @@ def draft_jeans_front_pocket(m, front):
     bag_inner_bottom = bag_inner_top + perp_norm * bag_depth
 
     # Connection to side seam: ~2" below pocket opening along the outseam
-    bag_sideseam = _point_at_arclength(outseam_path, (3.25 + 2.0) * INCH)
+    bag_sideseam = _point_at_arclength(outseam_path, POCKET_LOWER_DIST + 2.0 * INCH)
 
     # Bag bottom curve: S-curve from inner bottom back to the side seam
     chord = bag_sideseam - bag_inner_bottom
@@ -237,7 +264,10 @@ def draft_jeans_front_pocket(m, front):
             'mirror_hip_to_bag': mirror_hip_to_bag,
             'mirror_bag_bottom': mirror_bag_bottom,
         },
-        'construction': {},
+        'construction': {
+            'pocket_lower_dist': POCKET_LOWER_DIST,
+            'pocket_upper_dist': POCKET_UPPER_DIST,
+        },
         'watch_pocket': watch,
         'metadata': {
             'title': 'Front Pocket Bag',
@@ -377,6 +407,15 @@ def plot_jeans_front_pocket(piece, output_path='Logs/jeans_front_pocket.svg',
         (rot_rise[::-1],           _sa['waist']),
     ]
     draw_seam_allowance(ax, sa_edges, scale=s)
+
+    # --- Notches: matching marks for pocket assembly ---
+    rot_pocket_upper = rot_opening[0]
+    rot_pocket_lower = rot_opening[-1]
+    NOTCH_OFFSET = 0.375 * INCH   # 3/8" away from pocket mouth
+    draw_notch(ax, rot_rise, rot_pocket_upper, _sa['waist'], scale=s,
+               tangent_offset=NOTCH_OFFSET, flip=True)
+    draw_notch(ax, rot_hip, rot_pocket_lower, _sa['sideseam'], scale=s,
+               tangent_offset=NOTCH_OFFSET)
 
     # --- Grainline (parallel to fold line, centered on piece) ---
     from garment_programs.plot_utils import draw_grainline, draw_piece_label

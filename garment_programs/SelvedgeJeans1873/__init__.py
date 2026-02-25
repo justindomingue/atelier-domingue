@@ -30,7 +30,7 @@ GARMENTS = [
             {'module': 'jeans_back_pocket',   'name': 'Back Pocket',      'cut_count': 2, 'grain_axis': 'y'},
             {'module': 'jeans_back_cinch',    'name': 'Back Cinch Belt',  'cut_count': 1, 'selvedge_edge': 'bottom'},
             # --- Pocketing fabric (last — cut from separate material) ---
-            {'module': 'jeans_front_pocket',  'name': 'Front Pocket Bag',     'cut_count': 1, 'fabric': 'pocketing'},
+            {'module': 'jeans_front_pocket_bag',  'name': 'Front Pocket Bag',     'cut_count': 1, 'fabric': 'pocketing'},
         ],
     },
     # ------------------------------------------------------------------ #
@@ -49,7 +49,7 @@ GARMENTS = [
             {'module': 'jeans_fly_one_piece', 'name': 'Fly (One-Piece)',  'cut_count': 1, 'grain_axis': 'y'},
             {'module': 'jeans_back_pocket',   'name': 'Back Pocket',      'cut_count': 2, 'grain_axis': 'y'},
             # --- Pocketing fabric (last — cut from separate material) ---
-            {'module': 'jeans_front_pocket',  'name': 'Front Pocket Bag',     'cut_count': 1, 'fabric': 'pocketing'},
+            {'module': 'jeans_front_pocket_bag',  'name': 'Front Pocket Bag',     'cut_count': 1, 'fabric': 'pocketing'},
         ],
     },
 ]

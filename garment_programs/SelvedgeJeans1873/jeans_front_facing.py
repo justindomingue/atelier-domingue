@@ -28,9 +28,10 @@ from .jeans_front import (
     _annotate_segment, _annotate_curve, _curve_length,
     _curve_up_to_arclength,
 )
-from .jeans_front_pocket import draft_jeans_front_pocket
+from .jeans_front_pocket_bag import draft_jeans_front_pocket
 from garment_programs.plot_utils import (
-    SEAMLINE, draw_seam_allowance, display_scale, setup_figure, finalize_figure,
+    SEAMLINE, draw_seam_allowance, draw_notch,
+    display_scale, setup_figure, finalize_figure,
 )
 
 
@@ -65,12 +66,12 @@ def draft_jeans_front_facing(m):
     # Both rise and hip curves start at pt1' and the pocket points are
     # defined as 4.75"/3.25" from pt1' along those same curves.
     rise_to_upper = _curve_up_to_arclength(front['curves']['rise'],
-                                           4.75 * INCH)
+                                           pocket['construction']['pocket_upper_dist'])
     # Snap endpoint to exact pocket_upper to avoid interpolation gaps
     rise_to_upper[-1] = pocket_upper
 
     hip_to_lower = _curve_up_to_arclength(front['curves']['hip'],
-                                          3.25 * INCH)
+                                          pocket['construction']['pocket_lower_dist'])
     # Snap endpoint to exact pocket_lower
     hip_to_lower[-1] = pocket_lower
 
@@ -98,6 +99,10 @@ def draft_jeans_front_facing(m):
     new_pocket_upper = rotate_pt(pocket_upper)
     new_pocket_lower = rotate_pt(pocket_lower)
 
+    # Watch pocket outline — same rotate transform
+    watch_outline = pocket['watch_pocket']['outline']
+    rotated_watch = np.column_stack([watch_outline[:, 1], -watch_outline[:, 0]])
+
     # Shift so bounding box starts at (0, 0)
     all_pts = rotated_outline
     xy_min = all_pts.min(axis=0)
@@ -114,6 +119,7 @@ def draft_jeans_front_facing(m):
     rotated_rise = shift_curve(rotated_rise)
     rotated_opening = shift_curve(rotated_opening)
     rotated_hip = shift_curve(rotated_hip)
+    rotated_watch = shift_curve(rotated_watch)
 
     # SA values
     from .seam_allowances import SEAM_ALLOWANCES
@@ -140,6 +146,7 @@ def draft_jeans_front_facing(m):
             'rise': rotated_rise,
             'opening': rotated_opening,
             'hip': rotated_hip,
+            'watch_pocket': rotated_watch,
         },
         'construction': {},
         'metadata': {
@@ -172,6 +179,12 @@ def plot_jeans_front_facing(piece, output_path='Logs/jeans_front_facing.svg',
     ax.plot(opening[:, 0], opening[:, 1], **SEAMLINE)
     ax.plot(hip[:, 0], hip[:, 1], **SEAMLINE)
 
+    # Watch pocket placement (steelblue)
+    wp = curves['watch_pocket']
+    wp_closed = np.vstack([wp, wp[0:1]])
+    ax.plot(wp_closed[:, 0], wp_closed[:, 1],
+            color='steelblue', linewidth=1.2, zorder=3)
+
     # Seam allowances — CW edge order (reversed from drawing order
     # because the 90° rotation flipped the original winding):
     #   hip (pt1→pocket_lower) → opening (pocket_lower→pocket_upper)
@@ -184,18 +197,12 @@ def plot_jeans_front_facing(piece, output_path='Logs/jeans_front_facing.svg',
     ]
     draw_seam_allowance(ax, sa_edges, scale=s)
 
-    # --- Pocket notches ---
-    from garment_programs.plot_utils import draw_notch
-    # pocket_upper: at the end of the rise curve (matches front leg notch 1)
-    draw_notch(ax, rise, pts['pocket_upper'],
-               meta['sa_waist'], scale=s)
-    # pocket_lower: at the end of the hip curve (matches front leg notch 2)
-    draw_notch(ax, hip, pts['pocket_lower'],
-               meta['sa_sideseam'], scale=s)
-    # pt1: corner where rise meets hip (matches pt1' on front leg)
-    # Use the rise curve for tangent direction at pt1
-    draw_notch(ax, rise, pts['pt1'],
-               meta['sa_waist'], scale=s, count=2)
+    # --- Notches: matching marks for pocket assembly ---
+    NOTCH_OFFSET = 0.375 * INCH   # 3/8" away from pocket mouth
+    draw_notch(ax, rise, pts['pocket_upper'], meta['sa_waist'], scale=s,
+               tangent_offset=NOTCH_OFFSET, flip=True)
+    draw_notch(ax, hip, pts['pocket_lower'], meta['sa_sideseam'], scale=s,
+               tangent_offset=NOTCH_OFFSET, flip=True)
 
     # Grain line arrow (double-headed)
     from garment_programs.plot_utils import draw_grainline, draw_piece_label

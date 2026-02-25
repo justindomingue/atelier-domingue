@@ -16,7 +16,7 @@ from garment_programs.geometry import (
 )
 from garment_programs.measurements import load_measurements
 from garment_programs.plot_utils import (
-    SEAMLINE, CUTLINE, offset_polyline, draw_seam_allowance,
+    SEAMLINE, CUTLINE, offset_polyline, draw_seam_allowance, draw_notch,
     display_scale, setup_figure, finalize_figure,
 )
 
@@ -209,6 +209,14 @@ def plot_jeans_front(draft, output_path='Logs/jeans_front.svg', debug=False, uni
         ax.plot([pts['2'][0], pts['5'][0]], [pts['2'][1], pts['5'][1]],
                 'c--', linewidth=0.5, alpha=0.2)
 
+    # Sub-curves for facing cutout (pattern mode)
+    if pocket is not None:
+        _lower_dist = pocket['construction']['pocket_lower_dist'] * s
+        _upper_dist = pocket['construction']['pocket_upper_dist'] * s
+        hip_below_facing = _curve_from_arclength(curves['hip'], _lower_dist)
+        rise_above_facing = _curve_from_arclength(curves['rise'], _upper_dist)
+        pcurves_sa = {k: v * s for k, v in pocket['curves'].items()}
+
     # --- Pattern outline: curves ---
     c = curves
     if debug:
@@ -221,8 +229,18 @@ def plot_jeans_front(draft, output_path='Logs/jeans_front.svg', debug=False, uni
         ax.plot(c['inseam'][:, 0], c['inseam'][:, 1],
                 'm-', linewidth=2, label="Inseam (6->3')", zorder=4)
     else:
-        for curve in c.values():
-            ax.plot(curve[:, 0], curve[:, 1], 'k-', linewidth=1.5)
+        if pocket is not None:
+            # Facing area cut out — draw partial hip, partial rise, and opening
+            ax.plot(hip_below_facing[:, 0], hip_below_facing[:, 1], 'k-', linewidth=1.5)
+            ax.plot(rise_above_facing[:, 0], rise_above_facing[:, 1], 'k-', linewidth=1.5)
+            ax.plot(pcurves_sa['opening'][:, 0], pcurves_sa['opening'][:, 1],
+                    'k-', linewidth=1.5)
+        else:
+            ax.plot(c['hip'][:, 0], c['hip'][:, 1], 'k-', linewidth=1.5)
+            ax.plot(c['rise'][:, 0], c['rise'][:, 1], 'k-', linewidth=1.5)
+        # Curves unaffected by cutout
+        ax.plot(c['crotch'][:, 0], c['crotch'][:, 1], 'k-', linewidth=1.5)
+        ax.plot(c['inseam'][:, 0], c['inseam'][:, 1], 'k-', linewidth=1.5)
 
     # --- Pattern outline: straight segments ---
     for a, b in [('4', '0'), ("7'", '8'), ("3'", "0'"), ("0'", '0')]:
@@ -292,8 +310,9 @@ def plot_jeans_front(draft, output_path='Logs/jeans_front.svg', debug=False, uni
         POCKET_BAG = dict(color='green', linewidth=1, linestyle='--', alpha=0.6, zorder=3)
         WATCH = dict(color='steelblue', linewidth=1.2, zorder=3)
 
-        # Pocket opening (solid)
-        ax.plot(pcurves['opening'][:, 0], pcurves['opening'][:, 1], **POCKET_OPEN)
+        # Pocket opening (solid) — only in debug; pattern mode draws it as outline
+        if debug:
+            ax.plot(pcurves['opening'][:, 0], pcurves['opening'][:, 1], **POCKET_OPEN)
 
         # Pocket bag (dashed)
         ax.plot([ppts['bag_inner_top'][0], ppts['bag_inner_bottom'][0]],
@@ -308,12 +327,14 @@ def plot_jeans_front(draft, output_path='Logs/jeans_front.svg', debug=False, uni
         # the opening and gets extra SA at the bottom when cut as a separate
         # piece (data stored in pocket dict for later extraction).
 
-        # Watch pocket (steelblue)
-        watch = pocket['watch_pocket']
-        wp = watch['outline'] * s
-        # Close the pentagon by appending the first point
-        wp_closed = np.vstack([wp, wp[0:1]])
-        ax.plot(wp_closed[:, 0], wp_closed[:, 1], **WATCH)
+        # Watch pocket (steelblue) — debug only; in pattern mode the watch
+        # pocket sits in the cut-away facing area, so it's shown on the facing piece.
+        if debug:
+            watch = pocket['watch_pocket']
+            wp = watch['outline'] * s
+            # Close the pentagon by appending the first point
+            wp_closed = np.vstack([wp, wp[0:1]])
+            ax.plot(wp_closed[:, 0], wp_closed[:, 1], **WATCH)
 
         if debug:
             for name, pt in ppts.items():
@@ -335,6 +356,7 @@ def plot_jeans_front(draft, output_path='Logs/jeans_front.svg', debug=False, uni
     SA_CROTCH = SA['crotch']
     SA_FLY    = SA['fly']
     SA_WAIST  = SA['waist']
+    SA_FACING = SA['facing']
 
     # SA transition: 3/4" kicks in 1/2" before pt8 on the crotch curve
     _crotch_rev = curves['crotch'][::-1]          # scaled, pt6 → pt8
@@ -344,46 +366,46 @@ def plot_jeans_front(draft, output_path='Logs/jeans_front.svg', debug=False, uni
     _crotch_end  = _curve_up_to_arclength(_crotch_rev[::-1], _split)[::-1]
 
     # Build edges: (polyline, sa_distance_cm)
-    # Outline travels CW: hip(1'→4) → hem(4→0) → hem_drop(0→0') → inseam(0'→3')
-    #   → inseam_curve(3'→6) → crotch(6→8) → fly(8→7') → rise(7'→1')
-    sa_edges = [
-        (curves['hip'],                                          SA_SIDE),    # side seam (waist→seat)
-        (np.array([pts['4'], pts['0']]),                         SA_SIDE),    # side seam (seat→hem)
-        (np.array([pts['0'], pts["0'"]]),                        SA_HEM),     # hem
-        (np.array([pts["0'"], pts["3'"]]),                       SA_INSEAM),  # lower inseam straight
-        (curves['inseam'][::-1],                                 SA_INSEAM),  # inseam curve (3'→6)
-        (_crotch_body,                                           SA_CROTCH),  # crotch (6 → transition)
-        (_crotch_end,                                            SA_FLY),     # last 1/2" of crotch: 3/4"
-        (np.array([pts['8'], pts["7'"]]),                        SA_FLY),     # fly: full 3/4"
-        (curves['rise'][::-1],                                   SA_WAIST),   # rise / waist (7'→1')
-    ]
+    if not debug and pocket is not None:
+        # CW winding with facing area removed:
+        #   hip_below(pocket_lower→4) → 4→0 → 0→0' → 0'→3' → inseam(3'→6)
+        #   → crotch(6→8) → 8→7' → rise_above(7'→pocket_upper)
+        #   → opening(pocket_upper→pocket_lower)
+        sa_edges = [
+            (hip_below_facing,                                       SA_SIDE),
+            (np.array([pts['4'], pts['0']]),                         SA_SIDE),
+            (np.array([pts['0'], pts["0'"]]),                        SA_HEM),
+            (np.array([pts["0'"], pts["3'"]]),                       SA_INSEAM),
+            (curves['inseam'][::-1],                                 SA_INSEAM),
+            (_crotch_body,                                           SA_CROTCH),
+            (_crotch_end,                                            SA_FLY),
+            (np.array([pts['8'], pts["7'"]]),                        SA_FLY),
+            (rise_above_facing[::-1],                                SA_WAIST),
+            (pcurves_sa['opening'],                                  SA_FACING),
+        ]
+    else:
+        # Full outline (debug mode or no pocket data)
+        sa_edges = [
+            (curves['hip'],                                          SA_SIDE),
+            (np.array([pts['4'], pts['0']]),                         SA_SIDE),
+            (np.array([pts['0'], pts["0'"]]),                        SA_HEM),
+            (np.array([pts["0'"], pts["3'"]]),                       SA_INSEAM),
+            (curves['inseam'][::-1],                                 SA_INSEAM),
+            (_crotch_body,                                           SA_CROTCH),
+            (_crotch_end,                                            SA_FLY),
+            (np.array([pts['8'], pts["7'"]]),                        SA_FLY),
+            (curves['rise'][::-1],                                   SA_WAIST),
+        ]
     draw_seam_allowance(ax, sa_edges, scale=s)
 
-    # --- Pocket notches (always drawn when pocket data is available) ---
+    # --- Notches: matching marks for pocket assembly ---
     if pocket is not None:
-        from garment_programs.plot_utils import draw_notch
         ppts = {k: v * s for k, v in pocket['points'].items()}
-        pcurves = {k: v * s for k, v in pocket['curves'].items()}
-
-        # Notch 1: pocket_upper on the rise curve (waist edge)
-        #   rise curve travels 1'→7', pocket_upper is at 4.75" along it
-        draw_notch(ax, curves['rise'], ppts['pocket_upper'],
-                   SA_WAIST, scale=s)
-
-        # Notch 2: pocket_lower on the hip curve (side seam)
-        #   hip curve travels 1'→4, pocket_lower is at 3.25" along it
-        draw_notch(ax, curves['hip'], ppts['pocket_lower'],
-                   SA_SIDE, scale=s)
-
-        # Notch 3: bag_inner_top on the rise curve (waist edge)
-        #   5.75" from 1' along rise — where pocket bag inner edge meets waist
-        draw_notch(ax, curves['rise'], ppts['bag_inner_top'],
-                   SA_WAIST, scale=s, count=2)
-
-        # Notch 4: bag_sideseam on the hip curve (side seam)
-        #   5.25" from 1' along hip — where pocket bag meets side seam
-        draw_notch(ax, curves['hip'], ppts['bag_sideseam'],
-                   SA_SIDE, scale=s, count=2)
+        NOTCH_OFFSET = 0.375 * INCH   # 3/8" away from pocket mouth
+        draw_notch(ax, curves['rise'], ppts['pocket_upper'], SA_WAIST, scale=s,
+                   tangent_offset=NOTCH_OFFSET, flip=True)
+        draw_notch(ax, curves['hip'], ppts['pocket_lower'], SA_SIDE, scale=s,
+                   tangent_offset=NOTCH_OFFSET)
 
     # --- Grainline and piece label (pattern mode only) ---
     if not debug:
@@ -411,7 +433,7 @@ def run(measurements_path, output_path, debug=False, units='cm', pdf_pages=None)
     """Uniform interface called by the generic runner."""
     m = load_measurements(measurements_path)
     draft = draft_jeans_front(m)
-    from .jeans_front_pocket import draft_jeans_front_pocket
+    from .jeans_front_pocket_bag import draft_jeans_front_pocket
     pocket = draft_jeans_front_pocket(m, draft)
     plot_jeans_front(draft, output_path, debug=debug, units=units, pocket=pocket,
                      pdf_pages=pdf_pages)
