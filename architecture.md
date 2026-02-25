@@ -8,14 +8,18 @@ Personal garment drafting programs based on historical tailoring methods.
 atelier-domingue/
 ├── architecture.md
 ├── garment_programs/
-│   ├── SelvedgeJeans1873/          # 1873 selvedge jeans (11 pieces)
-│   │   ├── __init__.py             # GARMENT definition
+│   ├── SelvedgeJeans1873/          # Selvedge jeans variants (1873 + modern)
+│   │   ├── __init__.py             # GARMENTS list (2 variants)
 │   │   ├── jeans_front.py
 │   │   ├── jeans_back.py
 │   │   ├── jeans_yoke_1873.py
+│   │   ├── jeans_yoke_modern.py
 │   │   ├── jeans_waistband.py
 │   │   ├── jeans_fly_1873.py
-│   │   ├── jeans_front_pocket.py
+│   │   ├── jeans_fly_one_piece.py
+│   │   ├── jeans_front_facing.py
+│   │   ├── jeans_front_pocket_bag.py
+│   │   ├── jeans_watch_pocket.py
 │   │   ├── jeans_back_pocket.py
 │   │   ├── jeans_back_cinch.py
 │   │   ├── *_instructions.md       # Step-by-step drafting instructions
@@ -42,14 +46,21 @@ atelier-domingue/
 # Interactive — uses fzf to pick measurements, program, mode, and units
 python run.py
 
-# Non-interactive
-python run.py -m measurements/justin_1873_jeans.yaml -p SelvedgeJeans1873 -d -u cm
+# Non-interactive garment run (use garment name)
+python run.py -m measurements/justin_1873_jeans.yaml -p "1873 Selvedge Denim Jeans" -u cm
 
 # Single piece
-python run.py -m measurements/justin_1873_jeans.yaml -p SelvedgeJeans1873.jeans_front -d -u cm
+python run.py -m measurements/justin_1873_jeans.yaml -p SelvedgeJeans1873.jeans_front -u cm
+
+# Optional: prioritize shortest lay-plan length over panel pairing
+python run.py -m measurements/justin_1873_jeans.yaml -p "1873 Selvedge Denim Jeans" -u cm --shortest-layout
 ```
 
 Output goes to `Logs/`.
+
+Program selection notes:
+- `--program` accepts garment names, unambiguous package names, or dotted piece modules.
+- If a package contains multiple garments (for example `SelvedgeJeans1873`), use a garment name or a dotted module.
 
 ### Adding a new garment program
 
@@ -59,7 +70,7 @@ Output goes to `Logs/`.
 
 ## Measurements
 
-Measurements are stored in YAML in **inches** (how they're actually taken with a tape measure). The `load_measurements()` function converts to cm at load time, since all internal geometry is in cm.
+Measurements are stored in YAML with explicit `unit` (`inch` or `cm`). The `load_measurements()` function converts to cm at load time, since all internal geometry is in cm.
 
 To use different measurements, create a new file in `measurements/`.
 

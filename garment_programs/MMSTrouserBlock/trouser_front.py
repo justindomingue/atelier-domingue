@@ -330,7 +330,7 @@ def plot_trouser_front(draft, output_path='Logs/trouser_front.svg',
                     xytext=(-8, -8), fontsize=9, fontweight='bold')
 
     if step < 2:
-        _finish_plot(fig, ax, draft, output_path, step, debug)
+        _finish_plot(fig, ax, draft, output_path, step, debug, units=units)
         return
 
     if debug:
@@ -372,7 +372,7 @@ def plot_trouser_front(draft, output_path='Logs/trouser_front.svg',
                     fontsize=7, color='black', ha='center', va='top')
 
     if step < 3:
-        _finish_plot(fig, ax, draft, output_path, step, debug)
+        _finish_plot(fig, ax, draft, output_path, step, debug, units=units)
         return
 
     if debug:
@@ -440,7 +440,7 @@ def plot_trouser_front(draft, output_path='Logs/trouser_front.svg',
                 'k-', linewidth=0.5, alpha=0.4)
 
     if step < 4:
-        _finish_plot(fig, ax, draft, output_path, step, debug)
+        _finish_plot(fig, ax, draft, output_path, step, debug, units=units)
         return
 
     if debug:
@@ -472,7 +472,7 @@ def plot_trouser_front(draft, output_path='Logs/trouser_front.svg',
                         xytext=(-8, 6), fontsize=5, color='black')
 
     if step < 5:
-        _finish_plot(fig, ax, draft, output_path, step, debug)
+        _finish_plot(fig, ax, draft, output_path, step, debug, units=units)
         return
 
     # ── Step 5: Final curves and complete outline ─────────────────
@@ -538,13 +538,13 @@ def plot_trouser_front(draft, output_path='Logs/trouser_front.svg',
         _annotate_len(ax, np.array([pts['knee_side'], pts['hem_side_top']]), offset=(-10, 0))
         _annotate_len(ax, np.array([pts['hem_side'], pts['hem_inseam']]), offset=(0, -8))
 
-    _finish_plot(fig, ax, draft, output_path, step, debug)
+    _finish_plot(fig, ax, draft, output_path, step, debug, units=units)
 
 
-def _finish_plot(fig, ax, draft, output_path, step, debug=False):
+def _finish_plot(fig, ax, draft, output_path, step, debug=False, units='cm'):
     """Common plot finalization."""
     from garment_programs.plot_utils import finalize_figure
-    finalize_figure(ax, fig, True, output_path, units='cm', debug=debug)
+    finalize_figure(ax, fig, True, output_path, units=units, debug=debug)
 
 
 # -- Entry point for generic runner ------------------------------------------

@@ -702,7 +702,7 @@ def _offset_nest_selvedge(top_pieces, bot_pieces, fabric_width, gap=0.25,
     return nested_positions, remaining_tops, remaining_bots
 
 
-def polygon_nest(pieces, fabric_width, gap=0.25):
+def polygon_nest(pieces, fabric_width, gap=0.25, prefer_offset_nest=True):
     """Polygon-aware nesting with void filling and skyline fallback.
 
     Strategy:
@@ -712,7 +712,9 @@ def polygon_nest(pieces, fabric_width, gap=0.25):
        tuck free pieces into the curved voids within selvedge bounding boxes.
     3. Remaining free pieces go through skyline continuation.
     4. If spyrrow is available, also try polygon nesting as an alternative.
-    5. Use whichever strategy produces the shortest total length.
+    5. By default, prefer offset-nested front/back panel pairing when available
+       (matches typical cutting workflow). If disabled, choose the shortest
+       total-length strategy.
 
     Same return signature as skyline_pack() plus a ``use_polygons`` flag.
 
@@ -722,6 +724,9 @@ def polygon_nest(pieces, fabric_width, gap=0.25):
         (name, grain_len, cross_w, edge, polygon, pad_x, pad_y)
     fabric_width : float
     gap : float
+    prefer_offset_nest : bool
+        When True, prefer the offset-nest strategy if available, even when
+        another strategy is slightly shorter.
 
     Returns
     -------
@@ -909,21 +914,22 @@ def polygon_nest(pieces, fabric_width, gap=0.25):
             c_result = (c_total, c_positions)
 
     # --- Pick the best strategy ---
-    # When offset nesting paired cross-type main panels (front+back),
-    # always prefer it — it produces the layout the cutter expects
-    # (front and back side-by-side across fabric width).
-    # Fall back to length comparison only when offset nesting isn't applicable.
+    # Offset nesting yields a cutter-friendly pairing of front/back panels;
+    # keep it as the default preference, but allow shortest-length selection.
     candidates = [
         (vf_total, 0, vf_positions, True, "void fill + skyline"),
         (sky_length, 1, sky_positions, False, "baseline skyline"),
         (sky_cont_total, 2, sky_cont_positions, False, "skyline continuation"),
     ]
     if c_result is not None:
-        # Always use offset nest when it paired cross-main panels
-        best_total = c_result[0]
-        best_pos = c_result[1]
-        best_poly = False
-        best_label = "offset nest + skyline"
+        candidates.append(
+            (c_result[0], 3, c_result[1], False, "offset nest + skyline")
+        )
+
+    if c_result is not None and prefer_offset_nest:
+        best_total, _, best_pos, best_poly, best_label = next(
+            c for c in candidates if c[4] == "offset nest + skyline"
+        )
     else:
         best_total, _, best_pos, best_poly, best_label = min(
             candidates, key=lambda c: (c[0], c[1]))
@@ -940,7 +946,8 @@ def polygon_nest(pieces, fabric_width, gap=0.25):
 # Layout helper — expand piece SVGs and run nesting for a single fabric
 # ---------------------------------------------------------------------------
 
-def _layout_fabric(svg_paths, fabric_width, gap=0.25):
+def _layout_fabric(svg_paths, fabric_width, gap=0.25,
+                   prefer_panel_pairing=True):
     """Expand piece SVGs and pack them onto a fabric width.
 
     Parameters
@@ -948,6 +955,9 @@ def _layout_fabric(svg_paths, fabric_width, gap=0.25):
     svg_paths : list of (svg_file_path, cut_count, selvedge_edge, grain_axis)
     fabric_width : float
     gap : float
+    prefer_panel_pairing : bool
+        If True, prefer matched front/back panel pairing when offset nesting
+        is available.
 
     Returns
     -------
@@ -1083,7 +1093,8 @@ def _layout_fabric(svg_paths, fabric_width, gap=0.25):
              layout_pad_x, layout_pad_y))
 
     positions, total_length, _use_polygons = polygon_nest(
-        pieces_with_polys, fabric_width, gap=gap)
+        pieces_with_polys, fabric_width, gap=gap,
+        prefer_offset_nest=prefer_panel_pairing)
 
     return pieces, positions, total_length
 
@@ -1433,7 +1444,7 @@ def _write_pdf(layouts, output_path, units, gap):
 # ---------------------------------------------------------------------------
 
 def generate_lay_plan(fabric_groups, output_path, units='inch', gap=0.25,
-                      fmt='svg'):
+                      fmt='svg', prefer_panel_pairing=True):
     """Generate a multi-fabric lay plan as SVG (with Inkscape layers) or PDF.
 
     Parameters
@@ -1449,6 +1460,9 @@ def generate_lay_plan(fabric_groups, output_path, units='inch', gap=0.25,
     units : str  ('inch' or 'cm')
     gap : float  (spacing between pieces in inches)
     fmt : str    ('svg' or 'pdf')
+    prefer_panel_pairing : bool
+        If True (default), prefer matched front/back panel pairing when
+        offset nesting is available.
     """
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1458,7 +1472,8 @@ def generate_lay_plan(fabric_groups, output_path, units='inch', gap=0.25,
     for group in fabric_groups:
         print(f"\n  Laying out {group['label']} ({group['fabric_width']}\" wide)...")
         pieces, positions, total_length = _layout_fabric(
-            group['pieces'], group['fabric_width'], gap=gap)
+            group['pieces'], group['fabric_width'], gap=gap,
+            prefer_panel_pairing=prefer_panel_pairing)
         if not pieces:
             print(f"    (no pieces)")
             continue

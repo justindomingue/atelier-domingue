@@ -66,7 +66,11 @@ def _run_piece(pkg, piece, measurements_path, debug, units, fmt='svg', output_di
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--measurements', '-m', help='path to measurements YAML file')
-    parser.add_argument('--program', '-p', help='garment program module name (e.g. SelvedgeJeans1873 or SelvedgeJeans1873.jeans_front)')
+    parser.add_argument(
+        '--program', '-p',
+        help=('garment name, unambiguous package name, or single-piece module '
+              '(e.g. "1873 Selvedge Denim Jeans", SelvedgeJeans1873.jeans_front)')
+    )
     parser.add_argument('--debug', '-d', action='store_true',
                         help='show construction lines, point labels, and grid')
     parser.add_argument('--units', '-u', choices=['cm', 'inch'], default=None,
@@ -75,6 +79,11 @@ def main():
                         help='output format (default: prompt via fzf)')
     parser.add_argument('--fabric-width', type=float, default=None,
                         help='fabric width in inches (overrides garment default)')
+    parser.add_argument(
+        '--shortest-layout',
+        action='store_true',
+        help='prefer shortest lay-plan length over matching front/back panel pairing',
+    )
     args = parser.parse_args()
 
     # --- measurements selection ---
@@ -130,12 +139,27 @@ def main():
     timestamp = datetime.now().strftime('%Y-%m-%d_%H%M%S')
     measurements_stem = Path(measurements_path).stem
 
-    # Resolve program_name to (pkg, garment) if it's a garment
+    # Resolve program_name to (pkg, garment) if it's a garment.
+    # Package names are only accepted when unambiguous (single garment).
     resolved = None
     if program_name in garment_by_name:
         resolved = garment_by_name[program_name]
     elif program_name in garment_by_pkg:
         resolved = (program_name, garment_by_pkg[program_name])
+    elif program_name in pkg_counts and len(pkg_counts[program_name]) > 1:
+        print(
+            f"Ambiguous program '{program_name}': package contains multiple garments.",
+            file=sys.stderr,
+        )
+        print("Use one of:", file=sys.stderr)
+        for g in pkg_counts[program_name]:
+            print(f"  - {g['name']}", file=sys.stderr)
+        print(
+            "Or run a single piece module (e.g. "
+            f"{program_name}.{pkg_counts[program_name][0]['pieces'][0]['module']}).",
+            file=sys.stderr,
+        )
+        sys.exit(2)
 
     if resolved:
         pkg, garment = resolved
@@ -214,7 +238,8 @@ def main():
             layout_path = f'{output_dir}/lay_plan.{fmt}'
             print(f"\n  Generating lay plan...")
             generate_lay_plan(fabric_groups, layout_path,
-                              units=units, fmt=fmt)
+                              units=units, fmt=fmt,
+                              prefer_panel_pairing=not args.shortest_layout)
     else:
         # Single piece — may be dotted (pkg.module) or standalone
         parts = program_name.split('.', 1)
@@ -223,6 +248,19 @@ def main():
             piece = {'module': parts[1]}
             _run_piece(parts[0], piece, measurements_path, debug, units, fmt=fmt)
         else:
+            if program_name in pkg_counts:
+                # Unambiguous package names are handled above; this catches any
+                # remaining package-only input before module import.
+                print(
+                    f"Program '{program_name}' is a garment package, not a runnable piece module.",
+                    file=sys.stderr,
+                )
+                print(
+                    "Use a garment name or a dotted piece module "
+                    f"(e.g. {program_name}.{pkg_counts[program_name][0]['pieces'][0]['module']}).",
+                    file=sys.stderr,
+                )
+                sys.exit(2)
             module = importlib.import_module(f'garment_programs.{program_name}')
             output_path = f'Logs/{program_name}_{measurements_stem}_{timestamp}.{fmt}'
             module.run(measurements_path, output_path, debug=debug, units=units)

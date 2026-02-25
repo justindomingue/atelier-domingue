@@ -588,7 +588,7 @@ def plot_trouser_back(front, back, output_path='Logs/trouser_back.svg',
                     xytext=(-10, 6), fontsize=5, color='cornflowerblue')
 
     if step < 2:
-        _finish_back_plot(fig, ax, back, output_path, step, debug)
+        _finish_back_plot(fig, ax, back, output_path, step, debug, units=units)
         return
 
     if debug:
@@ -613,7 +613,7 @@ def plot_trouser_back(front, back, output_path='Logs/trouser_back.svg',
                 color='blue', ha='center')
 
     if step < 3:
-        _finish_back_plot(fig, ax, back, output_path, step, debug)
+        _finish_back_plot(fig, ax, back, output_path, step, debug, units=units)
         return
 
     if debug:
@@ -632,7 +632,7 @@ def plot_trouser_back(front, back, output_path='Logs/trouser_back.svg',
                     xytext=(4, 4), fontsize=7, fontweight='bold', color='cornflowerblue')
 
     if step < 4:
-        _finish_back_plot(fig, ax, back, output_path, step, debug)
+        _finish_back_plot(fig, ax, back, output_path, step, debug, units=units)
         return
 
     if debug:
@@ -669,7 +669,7 @@ def plot_trouser_back(front, back, output_path='Logs/trouser_back.svg',
                     xytext=(6, 6), fontsize=5, color='black')
 
     if step < 5:
-        _finish_back_plot(fig, ax, back, output_path, step, debug)
+        _finish_back_plot(fig, ax, back, output_path, step, debug, units=units)
         return
 
     if debug:
@@ -712,7 +712,7 @@ def plot_trouser_back(front, back, output_path='Logs/trouser_back.svg',
             **DART_STYLE)
 
     if step < 6:
-        _finish_back_plot(fig, ax, back, output_path, step, debug)
+        _finish_back_plot(fig, ax, back, output_path, step, debug, units=units)
         return
 
     # ── Step 6: Final Curves and Outline ───────────────────────────
@@ -780,15 +780,15 @@ def plot_trouser_back(front, back, output_path='Logs/trouser_back.svg',
         _annotate_len(ax, np.array([bpts['back_hem_side'], bpts['back_hem_inseam']]),
                       offset=(0, -8))
 
-    _finish_back_plot(fig, ax, back, output_path, step, debug)
+    _finish_back_plot(fig, ax, back, output_path, step, debug, units=units)
 
 
-def _finish_back_plot(fig, ax, back, output_path, step, debug=False):
+def _finish_back_plot(fig, ax, back, output_path, step, debug=False, units='cm'):
     """Common plot finalization."""
     if not debug:
         ax.axis('off')
     from garment_programs.plot_utils import save_pattern
-    save_pattern(fig, ax, output_path, units='cm', calibration=not debug)
+    save_pattern(fig, ax, output_path, units=units, calibration=not debug)
 
 
 # -- Entry point for generic runner ------------------------------------------
