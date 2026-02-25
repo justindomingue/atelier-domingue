@@ -160,18 +160,18 @@ def plot_jeans_back_pocket(pocket, output_path='Logs/jeans_back_pocket.svg',
     SA = SEAM_ALLOWANCES['back_pocket']
 
     # Finished shape (pentagon: tl → tr → ref_r → bottom → ref_l → tl)
-    f_order = ['f_tl', 'f_tr', 'f_ref_r', 'f_bottom', 'f_ref_l', 'f_tl']
+    f_order = ['f_tl', 'f_ref_l', 'f_bottom', 'f_ref_r', 'f_tr', 'f_tl']
     fx = [pts[k][0] for k in f_order]
     fy = [pts[k][1] for k in f_order]
     ax.plot(fx, fy, **SEAMLINE)
 
-    # SA outline via draw_seam_allowance (CW edges)
+    # SA outline via draw_seam_allowance (CW in local coords)
     sa_edges = [
-        (np.array([pts['f_tl'], pts['f_tr']]),         SA['top']),
-        (np.array([pts['f_tr'], pts['f_ref_r']]),      SA['side']),
-        (np.array([pts['f_ref_r'], pts['f_bottom']]),  SA['side']),
-        (np.array([pts['f_bottom'], pts['f_ref_l']]),  SA['side']),
-        (np.array([pts['f_ref_l'], pts['f_tl']]),      SA['side']),
+        (np.array([pts['f_tl'], pts['f_ref_l']]),      SA['side']),
+        (np.array([pts['f_ref_l'], pts['f_bottom']]),  SA['side']),
+        (np.array([pts['f_bottom'], pts['f_ref_r']]),  SA['side']),
+        (np.array([pts['f_ref_r'], pts['f_tr']]),      SA['side']),
+        (np.array([pts['f_tr'], pts['f_tl']]),         SA['top']),
     ]
     draw_seam_allowance(ax, sa_edges, scale=s)
 

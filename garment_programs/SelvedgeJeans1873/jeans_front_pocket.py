@@ -232,8 +232,16 @@ def plot_jeans_front_pocket(piece, output_path='Logs/jeans_front_pocket.svg',
     s, unit_label = display_scale(units)
 
     # --- Build closed outline from draft curves ---
-    rise_to_bag = piece['curves']['rise_to_bag']
-    hip_to_bag = piece['curves']['hip_to_bag']
+    def _dedup(pts, tol=1e-10):
+        """Remove consecutive near-duplicate points (avoids zero-length segs)."""
+        keep = [0]
+        for i in range(1, len(pts)):
+            if np.linalg.norm(pts[i] - pts[keep[-1]]) > tol:
+                keep.append(i)
+        return pts[np.array(keep)]
+
+    rise_to_bag = _dedup(piece['curves']['rise_to_bag'])
+    hip_to_bag = _dedup(piece['curves']['hip_to_bag'])
     bag_bottom = piece['curves']['bag_bottom']
     bag_inner_top = piece['points']['bag_inner_top']
     bag_inner_bottom = piece['points']['bag_inner_bottom']
@@ -300,10 +308,10 @@ def plot_jeans_front_pocket(piece, output_path='Logs/jeans_front_pocket.svg',
     # --- Seam allowances ---
     _sa = SEAM_ALLOWANCES['front_pocket_bag']
     sa_edges = [
-        (rot_rise,   -_sa['waist']),
-        (rot_inner,  -_sa['inner']),
-        (rot_bottom, -_sa['bottom']),
-        (rot_hip,    -_sa['sideseam']),
+        (rot_hip[::-1],    _sa['sideseam']),
+        (rot_bottom[::-1], _sa['bottom']),
+        (rot_inner[::-1],  _sa['inner']),
+        (rot_rise[::-1],   _sa['waist']),
     ]
     draw_seam_allowance(ax, sa_edges, scale=s)
 
