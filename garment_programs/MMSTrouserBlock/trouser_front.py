@@ -17,6 +17,7 @@ from garment_programs.geometry import (
     INCH, _bezier_cubic, _bezier_quad, _curve_length, _annotate_len,
 )
 from garment_programs.measurements import load_measurements
+from .seam_allowances import SEAM_ALLOWANCES
 
 # -- Pleat configuration by count ---------------------------------------------
 # Each pleat_offsets entry is (left_offset, right_offset) relative to creaseline_x.
@@ -298,7 +299,7 @@ def plot_trouser_front(draft, output_path='Logs/trouser_front.svg',
     mm  = draft['measurements']
     crv = draft['curves']
 
-    from garment_programs.plot_utils import setup_figure, finalize_figure
+    from garment_programs.plot_utils import draw_seam_allowance, setup_figure, finalize_figure
     fig, ax, standalone = setup_figure(figsize=(10, 16))
     plt.rcParams['lines.solid_capstyle'] = 'butt'
     REF = dict(color='gray', linewidth=0.8, linestyle='--', alpha=0.4)
@@ -525,6 +526,23 @@ def plot_trouser_front(draft, output_path='Logs/trouser_front.svg',
     ax.plot([pts['knee_side'][0], pts['hem_side_top'][0]],
             [pts['knee_side'][1], pts['hem_side_top'][1]],
             'k-', linewidth=1.5, zorder=4)
+
+    # Seam allowances (CW outline order for outward offset)
+    sa = SEAM_ALLOWANCES['front']
+    sa_edges = [
+        (crv['waistline'],                                        sa['waist']),
+        (np.array([pts['cf_waist'], pts['cf_hip']]),              sa['cf']),
+        (crv['crotch'],                                           sa['crotch']),
+        (crv['inseam_upper'],                                     sa['inseam']),
+        (np.array([pts['knee_inseam'], pts['hem_inseam_top']]),   sa['inseam']),
+        (np.array([pts['hem_inseam_top'], pts['hem_inseam'],
+                   pts['hem_side'], pts['hem_side_top']]),        sa['hem']),
+        (np.array([pts['hem_side_top'], pts['knee_side']]),       sa['side']),
+        (crv['side_upper'][::-1],                                 sa['side']),
+        (np.array([pts['mid_side'], pts['hip_side']]),            sa['side']),
+        (crv['hip'],                                              sa['side']),
+    ]
+    draw_seam_allowance(ax, sa_edges, scale=1.0)
 
     # ── Debug: outline dimension annotations ──────────────────────
     if debug:

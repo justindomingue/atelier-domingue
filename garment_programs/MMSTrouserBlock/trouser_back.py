@@ -18,6 +18,7 @@ from .trouser_front import (
     INCH, PLEAT_CONFIGS, PLEAT_NAMES, load_measurements, draft_trouser_front,
     _bezier_cubic, _bezier_quad, _curve_length, _annotate_len,
 )
+from .seam_allowances import SEAM_ALLOWANCES
 
 
 # -- Design parameters -------------------------------------------------------
@@ -754,6 +755,25 @@ def plot_trouser_back(front, back, output_path='Logs/trouser_back.svg',
     ax.plot(bcrv['waist_seg1'][:, 0], bcrv['waist_seg1'][:, 1], **OUTLINE)
     ax.plot(bcrv['waist_seg2'][:, 0], bcrv['waist_seg2'][:, 1], **OUTLINE)
     ax.plot(bcrv['waist_seg3'][:, 0], bcrv['waist_seg3'][:, 1], **OUTLINE)
+
+    # Seam allowances (CW outline order for outward offset)
+    from garment_programs.plot_utils import draw_seam_allowance
+    sa = SEAM_ALLOWANCES['back']
+    sa_edges = [
+        (bcrv['waist_seg1'],                                               sa['waist']),
+        (bcrv['waist_seg2'],                                               sa['waist']),
+        (bcrv['waist_seg3'],                                               sa['waist']),
+        (np.array([bpts['back_cb_waist'], bpts['bcw_mark']]),             sa['cb']),
+        (bcrv['crotch'],                                                   sa['crotch']),
+        (bcrv['inseam'][::-1],                                             sa['inseam']),
+        (np.array([bpts['back_knee_inseam'], bpts['back_hem_inseam_top']]), sa['inseam']),
+        (np.array([bpts['back_hem_inseam_top'], bpts['back_hem_inseam'],
+                   bpts['back_hem_side'], bpts['back_hem_side_top']]),    sa['hem']),
+        (np.array([bpts['back_hem_side_top'], bpts['back_knee_side']]),   sa['side']),
+        (bcrv['side_lower'],                                               sa['side']),
+        (bcrv['side_upper'],                                               sa['side']),
+    ]
+    draw_seam_allowance(ax, sa_edges, scale=1.0)
 
     if debug:
         # Verification line: perpendicular from CB to sideseam/hipline
