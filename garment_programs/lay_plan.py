@@ -25,6 +25,9 @@ SVG_NS = 'http://www.w3.org/2000/svg'
 ET.register_namespace('', SVG_NS)
 ET.register_namespace('xlink', 'http://www.w3.org/1999/xlink')
 
+INKSCAPE_NS = 'http://www.inkscape.org/namespaces/inkscape'
+ET.register_namespace('inkscape', INKSCAPE_NS)
+
 from garment_programs.geometry import INCH as CM_PER_INCH
 
 PTS_PER_INCH = 72.0
@@ -933,28 +936,25 @@ def polygon_nest(pieces, fabric_width, gap=0.25):
     return best_pos, best_total, best_poly
 
 
-def generate_lay_plan(svg_paths, fabric_width, output_path,
-                      units='inch', gap=0.25):
-    """Composite piece SVGs into a single lay plan SVG.
+# ---------------------------------------------------------------------------
+# Layout helper — expand piece SVGs and run nesting for a single fabric
+# ---------------------------------------------------------------------------
 
-    Pieces are placed WITHOUT rotation — their SVG x-axis (grainline)
-    maps directly to the layout x-axis (fabric length).
+def _layout_fabric(svg_paths, fabric_width, gap=0.25):
+    """Expand piece SVGs and pack them onto a fabric width.
 
     Parameters
     ----------
     svg_paths : list of (svg_file_path, cut_count, selvedge_edge, grain_axis)
-        Each entry is an SVG file, how many copies to cut, an optional
-        selvedge edge indicator ('top' in SVG coords) specifying which edge
-        should sit on the fabric selvedge, and the grain axis ('x' or 'y')
-        indicating which SVG axis carries the grainline.
     fabric_width : float
-        Fabric width in inches.
-    output_path : str or Path
-        Where to write the combined SVG.
-    units : str
-        'inch' or 'cm' — used for ruler labels.
     gap : float
-        Gap between pieces in inches.
+
+    Returns
+    -------
+    pieces : list of (name, grain_len, cross_w, svg_path, transform, edge)
+        Expanded piece list with transforms applied.
+    positions : dict  {name: (x, y)}
+    total_length : float
     """
     # --- Parse dimensions and build piece list ---
     # Each entry: (unique_name, grain_len, cross_w, svg_path, transform, edge)
@@ -1025,8 +1025,7 @@ def generate_lay_plan(svg_paths, fabric_width, output_path,
                                    svg_path, base_transform, None))
 
     if not pieces:
-        print("No pieces to lay out.")
-        return
+        return [], {}, 0.0
 
     # --- Extract polygons and pack ---
     pieces_with_polys = []
@@ -1083,57 +1082,184 @@ def generate_lay_plan(svg_paths, fabric_width, output_path,
             (name, grain_len, cross_w, edge, poly,
              layout_pad_x, layout_pad_y))
 
-    positions, total_length, use_polygons = polygon_nest(
+    positions, total_length, _use_polygons = polygon_nest(
         pieces_with_polys, fabric_width, gap=gap)
 
-    # --- Build composite SVG (horizontal) ---
-    # x = fabric length, y = fabric width
+    return pieces, positions, total_length
+
+
+# ---------------------------------------------------------------------------
+# Rendering helper — draw fabric strip contents into a parent SVG element
+# ---------------------------------------------------------------------------
+
+# Background colors per fabric type
+_BG_COLORS = {
+    'main':        '#faf8f5',
+    'pocketing':   '#f5f8fa',
+    'interfacing': '#faf5f8',
+}
+
+
+def _embed_piece_svg(container, svg_path, x_pt, y_pt, gl_pt, cw_pt,
+                     transform, viewBox_override=None):
+    """Parse a piece SVG and embed it into *container* with the given transform.
+
+    Factored out of _render_strip to keep the per-transform logic in one
+    place (identical for both SVG-layer and PDF-page rendering).
+    """
+    piece_tree = ET.parse(svg_path)
+    piece_root = piece_tree.getroot()
+
+    # Strip the white background rectangle (patch_1) so overlapping
+    # bounding boxes don't hide adjacent pieces in the cutting layout.
+    patch1 = piece_root.find(f'.//{_tag("g")}[@id="patch_1"]')
+    if patch1 is not None:
+        fig_g = piece_root.find(f'.//{_tag("g")}[@id="figure_1"]')
+        if fig_g is not None:
+            fig_g.remove(patch1)
+
+    viewBox = piece_root.get('viewBox')
+    if not viewBox:
+        pw = piece_root.get('width', '0')
+        ph = piece_root.get('height', '0')
+        pw_num = float(pw.replace('pt', '').replace('in', '')
+                       .replace('px', ''))
+        ph_num = float(ph.replace('pt', '').replace('in', '')
+                       .replace('px', ''))
+        viewBox = f'0 0 {pw_num} {ph_num}'
+
+    vb_parts = viewBox.split()
+    vw, vh = float(vb_parts[2]), float(vb_parts[3])
+
+    nested = ET.SubElement(container, _tag('svg'), {
+        'x': f'{x_pt:.2f}',
+        'y': f'{y_pt:.2f}',
+        'width': f'{gl_pt:.2f}',
+        'height': f'{cw_pt:.2f}',
+    })
+
+    if transform == 'cw':
+        nested.set('viewBox', f'0 0 {vh} {vw}')
+        wrapper = ET.SubElement(nested, _tag('g'), {
+            'transform': f'translate({vh}, 0) rotate(90)',
+        })
+        for child in piece_root:
+            wrapper.append(child)
+    elif transform == 'ccw':
+        nested.set('viewBox', f'0 0 {vh} {vw}')
+        wrapper = ET.SubElement(nested, _tag('g'), {
+            'transform': f'translate(0, {vw}) rotate(-90)',
+        })
+        for child in piece_root:
+            wrapper.append(child)
+    elif transform == 'flip_h':
+        nested.set('viewBox', viewBox)
+        wrapper = ET.SubElement(nested, _tag('g'), {
+            'transform': f'translate({vw}, 0) scale(-1, 1)',
+        })
+        for child in piece_root:
+            wrapper.append(child)
+    elif transform == 'ccw_flip_h':
+        nested.set('viewBox', f'0 0 {vh} {vw}')
+        wrapper = ET.SubElement(nested, _tag('g'), {
+            'transform':
+                f'translate({vh}, 0) scale(-1, 1) '
+                f'translate(0, {vw}) rotate(-90)',
+        })
+        for child in piece_root:
+            wrapper.append(child)
+    elif transform == 'ccw_flip_v':
+        nested.set('viewBox', f'0 0 {vh} {vw}')
+        wrapper = ET.SubElement(nested, _tag('g'), {
+            'transform':
+                f'translate(0, {vw}) scale(1, -1) '
+                f'translate(0, {vw}) rotate(-90)',
+        })
+        for child in piece_root:
+            wrapper.append(child)
+    elif transform == 'flip_v':
+        nested.set('viewBox', viewBox)
+        wrapper = ET.SubElement(nested, _tag('g'), {
+            'transform': f'translate(0, {vh}) scale(1, -1)',
+        })
+        for child in piece_root:
+            wrapper.append(child)
+    else:
+        nested.set('viewBox', viewBox)
+        for child in piece_root:
+            nested.append(child)
+
+
+def _render_strip(container, pieces, positions, total_length,
+                  fabric_width, units='inch', gap=0.25,
+                  selvedge=True, bg_color='#faf8f5'):
+    """Render a fabric strip (background, markers, rulers, pieces, yardage)
+    into a parent SVG element.
+
+    Parameters
+    ----------
+    container : Element
+        SVG element to append children to (``<g>`` layer or ``<svg>`` root).
+    pieces : list of (name, grain_len, cross_w, svg_path, transform, edge)
+    positions : dict  {name: (x, y)}
+    total_length : float
+    fabric_width : float
+    units : str
+    gap : float
+    selvedge : bool
+        True for selvedge fabric (red dashed edge lines), False for
+        plain-edge fabric (gray solid edge lines).
+    bg_color : str
+        Background fill color.
+    """
     svg_w_pt = total_length * PTS_PER_INCH
     svg_h_pt = fabric_width * PTS_PER_INCH
 
-    root = ET.Element(_tag('svg'), {
-        'width': f'{svg_w_pt:.2f}pt',
-        'height': f'{svg_h_pt:.2f}pt',
-        'viewBox': f'0 0 {svg_w_pt:.2f} {svg_h_pt:.2f}',
+    # Background (transparent — keeps bounding box for Inkscape layer extents)
+    ET.SubElement(container, _tag('rect'), {
+        'width': f'{svg_w_pt:.2f}', 'height': f'{svg_h_pt:.2f}',
+        'fill': 'none', 'stroke': 'none',
     })
 
-    # Background
-    ET.SubElement(root, _tag('rect'), {
-        'width': '100%', 'height': '100%',
-        'fill': '#faf8f5', 'stroke': 'none',
-    })
+    # --- Edge markers (horizontal lines at top and bottom) ---
+    if selvedge:
+        edge_style = 'stroke:#c44;stroke-width:1.5;stroke-dasharray:8,4'
+        edge_label = 'SELVEDGE'
+        edge_color = '#c44'
+    else:
+        edge_style = 'stroke:#888;stroke-width:0.75;stroke-dasharray:4,2'
+        edge_label = 'EDGE'
+        edge_color = '#888'
 
-    # --- Selvedge markers (horizontal lines at top and bottom) ---
-    selvedge_style = 'stroke:#c44;stroke-width:1.5;stroke-dasharray:8,4'
-    ET.SubElement(root, _tag('line'), {
+    ET.SubElement(container, _tag('line'), {
         'x1': '0', 'y1': '0',
-        'x2': str(svg_w_pt), 'y2': '0',
-        'style': selvedge_style,
+        'x2': f'{svg_w_pt:.2f}', 'y2': '0',
+        'style': edge_style,
     })
-    ET.SubElement(root, _tag('line'), {
-        'x1': '0', 'y1': str(svg_h_pt),
-        'x2': str(svg_w_pt), 'y2': str(svg_h_pt),
-        'style': selvedge_style,
+    ET.SubElement(container, _tag('line'), {
+        'x1': '0', 'y1': f'{svg_h_pt:.2f}',
+        'x2': f'{svg_w_pt:.2f}', 'y2': f'{svg_h_pt:.2f}',
+        'style': edge_style,
     })
 
-    # Selvedge labels
+    # Edge labels
     for y_pos, baseline in [(12, 'hanging'), (svg_h_pt - 4, 'auto')]:
-        label = ET.SubElement(root, _tag('text'), {
+        label = ET.SubElement(container, _tag('text'), {
             'x': '5', 'y': str(y_pos),
             'font-family': 'sans-serif', 'font-size': '10',
-            'fill': '#c44', 'text-anchor': 'start',
+            'fill': edge_color, 'text-anchor': 'start',
             'dominant-baseline': baseline,
         })
-        label.text = 'SELVEDGE'
+        label.text = edge_label
 
     # --- Length rulers (vertical lines every 12 inches / 1 foot) ---
     ruler_interval = 12.0
     x_ruler = ruler_interval
     while x_ruler < total_length:
         x_pt = x_ruler * PTS_PER_INCH
-        ET.SubElement(root, _tag('line'), {
+        ET.SubElement(container, _tag('line'), {
             'x1': str(x_pt), 'y1': '0',
-            'x2': str(x_pt), 'y2': str(svg_h_pt),
+            'x2': str(x_pt), 'y2': f'{svg_h_pt:.2f}',
             'style': 'stroke:#aaa;stroke-width:0.5;stroke-dasharray:4,8',
         })
         if units == 'cm':
@@ -1142,8 +1268,8 @@ def generate_lay_plan(svg_paths, fabric_width, output_path,
             feet = int(x_ruler // 12)
             inches = int(x_ruler % 12)
             label_text = f"{feet}'" if inches == 0 else f"{feet}' {inches}\""
-        ruler_label = ET.SubElement(root, _tag('text'), {
-            'x': str(x_pt + 3), 'y': str(svg_h_pt - 5),
+        ruler_label = ET.SubElement(container, _tag('text'), {
+            'x': str(x_pt + 3), 'y': f'{svg_h_pt - 5:.2f}',
             'font-family': 'sans-serif', 'font-size': '8',
             'fill': '#999', 'text-anchor': 'start',
         })
@@ -1157,7 +1283,7 @@ def generate_lay_plan(svg_paths, fabric_width, output_path,
     box_x = svg_w_pt - box_w - 8
     box_y = 8  # top-right corner
 
-    ET.SubElement(root, _tag('rect'), {
+    ET.SubElement(container, _tag('rect'), {
         'x': str(box_x), 'y': str(box_y),
         'width': str(box_w), 'height': str(box_h),
         'rx': '4',
@@ -1171,7 +1297,7 @@ def generate_lay_plan(svg_paths, fabric_width, output_path,
         (f'{len(pieces)} pieces', 50),
     ]
     for text, dy in info_lines:
-        el = ET.SubElement(root, _tag('text'), {
+        el = ET.SubElement(container, _tag('text'), {
             'x': str(box_x + box_w / 2), 'y': str(box_y + dy),
             'font-family': 'sans-serif', 'font-size': '9',
             'fill': '#444', 'text-anchor': 'middle',
@@ -1183,12 +1309,12 @@ def generate_lay_plan(svg_paths, fabric_width, output_path,
     cal_pt = cal_cm / CM_PER_INCH * PTS_PER_INCH  # 5 cm in points
     cal_x = box_x + (box_w - cal_pt) / 2
     cal_y = box_y + 54
-    ET.SubElement(root, _tag('rect'), {
+    ET.SubElement(container, _tag('rect'), {
         'x': str(cal_x), 'y': str(cal_y),
         'width': f'{cal_pt:.1f}', 'height': f'{cal_pt:.1f}',
         'fill': 'none', 'stroke': '#444', 'stroke-width': '0.75',
     })
-    cal_label = ET.SubElement(root, _tag('text'), {
+    cal_label = ET.SubElement(container, _tag('text'), {
         'x': str(cal_x + cal_pt / 2), 'y': str(cal_y + cal_pt / 2 + 3),
         'font-family': 'sans-serif', 'font-size': '7',
         'fill': '#444', 'text-anchor': 'middle',
@@ -1198,109 +1324,162 @@ def generate_lay_plan(svg_paths, fabric_width, output_path,
     # --- Embed each piece SVG ---
     for name, grain_len, cross_w, svg_path, transform, edge in pieces:
         x, y = positions[name]
-        x_pt = x * PTS_PER_INCH
-        y_pt = y * PTS_PER_INCH
-        gl_pt = grain_len * PTS_PER_INCH
-        cw_pt = cross_w * PTS_PER_INCH
+        _embed_piece_svg(container, svg_path,
+                         x * PTS_PER_INCH, y * PTS_PER_INCH,
+                         grain_len * PTS_PER_INCH, cross_w * PTS_PER_INCH,
+                         transform)
 
-        piece_tree = ET.parse(svg_path)
-        piece_root = piece_tree.getroot()
 
-        # Strip the white background rectangle (patch_1) so overlapping
-        # bounding boxes don't hide adjacent pieces in the cutting layout.
-        patch1 = piece_root.find(
-            f'.//{_tag("g")}[@id="patch_1"]')
-        if patch1 is not None:
-            parent = piece_root.find(
-                f'.//{_tag("g")}[@id="figure_1"]')
-            if parent is not None:
-                parent.remove(patch1)
+# ---------------------------------------------------------------------------
+# Output writers — SVG (Inkscape layers) and PDF (multi-page)
+# ---------------------------------------------------------------------------
 
-        viewBox = piece_root.get('viewBox')
-        if not viewBox:
-            pw = piece_root.get('width', '0')
-            ph = piece_root.get('height', '0')
-            pw_num = float(pw.replace('pt', '').replace('in', '')
-                           .replace('px', ''))
-            ph_num = float(ph.replace('pt', '').replace('in', '')
-                           .replace('px', ''))
-            viewBox = f'0 0 {pw_num} {ph_num}'
+def _write_svg(layouts, output_path, units, gap):
+    """Write a single SVG with Inkscape layers (one per fabric)."""
+    # Canvas = max dimensions across all fabrics
+    max_length = max(tl for _, _, _, tl in layouts)
+    max_width = max(g['fabric_width'] for g, _, _, _ in layouts)
+    svg_w_pt = max_length * PTS_PER_INCH
+    svg_h_pt = max_width * PTS_PER_INCH
 
-        vb_parts = viewBox.split()
-        vw, vh = float(vb_parts[2]), float(vb_parts[3])
+    root = ET.Element(_tag('svg'), {
+        'width': f'{svg_w_pt:.2f}pt',
+        'height': f'{svg_h_pt:.2f}pt',
+        'viewBox': f'0 0 {svg_w_pt:.2f} {svg_h_pt:.2f}',
+    })
 
-        nested = ET.SubElement(root, _tag('svg'), {
-            'x': f'{x_pt:.2f}',
-            'y': f'{y_pt:.2f}',
-            'width': f'{gl_pt:.2f}',
-            'height': f'{cw_pt:.2f}',
+    for i, (group, pieces, positions, total_length) in enumerate(layouts):
+        label = f"{group['label']} ({group['fabric_width']}\""
+        if group['selvedge']:
+            label += ' selvedge'
+        label += ')'
+
+        display = 'inline' if i == 0 else 'none'
+        layer = ET.SubElement(root, _tag('g'), {
+            f'{{{INKSCAPE_NS}}}groupmode': 'layer',
+            f'{{{INKSCAPE_NS}}}label': label,
+            'id': f"layer-{group['name']}",
+            'style': f'display:{display}',
         })
 
-        if transform == 'cw':
-            # 90° CW: SVG top → right.  (x,y) → (y, -x+vh)
-            nested.set('viewBox', f'0 0 {vh} {vw}')
-            wrapper = ET.SubElement(nested, _tag('g'), {
-                'transform': f'translate({vh}, 0) rotate(90)',
-            })
-            for child in piece_root:
-                wrapper.append(child)
-        elif transform == 'ccw':
-            # 90° CCW: SVG top → left.  (x,y) → (-y+vw, x)
-            nested.set('viewBox', f'0 0 {vh} {vw}')
-            wrapper = ET.SubElement(nested, _tag('g'), {
-                'transform': f'translate(0, {vw}) rotate(-90)',
-            })
-            for child in piece_root:
-                wrapper.append(child)
-        elif transform == 'flip_h':
-            # Horizontal flip: left ↔ right mirror.
-            nested.set('viewBox', viewBox)
-            wrapper = ET.SubElement(nested, _tag('g'), {
-                'transform': f'translate({vw}, 0) scale(-1, 1)',
-            })
-            for child in piece_root:
-                wrapper.append(child)
-        elif transform == 'ccw_flip_h':
-            # CCW rotation + horizontal flip (mirror of CCW-rotated piece).
-            nested.set('viewBox', f'0 0 {vh} {vw}')
-            wrapper = ET.SubElement(nested, _tag('g'), {
-                'transform':
-                    f'translate({vh}, 0) scale(-1, 1) '
-                    f'translate(0, {vw}) rotate(-90)',
-            })
-            for child in piece_root:
-                wrapper.append(child)
-        elif transform == 'ccw_flip_v':
-            # CCW rotation + vertical flip (mirror of CCW-rotated piece).
-            # (x,y) → rotate(-90) → (y, vw-x) → flip_v → (y, x)
-            nested.set('viewBox', f'0 0 {vh} {vw}')
-            wrapper = ET.SubElement(nested, _tag('g'), {
-                'transform':
-                    f'translate(0, {vw}) scale(1, -1) '
-                    f'translate(0, {vw}) rotate(-90)',
-            })
-            for child in piece_root:
-                wrapper.append(child)
-        elif transform == 'flip_v':
-            # Vertical flip: outseam (SVG top) moves to bottom of piece.
-            nested.set('viewBox', viewBox)
-            wrapper = ET.SubElement(nested, _tag('g'), {
-                'transform': f'translate(0, {vh}) scale(1, -1)',
-            })
-            for child in piece_root:
-                wrapper.append(child)
-        else:
-            nested.set('viewBox', viewBox)
-            for child in piece_root:
-                nested.append(child)
+        bg_color = _BG_COLORS.get(group['name'], '#f8f8f8')
+        _render_strip(layer, pieces, positions, total_length,
+                      group['fabric_width'], units=units, gap=gap,
+                      selvedge=group['selvedge'], bg_color=bg_color)
 
-    # --- Write output ---
-    output_path = Path(output_path)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
     tree = ET.ElementTree(root)
     ET.indent(tree, space='  ')
     tree.write(str(output_path), xml_declaration=True, encoding='utf-8')
-    print(f"Saved lay plan to {output_path}")
-    print(f"  Fabric: {fabric_width}\" wide x {total_length:.1f}\" long")
-    print(f"  Yardage: {yards:.2f} yd  ({metres:.2f} m)")
-    print(f"  Pieces: {len(pieces)}")
+
+
+def _write_pdf(layouts, output_path, units, gap):
+    """Write a multi-page PDF (one page per fabric) at 1:1 scale."""
+    import io
+
+    try:
+        import cairosvg
+    except ImportError:
+        print("cairosvg not installed — install with: pip install cairosvg")
+        print("Falling back to SVG output.")
+        _write_svg(layouts, output_path.with_suffix('.svg'), units, gap)
+        return
+
+    try:
+        from pypdf import PdfWriter, PdfReader
+    except ImportError:
+        print("pypdf not installed — install with: pip install pypdf")
+        print("Falling back to SVG output.")
+        _write_svg(layouts, output_path.with_suffix('.svg'), units, gap)
+        return
+
+    writer = PdfWriter()
+
+    for group, pieces, positions, total_length in layouts:
+        svg_w_pt = total_length * PTS_PER_INCH
+        svg_h_pt = group['fabric_width'] * PTS_PER_INCH
+
+        svg_root = ET.Element(_tag('svg'), {
+            'width': f'{svg_w_pt:.2f}pt',
+            'height': f'{svg_h_pt:.2f}pt',
+            'viewBox': f'0 0 {svg_w_pt:.2f} {svg_h_pt:.2f}',
+        })
+
+        bg_color = _BG_COLORS.get(group['name'], '#f8f8f8')
+        _render_strip(svg_root, pieces, positions, total_length,
+                      group['fabric_width'], units=units, gap=gap,
+                      selvedge=group['selvedge'], bg_color=bg_color)
+
+        # Serialize to SVG bytes
+        svg_tree = ET.ElementTree(svg_root)
+        ET.indent(svg_tree, space='  ')
+        buf = io.BytesIO()
+        svg_tree.write(buf, xml_declaration=True, encoding='utf-8')
+        svg_bytes = buf.getvalue()
+
+        # Convert to PDF via cairosvg
+        pdf_bytes = cairosvg.svg2pdf(bytestring=svg_bytes)
+
+        # Add page(s) to the writer
+        reader = PdfReader(io.BytesIO(pdf_bytes))
+        for page in reader.pages:
+            writer.add_page(page)
+
+    with open(output_path, 'wb') as f:
+        writer.write(f)
+
+
+# ---------------------------------------------------------------------------
+# Public entry point
+# ---------------------------------------------------------------------------
+
+def generate_lay_plan(fabric_groups, output_path, units='inch', gap=0.25,
+                      fmt='svg'):
+    """Generate a multi-fabric lay plan as SVG (with Inkscape layers) or PDF.
+
+    Parameters
+    ----------
+    fabric_groups : list of dict
+        Each dict has keys:
+          name         — fabric identifier ('main', 'pocketing', …)
+          label        — human-readable name ('Main Fabric', …)
+          fabric_width — width in inches
+          selvedge     — bool (True for selvedge markers)
+          pieces       — list of (svg_path, cut_count, selvedge_edge, grain_axis)
+    output_path : str or Path
+    units : str  ('inch' or 'cm')
+    gap : float  (spacing between pieces in inches)
+    fmt : str    ('svg' or 'pdf')
+    """
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # --- Layout phase: pack each fabric group ---
+    layouts = []  # (group, pieces, positions, total_length)
+    for group in fabric_groups:
+        print(f"\n  Laying out {group['label']} ({group['fabric_width']}\" wide)...")
+        pieces, positions, total_length = _layout_fabric(
+            group['pieces'], group['fabric_width'], gap=gap)
+        if not pieces:
+            print(f"    (no pieces)")
+            continue
+        layouts.append((group, pieces, positions, total_length))
+
+    if not layouts:
+        print("No pieces to lay out.")
+        return
+
+    # --- Summary per fabric ---
+    for group, pieces, positions, total_length in layouts:
+        yards = total_length / 36.0
+        metres = total_length * CM_PER_INCH / 100.0
+        print(f"  {group['label']}: {group['fabric_width']}\" wide × "
+              f"{total_length:.1f}\" long = {yards:.2f} yd ({metres:.2f} m), "
+              f"{len(pieces)} pieces")
+
+    # --- Write output ---
+    if fmt == 'pdf':
+        _write_pdf(layouts, output_path, units, gap)
+    else:
+        _write_svg(layouts, output_path, units, gap)
+
+    print(f"\nSaved lay plan to {output_path}")

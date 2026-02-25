@@ -145,7 +145,7 @@ def main():
         print(f"Output: {output_dir}/")
 
         outputs = []
-        svg_pieces = []  # (svg_path, cut_count) for lay plan
+        fabric_pieces = {}  # fabric_name -> [(svg_path, cut_count, selvedge_edge, grain_axis)]
 
         for piece in garment['pieces']:
             print(f"  Drafting {piece['name']}...")
@@ -163,50 +163,58 @@ def main():
 
             outputs.append((piece['name'], out))
 
-            # Collect main-fabric pieces for lay plan (skip verify, pocketing, etc.)
+            # Collect pieces per fabric for lay plan
             cut_count = piece.get('cut_count', 0)
+            if cut_count <= 0:
+                continue
             fabric = piece.get('fabric', 'main')
-            if cut_count > 0 and fabric == 'main':
-                svg_pieces.append((svg_path, cut_count,
-                                   piece.get('selvedge_edge'),
-                                   piece.get('grain_axis', 'x')))
+            fabric_pieces.setdefault(fabric, []).append(
+                (svg_path, cut_count, piece.get('selvedge_edge'),
+                 piece.get('grain_axis', 'x')))
+            # Interfacing: same SVG, also placed on interfacing fabric
+            if piece.get('interfacing'):
+                fabric_pieces.setdefault('interfacing', []).append(
+                    (svg_path, cut_count, None,
+                     piece.get('grain_axis', 'x')))
 
         print(f"\nGenerated {len(outputs)} pieces:")
         for name, path in outputs:
             print(f"  {name} -> {path}")
 
-        # Generate lay plan SVG (pattern mode only)
-        if svg_pieces and not debug:
+        # Build fabric groups and generate lay plan (pattern mode only)
+        if fabric_pieces and not debug:
             from garment_programs.lay_plan import generate_lay_plan
-            fabric_width = args.fabric_width or garment.get('fabric_width', 60)
-            layout_path = f'{output_dir}/lay_plan.svg'
-            print(f"\n  Generating lay plan ({fabric_width}\" fabric)...")
-            generate_lay_plan(svg_pieces, fabric_width, layout_path,
-                              units=units)
 
-        # Summarize non-main fabric and interfacing requirements
-        other_fabrics = {}  # fabric_name -> [(piece_name, cut_count), ...]
-        interfacing_pieces = []
-        for piece in garment['pieces']:
-            cut_count = piece.get('cut_count', 0)
-            if cut_count <= 0:
-                continue
-            fabric = piece.get('fabric', 'main')
-            if fabric != 'main':
-                other_fabrics.setdefault(fabric, []).append(
-                    (piece['name'], cut_count))
-            if piece.get('interfacing'):
-                interfacing_pieces.append((piece['name'], cut_count))
+            FABRIC_DEFAULTS = {
+                'main':        {'label': 'Main Fabric',  'selvedge': True,  'width': 60},
+                'pocketing':   {'label': 'Pocketing',    'selvedge': False, 'width': 45},
+                'interfacing': {'label': 'Interfacing',  'selvedge': False, 'width': 20},
+            }
+            garment_widths = garment.get('fabric_widths', {})
 
-        if other_fabrics or interfacing_pieces:
-            print("\nAdditional cutting notes:")
-            for fab, items in other_fabrics.items():
-                parts_str = ', '.join(f"{n} (cut {c})" for n, c in items)
-                print(f"  {fab.title()}: {parts_str}")
-            if interfacing_pieces:
-                parts_str = ', '.join(f"{n} (cut {c})"
-                                      for n, c in interfacing_pieces)
-                print(f"  Interfacing: {parts_str}")
+            fabric_groups = []
+            for name in ['main'] + sorted(k for k in fabric_pieces if k != 'main'):
+                if name not in fabric_pieces:
+                    continue
+                defaults = FABRIC_DEFAULTS.get(
+                    name, {'label': name.title(), 'selvedge': False, 'width': 45})
+                fabric_groups.append({
+                    'name': name,
+                    'label': defaults['label'],
+                    'fabric_width': (
+                        garment_widths.get(name, defaults['width'])
+                        if name != 'main'
+                        else (args.fabric_width
+                              or garment.get('fabric_width', defaults['width']))
+                    ),
+                    'selvedge': defaults['selvedge'],
+                    'pieces': fabric_pieces[name],
+                })
+
+            layout_path = f'{output_dir}/lay_plan.{fmt}'
+            print(f"\n  Generating lay plan...")
+            generate_lay_plan(fabric_groups, layout_path,
+                              units=units, fmt=fmt)
     else:
         # Single piece — may be dotted (pkg.module) or standalone
         parts = program_name.split('.', 1)

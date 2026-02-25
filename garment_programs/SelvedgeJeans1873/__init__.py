@@ -9,8 +9,6 @@ _SHARED_PIECES = [
     # Historically the 1873 version is ~1" longer (top at waistband center,
     # bottom just below pocket opening); using identical geometry for now.
     {'module': 'jeans_watch_pocket',  'name': 'Watch Pocket',         'cut_count': 1, 'grain_axis': 'y'},
-    # --- Pocketing fabric ---
-    {'module': 'jeans_front_pocket',  'name': 'Front Pocket Bag',     'cut_count': 2, 'fabric': 'pocketing'},
 ]
 
 GARMENTS = [
@@ -20,6 +18,10 @@ GARMENTS = [
     {
         'name': '1873 Selvedge Denim Jeans',
         'fabric_width': 31,  # inches — narrow selvedge denim
+        'fabric_widths': {
+            'pocketing': 45,    # standard pocketing cotton
+            'interfacing': 20,  # standard fusible interfacing
+        },
         'pieces': _SHARED_PIECES + [
             {'module': 'jeans_back',          'name': 'Back Panel',       'cut_count': 2, 'selvedge_edge': 'top',
              'kwargs': {'gathering_amount': 1.905}},      # 0.75" gathering for 1873
@@ -27,6 +29,8 @@ GARMENTS = [
             {'module': 'jeans_fly_1873',      'name': 'Fly (1873)',       'cut_count': 2, 'grain_axis': 'y', 'interfacing': True},
             {'module': 'jeans_back_pocket',   'name': 'Back Pocket',      'cut_count': 2, 'grain_axis': 'y'},
             {'module': 'jeans_back_cinch',    'name': 'Back Cinch Belt',  'cut_count': 1, 'selvedge_edge': 'bottom'},
+            # --- Pocketing fabric (last — cut from separate material) ---
+            {'module': 'jeans_front_pocket',  'name': 'Front Pocket Bag',     'cut_count': 2, 'fabric': 'pocketing'},
         ],
     },
     # ------------------------------------------------------------------ #
@@ -35,11 +39,17 @@ GARMENTS = [
     {
         'name': 'Modern Selvedge Denim Jeans',
         'fabric_width': 31,  # inches — narrow selvedge denim
+        'fabric_widths': {
+            'pocketing': 45,    # standard pocketing cotton
+            'interfacing': 20,  # standard fusible interfacing
+        },
         'pieces': _SHARED_PIECES + [
             {'module': 'jeans_back',          'name': 'Back Panel',       'cut_count': 2, 'selvedge_edge': 'top'},
             {'module': 'jeans_yoke_modern',   'name': 'Yoke (Modern)',    'cut_count': 2},
             {'module': 'jeans_fly_one_piece', 'name': 'Fly (One-Piece)',  'cut_count': 1, 'grain_axis': 'y'},
             {'module': 'jeans_back_pocket',   'name': 'Back Pocket',      'cut_count': 2, 'grain_axis': 'y'},
+            # --- Pocketing fabric (last — cut from separate material) ---
+            {'module': 'jeans_front_pocket',  'name': 'Front Pocket Bag',     'cut_count': 2, 'fabric': 'pocketing'},
         ],
     },
 ]

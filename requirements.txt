@@ -2,3 +2,5 @@ numpy
 matplotlib
 pyyaml
 scipy
+cairosvg
+pypdf
