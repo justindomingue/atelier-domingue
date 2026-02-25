@@ -22,6 +22,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 
+from garment_programs.core.runtime import cache_draft, resolve_measurements
 from garment_programs.plot_utils import (
     SEAMLINE, draw_seam_allowance, display_scale, setup_figure, finalize_figure,
 )
@@ -159,8 +160,9 @@ def plot_jeans_waistband(wb, output_path='Logs/jeans_waistband.svg',
 
 # -- Entry point for generic runner ------------------------------------------
 
-def run(measurements_path, output_path, debug=False, units='cm', pdf_pages=None):
-    m = load_measurements(measurements_path)
-    wb = draft_jeans_waistband(m)
+def run(measurements_path, output_path, debug=False, units='cm', pdf_pages=None,
+        context=None):
+    m = resolve_measurements(context, measurements_path, load_measurements)
+    wb = cache_draft(context, 'selvedge.waistband', lambda: draft_jeans_waistband(m))
     plot_jeans_waistband(wb, output_path, debug=debug, units=units,
                          pdf_pages=pdf_pages)

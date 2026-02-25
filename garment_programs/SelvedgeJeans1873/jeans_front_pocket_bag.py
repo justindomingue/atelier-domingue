@@ -18,6 +18,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 
+from garment_programs.core.runtime import cache_draft, resolve_measurements
 from .jeans_front import (
     INCH, load_measurements, draft_jeans_front,
     _bezier_cubic, _curve_length, _annotate_segment,
@@ -442,9 +443,14 @@ def plot_jeans_front_pocket(piece, output_path='Logs/jeans_front_pocket.svg',
 
 # -- Entry point for generic runner ------------------------------------------
 
-def run(measurements_path, output_path, debug=False, units='cm', pdf_pages=None):
-    m = load_measurements(measurements_path)
-    front = draft_jeans_front(m)
-    pocket = draft_jeans_front_pocket(m, front)
+def run(measurements_path, output_path, debug=False, units='cm', pdf_pages=None,
+        context=None):
+    m = resolve_measurements(context, measurements_path, load_measurements)
+    front = cache_draft(context, 'selvedge.front', lambda: draft_jeans_front(m))
+    pocket = cache_draft(
+        context,
+        'selvedge.front_pocket',
+        lambda: draft_jeans_front_pocket(m, front),
+    )
     plot_jeans_front_pocket(pocket, output_path, debug=debug, units=units,
                             pdf_pages=pdf_pages)

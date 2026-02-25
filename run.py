@@ -1,10 +1,15 @@
 """Generic TUI runner — select measurements and garment program via fzf."""
 import argparse
 import importlib
+import inspect
+import json
 import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
+
+from garment_programs.measurements import load_measurements
+from garment_programs.core.types import PieceRuntimeContext
 
 MEASUREMENTS_DIR = Path('measurements')
 PROGRAMS_DIR = Path('garment_programs')
@@ -47,7 +52,33 @@ def _discover_garments():
     return garments
 
 
-def _run_piece(pkg, piece, measurements_path, debug, units, fmt='svg', output_dir=None):
+def _supports_param(fn, name):
+    """Return True when *fn* accepts *name* or arbitrary keyword args."""
+    sig = inspect.signature(fn)
+    if name in sig.parameters:
+        return True
+    return any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values())
+
+
+def _invoke_run(module, measurements_path, output_path, debug, units, kwargs=None,
+                context=None):
+    """Invoke a piece module run() with safe optional kwargs."""
+    run_kwargs = dict(kwargs or {})
+    if context is not None and _supports_param(module.run, 'context'):
+        run_kwargs['context'] = context
+    result = module.run(measurements_path, output_path, debug=debug, units=units, **run_kwargs)
+    if (
+        isinstance(result, dict)
+        and str(output_path).endswith('.svg')
+        and isinstance(result.get('layout_outline'), dict)
+    ):
+        sidecar_path = Path(output_path).with_suffix('.outline.json')
+        sidecar_path.write_text(json.dumps(result['layout_outline']))
+    return result
+
+
+def _run_piece(pkg, piece, measurements_path, debug, units, fmt='svg', output_dir=None,
+               context=None):
     """Import and run a single piece module, returning the output path."""
     piece_module = piece['module']
     full_module = f'garment_programs.{pkg}.{piece_module}'
@@ -59,7 +90,8 @@ def _run_piece(pkg, piece, measurements_path, debug, units, fmt='svg', output_di
         timestamp = datetime.now().strftime('%Y-%m-%d_%H%M%S')
         output_path = f'Logs/{pkg}.{piece_module}_{measurements_stem}_{timestamp}.{fmt}'
     kwargs = piece.get('kwargs', {})
-    module.run(measurements_path, output_path, debug=debug, units=units, **kwargs)
+    _invoke_run(module, measurements_path, output_path, debug, units,
+                kwargs=kwargs, context=context)
     return output_path
 
 
@@ -92,6 +124,10 @@ def main():
     else:
         yamls = sorted(str(p) for p in MEASUREMENTS_DIR.glob('*.yaml'))
         measurements_path = _fzf_select(yamls, 'Measurements')
+    runtime_context = PieceRuntimeContext(
+        measurements_path=str(Path(measurements_path)),
+        measurements=load_measurements(measurements_path),
+    )
 
     # --- discover garments ---
     garments = _discover_garments()
@@ -176,12 +212,14 @@ def main():
 
             # Always generate SVG (intermediate for layout)
             svg_path = _run_piece(pkg, piece, measurements_path, debug, units,
-                                  fmt='svg', output_dir=output_dir)
+                                  fmt='svg', output_dir=output_dir,
+                                  context=runtime_context)
 
             # Also generate requested format if not SVG
             if fmt != 'svg':
                 out = _run_piece(pkg, piece, measurements_path, debug, units,
-                                 fmt=fmt, output_dir=output_dir)
+                                 fmt=fmt, output_dir=output_dir,
+                                 context=runtime_context)
             else:
                 out = svg_path
 
@@ -246,7 +284,8 @@ def main():
         if len(parts) == 2 and parts[0] in pkg_counts:
             # Build a synthetic piece dict for the single-piece run
             piece = {'module': parts[1]}
-            _run_piece(parts[0], piece, measurements_path, debug, units, fmt=fmt)
+            _run_piece(parts[0], piece, measurements_path, debug, units, fmt=fmt,
+                       context=runtime_context)
         else:
             if program_name in pkg_counts:
                 # Unambiguous package names are handled above; this catches any
@@ -263,7 +302,8 @@ def main():
                 sys.exit(2)
             module = importlib.import_module(f'garment_programs.{program_name}')
             output_path = f'Logs/{program_name}_{measurements_stem}_{timestamp}.{fmt}'
-            module.run(measurements_path, output_path, debug=debug, units=units)
+            _invoke_run(module, measurements_path, output_path, debug, units,
+                        context=runtime_context)
 
 
 if __name__ == '__main__':

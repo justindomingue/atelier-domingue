@@ -9,6 +9,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 
+from garment_programs.core.runtime import cache_draft, resolve_measurements
 from garment_programs.plot_utils import (
     SEAMLINE, draw_seam_allowance, display_scale, setup_figure, finalize_figure,
 )
@@ -257,11 +258,12 @@ def plot_jeans_yoke(front, back, yoke, output_path='Logs/jeans_yoke.svg',
 
 # -- Entry point for generic runner ------------------------------------------
 
-def run(measurements_path, output_path, debug=False, units='cm', pdf_pages=None):
+def run(measurements_path, output_path, debug=False, units='cm', pdf_pages=None,
+        context=None):
     """Uniform interface called by the generic runner."""
-    m = load_measurements(measurements_path)
-    front = draft_jeans_front(m)
-    back = draft_jeans_back(m, front)
-    yoke = draft_jeans_yoke(m, front, back)
+    m = resolve_measurements(context, measurements_path, load_measurements)
+    front = cache_draft(context, 'selvedge.front', lambda: draft_jeans_front(m))
+    back = cache_draft(context, 'selvedge.back:0.0000', lambda: draft_jeans_back(m, front))
+    yoke = cache_draft(context, 'selvedge.yoke_1873:0.0000', lambda: draft_jeans_yoke(m, front, back))
     plot_jeans_yoke(front, back, yoke, output_path, debug=debug, units=units,
                     pdf_pages=pdf_pages)

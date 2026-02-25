@@ -25,6 +25,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 
+from garment_programs.core.runtime import cache_draft, resolve_measurements
 from .jeans_front import INCH, load_measurements, draft_jeans_front, _annotate_segment
 from .jeans_back import draft_jeans_back
 from .jeans_yoke_1873 import draft_jeans_yoke
@@ -203,11 +204,16 @@ def plot_jeans_back_pocket(pocket, output_path='Logs/jeans_back_pocket.svg',
 
 # -- Entry point for generic runner ------------------------------------------
 
-def run(measurements_path, output_path, debug=False, units='cm', pdf_pages=None):
-    m = load_measurements(measurements_path)
-    front = draft_jeans_front(m)
-    back = draft_jeans_back(m, front)
-    yoke = draft_jeans_yoke(m, front, back)
-    pocket = draft_jeans_back_pocket(m, front, back, yoke)
+def run(measurements_path, output_path, debug=False, units='cm', pdf_pages=None,
+        context=None):
+    m = resolve_measurements(context, measurements_path, load_measurements)
+    front = cache_draft(context, 'selvedge.front', lambda: draft_jeans_front(m))
+    back = cache_draft(context, 'selvedge.back:0.0000', lambda: draft_jeans_back(m, front))
+    yoke = cache_draft(context, 'selvedge.yoke_1873:0.0000', lambda: draft_jeans_yoke(m, front, back))
+    pocket = cache_draft(
+        context,
+        'selvedge.back_pocket:0.0000',
+        lambda: draft_jeans_back_pocket(m, front, back, yoke),
+    )
     plot_jeans_back_pocket(pocket, output_path, debug=debug, units=units,
                            pdf_pages=pdf_pages)

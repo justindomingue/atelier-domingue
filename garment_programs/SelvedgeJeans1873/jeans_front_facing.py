@@ -23,6 +23,7 @@ Grain line: vertical (parallel to side seam).
 import numpy as np
 import matplotlib.pyplot as plt
 
+from garment_programs.core.runtime import cache_draft, resolve_measurements
 from .jeans_front import (
     INCH, load_measurements, draft_jeans_front,
     _annotate_segment, _annotate_curve, _curve_length,
@@ -235,8 +236,13 @@ def plot_jeans_front_facing(piece, output_path='Logs/jeans_front_facing.svg',
 
 # -- Entry point for generic runner ------------------------------------------
 
-def run(measurements_path, output_path, debug=False, units='cm', pdf_pages=None):
-    m = load_measurements(measurements_path)
-    piece = draft_jeans_front_facing(m)
+def run(measurements_path, output_path, debug=False, units='cm', pdf_pages=None,
+        context=None):
+    m = resolve_measurements(context, measurements_path, load_measurements)
+    piece = cache_draft(
+        context,
+        'selvedge.front_facing',
+        lambda: draft_jeans_front_facing(m),
+    )
     plot_jeans_front_facing(piece, output_path, debug=debug, units=units,
                             pdf_pages=pdf_pages)

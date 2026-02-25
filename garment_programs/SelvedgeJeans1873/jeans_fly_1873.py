@@ -17,6 +17,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 
+from garment_programs.core.runtime import cache_draft, resolve_measurements
 from garment_programs.plot_utils import (
     SEAMLINE, CUTLINE, draw_seam_allowance, display_scale, setup_figure, finalize_figure,
 )
@@ -168,9 +169,14 @@ def plot_jeans_fly_1873(fly, output_path='Logs/jeans_fly_1873.svg',
 
 # -- Entry point for generic runner ------------------------------------------
 
-def run(measurements_path, output_path, debug=False, units='cm', pdf_pages=None):
-    m = load_measurements(measurements_path)
-    front = draft_jeans_front(m)
-    fly = draft_jeans_fly_1873(m, front)
+def run(measurements_path, output_path, debug=False, units='cm', pdf_pages=None,
+        context=None):
+    m = resolve_measurements(context, measurements_path, load_measurements)
+    front = cache_draft(context, 'selvedge.front', lambda: draft_jeans_front(m))
+    fly = cache_draft(
+        context,
+        'selvedge.fly_1873',
+        lambda: draft_jeans_fly_1873(m, front),
+    )
     plot_jeans_fly_1873(fly, output_path, debug=debug, units=units,
                         pdf_pages=pdf_pages)

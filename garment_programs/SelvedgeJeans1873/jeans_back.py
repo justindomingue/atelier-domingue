@@ -11,6 +11,8 @@ from pathlib import Path
 from garment_programs.plot_utils import (
     SEAMLINE, draw_seam_allowance, display_scale, setup_figure, finalize_figure,
 )
+from garment_programs.core.types import DraftData
+from garment_programs.core.runtime import cache_draft, resolve_measurements
 from .jeans_front import (
     INCH, load_measurements, draft_jeans_front,
     _bezier_cubic, _bezier_quad,
@@ -23,7 +25,8 @@ from .seam_allowances import YOKE_SEAT_DEPTH
 
 # -- Drafting ----------------------------------------------------------------
 
-def draft_jeans_back(m, front, gathering_amount=0):
+def draft_jeans_back(m: dict[str, float], front: DraftData,
+                     gathering_amount=0) -> DraftData:
     """
     Compute back panel geometry, built on top of the front draft.
 
@@ -518,15 +521,28 @@ def plot_jeans_back(front, back, output_path='Logs/jeans_back.svg', debug=False,
 # -- Entry point for generic runner ------------------------------------------
 
 def run(measurements_path, output_path, debug=False, units='cm', pdf_pages=None,
-        gathering_amount=0):
+        gathering_amount=0, context=None):
     """Uniform interface called by the generic runner."""
-    m = load_measurements(measurements_path)
-    front = draft_jeans_front(m)
-    back = draft_jeans_back(m, front, gathering_amount=gathering_amount)
+    m = resolve_measurements(context, measurements_path, load_measurements)
+    front = cache_draft(context, 'selvedge.front', lambda: draft_jeans_front(m))
+    back_key = f'selvedge.back:{gathering_amount:.4f}'
+    back = cache_draft(
+        context,
+        back_key,
+        lambda: draft_jeans_back(m, front, gathering_amount=gathering_amount),
+    )
     # Draft pocket so we can show its placement on the back panel
     from .jeans_yoke_1873 import draft_jeans_yoke
     from .jeans_back_pocket import draft_jeans_back_pocket
-    yoke = draft_jeans_yoke(m, front, back)
-    pocket = draft_jeans_back_pocket(m, front, back, yoke)
+    yoke = cache_draft(
+        context,
+        f'selvedge.yoke_1873:{gathering_amount:.4f}',
+        lambda: draft_jeans_yoke(m, front, back),
+    )
+    pocket = cache_draft(
+        context,
+        f'selvedge.back_pocket:{gathering_amount:.4f}',
+        lambda: draft_jeans_back_pocket(m, front, back, yoke),
+    )
     plot_jeans_back(front, back, output_path, debug=debug, units=units,
                     pdf_pages=pdf_pages, pocket=pocket)

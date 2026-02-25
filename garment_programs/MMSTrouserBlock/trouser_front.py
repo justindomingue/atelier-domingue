@@ -12,6 +12,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 
+from garment_programs.core.types import DraftData
 from garment_programs.geometry import (
     INCH, _bezier_cubic, _bezier_quad, _curve_length, _annotate_len,
 )
@@ -31,7 +32,7 @@ PLEAT_NAMES = {0: 'Flat-Front', 1: '1-Pleat', 2: '2-Pleat'}
 
 # -- Drafting ----------------------------------------------------------------
 
-def draft_trouser_front(m, num_pleats=1):
+def draft_trouser_front(m: dict[str, float], num_pleats=1) -> DraftData:
     """
     Compute all geometry for the trouser front.
 

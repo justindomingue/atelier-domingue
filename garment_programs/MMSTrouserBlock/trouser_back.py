@@ -13,6 +13,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 
+from garment_programs.core.types import DraftData
 from .trouser_front import (
     INCH, PLEAT_CONFIGS, PLEAT_NAMES, load_measurements, draft_trouser_front,
     _bezier_cubic, _bezier_quad, _curve_length, _annotate_len,
@@ -56,8 +57,9 @@ DART_SMALL_LEN = 7.5      # cm
 
 # -- Drafting ----------------------------------------------------------------
 
-def draft_trouser_back(m, front, num_pleats=1, creaseline_shift=CREASELINE_SHIFT,
-                       cb_slant=CB_SLANT):
+def draft_trouser_back(m: dict[str, float], front: DraftData, num_pleats=1,
+                       creaseline_shift=CREASELINE_SHIFT,
+                       cb_slant=CB_SLANT) -> DraftData:
     """
     Compute all geometry for the trouser back.
 

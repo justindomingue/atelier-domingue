@@ -14,7 +14,9 @@ from garment_programs.geometry import (
     _curve_from_arclength,
     _annotate_curve, _annotate_segment,
 )
+from garment_programs.core.types import DraftData
 from garment_programs.measurements import load_measurements
+from garment_programs.core.runtime import cache_draft, resolve_measurements
 from garment_programs.plot_utils import (
     SEAMLINE, CUTLINE, offset_polyline, draw_seam_allowance, draw_notch,
     display_scale, setup_figure, finalize_figure,
@@ -23,7 +25,7 @@ from garment_programs.plot_utils import (
 
 # -- Drafting ----------------------------------------------------------------
 
-def draft_jeans_front(m):
+def draft_jeans_front(m: dict[str, float]) -> DraftData:
     """
     Compute all points, curves, and construction geometry for the jeans front.
 
@@ -429,11 +431,16 @@ def plot_jeans_front(draft, output_path='Logs/jeans_front.svg', debug=False, uni
 
 # -- Entry point for generic runner ------------------------------------------
 
-def run(measurements_path, output_path, debug=False, units='cm', pdf_pages=None):
+def run(measurements_path, output_path, debug=False, units='cm', pdf_pages=None,
+        context=None):
     """Uniform interface called by the generic runner."""
-    m = load_measurements(measurements_path)
-    draft = draft_jeans_front(m)
+    m = resolve_measurements(context, measurements_path, load_measurements)
+    draft = cache_draft(context, 'selvedge.front', lambda: draft_jeans_front(m))
     from .jeans_front_pocket_bag import draft_jeans_front_pocket
-    pocket = draft_jeans_front_pocket(m, draft)
+    pocket = cache_draft(
+        context,
+        'selvedge.front_pocket',
+        lambda: draft_jeans_front_pocket(m, draft),
+    )
     plot_jeans_front(draft, output_path, debug=debug, units=units, pocket=pocket,
                      pdf_pages=pdf_pages)

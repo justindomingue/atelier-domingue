@@ -8,6 +8,9 @@ Personal garment drafting programs based on historical tailoring methods.
 atelier-domingue/
 ├── architecture.md
 ├── garment_programs/
+│   ├── core/                        # Shared runtime utilities
+│   │   ├── types.py                 # PieceRuntimeContext, DraftData
+│   │   └── runtime.py               # Shared measurement/cache helpers
 │   ├── SelvedgeJeans1873/          # Selvedge jeans variants (1873 + modern)
 │   │   ├── __init__.py             # GARMENTS list (2 variants)
 │   │   ├── jeans_front.py
@@ -61,12 +64,15 @@ Output goes to `Logs/`.
 Program selection notes:
 - `--program` accepts garment names, unambiguous package names, or dotted piece modules.
 - If a package contains multiple garments (for example `SelvedgeJeans1873`), use a garment name or a dotted module.
+- Lay-plan default prefers matching front/back panel pairing; use `--shortest-layout` to optimize only for minimum length.
 
 ### Adding a new garment program
 
 1. Create `garment_programs/MyGarment/` with an `__init__.py` defining a `GARMENT` dict (or `GARMENTS` list for multiple variants)
-2. Each piece module exposes a `run(measurements_path, output_path, debug, units)` function
-3. It will automatically appear in the fzf selection
+2. Each piece module exposes `run(measurements_path, output_path, debug, units, context=None)`
+3. Use `context` to access shared converted measurements and cached draft data when available
+4. Optionally return `{"layout_outline": ...}` from `run()` to emit `<piece>.outline.json` sidecars for lay planning
+5. It will automatically appear in the fzf selection
 
 ## Measurements
 
@@ -76,12 +82,17 @@ To use different measurements, create a new file in `measurements/`.
 
 ## Module structure
 
-Each garment program module exposes:
+Each garment program module typically exposes:
 
 - **`load_measurements(yaml_path)`** — reads YAML, converts units, returns a dict
 - **`draft_*(m)`** — takes measurements dict, computes all points/curves/construction geometry, returns a structured result dict
 - **`plot_*(draft, output_path)`** — renders the draft to a matplotlib figure
-- **`run(measurements_path, output_path, debug, units)`** — top-level entry point
+- **`run(measurements_path, output_path, debug, units, context=None)`** — top-level entry point (supports shared runtime context)
+
+Runtime notes:
+- `run.py` loads and validates measurements once per invocation and passes them through `PieceRuntimeContext`.
+- `garment_programs.core.runtime.resolve_measurements()` provides backward-compatible access to shared measurements.
+- `garment_programs.core.runtime.cache_draft()` allows piece modules to reuse draft computations across runs.
 
 This is intentionally procedural (not class-based). Historical drafting is a sequence of geometric operations, and functions map naturally to that.
 

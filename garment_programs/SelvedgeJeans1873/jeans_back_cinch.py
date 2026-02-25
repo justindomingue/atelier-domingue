@@ -18,6 +18,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 
+from garment_programs.core.runtime import cache_draft, resolve_measurements
 from garment_programs.plot_utils import display_scale, setup_figure, finalize_figure
 from .jeans_front import INCH, load_measurements, _annotate_segment
 
@@ -153,8 +154,9 @@ def plot_jeans_back_cinch(cinch, output_path='Logs/jeans_back_cinch.svg',
 
 # -- Entry point for generic runner ------------------------------------------
 
-def run(measurements_path, output_path, debug=False, units='cm', pdf_pages=None):
-    m = load_measurements(measurements_path)
-    cinch = draft_jeans_back_cinch(m)
+def run(measurements_path, output_path, debug=False, units='cm', pdf_pages=None,
+        context=None):
+    m = resolve_measurements(context, measurements_path, load_measurements)
+    cinch = cache_draft(context, 'selvedge.back_cinch', lambda: draft_jeans_back_cinch(m))
     plot_jeans_back_cinch(cinch, output_path, debug=debug, units=units,
                           pdf_pages=pdf_pages)

@@ -15,10 +15,12 @@ outseam sits on the selvedge.
 """
 
 import math
+import json
 import re
 import warnings
 import xml.etree.ElementTree as ET
 from pathlib import Path
+import numpy as np
 
 # SVG namespace
 SVG_NS = 'http://www.w3.org/2000/svg'
@@ -219,21 +221,159 @@ def skyline_pack(pieces, fabric_width, gap=0.25, initial_skyline=None,
 # Polygon extraction from piece SVGs
 # ---------------------------------------------------------------------------
 
-def _parse_svg_path_data(d_string):
-    """Parse an SVG path ``d`` attribute (M/L commands only) into vertices.
+def _parse_svg_path_data(d_string, curve_steps=10):
+    """Parse an SVG path ``d`` attribute into polyline vertices.
 
-    Handles whitespace/newline variations in matplotlib's SVG output.
-    Returns a list of (x, y) float tuples.  Ignores Q/C/z commands
-    (quadratic/cubic beziers, closepath) — those appear in grainline arrows
-    and font glyphs, not in piece outlines.
+    Supports M/L/H/V/C/Q/Z path commands (absolute + relative) and
+    approximates Bezier segments into line segments.
+
+    Returns
+    -------
+    vertices : list[(float, float)]
+    closed : bool
+        True when a closepath command is present or start/end coincide.
     """
+    token_re = re.compile(r'[MmLlHhVvCcQqZz]|[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?')
+    tokens = token_re.findall(d_string)
+    if not tokens:
+        return [], False
+
+    def _is_cmd(tok):
+        return len(tok) == 1 and tok.isalpha()
+
+    def _as_float(idx):
+        return float(tokens[idx])
+
+    i = 0
+    cmd = None
+    current = np.array([0.0, 0.0], dtype=float)
+    subpath_start = None
     vertices = []
-    # Tokenize: find all M or L commands followed by two numbers
-    for m in re.finditer(
-        r'([ML])\s+([-\d.eE]+)\s*[,\s]\s*([-\d.eE]+)', d_string
-    ):
-        vertices.append((float(m.group(2)), float(m.group(3))))
-    return vertices
+    closed = False
+
+    while i < len(tokens):
+        if _is_cmd(tokens[i]):
+            cmd = tokens[i]
+            i += 1
+        if cmd is None:
+            break
+
+        abs_cmd = cmd.upper()
+        rel = cmd.islower()
+
+        if abs_cmd == 'M':
+            # First pair is move-to; subsequent pairs are implicit line-to.
+            if i + 1 >= len(tokens) or _is_cmd(tokens[i]):
+                continue
+            x = _as_float(i)
+            y = _as_float(i + 1)
+            i += 2
+            target = np.array([x, y], dtype=float)
+            if rel:
+                target = current + target
+            current = target
+            subpath_start = current.copy()
+            vertices.append((current[0], current[1]))
+            cmd = 'l' if rel else 'L'
+            continue
+
+        if abs_cmd == 'Z':
+            if subpath_start is not None:
+                current = subpath_start.copy()
+                vertices.append((current[0], current[1]))
+                closed = True
+            continue
+
+        if abs_cmd == 'L':
+            while i + 1 < len(tokens) and not _is_cmd(tokens[i]):
+                x = _as_float(i)
+                y = _as_float(i + 1)
+                i += 2
+                target = np.array([x, y], dtype=float)
+                if rel:
+                    target = current + target
+                current = target
+                vertices.append((current[0], current[1]))
+            continue
+
+        if abs_cmd == 'H':
+            while i < len(tokens) and not _is_cmd(tokens[i]):
+                x = _as_float(i)
+                i += 1
+                target = current.copy()
+                target[0] = current[0] + x if rel else x
+                current = target
+                vertices.append((current[0], current[1]))
+            continue
+
+        if abs_cmd == 'V':
+            while i < len(tokens) and not _is_cmd(tokens[i]):
+                y = _as_float(i)
+                i += 1
+                target = current.copy()
+                target[1] = current[1] + y if rel else y
+                current = target
+                vertices.append((current[0], current[1]))
+            continue
+
+        if abs_cmd == 'Q':
+            while i + 3 < len(tokens) and not _is_cmd(tokens[i]):
+                qx = _as_float(i)
+                qy = _as_float(i + 1)
+                x = _as_float(i + 2)
+                y = _as_float(i + 3)
+                i += 4
+                c = np.array([qx, qy], dtype=float)
+                p = np.array([x, y], dtype=float)
+                if rel:
+                    c = current + c
+                    p = current + p
+                p0 = current.copy()
+                for step in range(1, curve_steps + 1):
+                    t = step / curve_steps
+                    pt = (1 - t) ** 2 * p0 + 2 * (1 - t) * t * c + t ** 2 * p
+                    vertices.append((pt[0], pt[1]))
+                current = p
+            continue
+
+        if abs_cmd == 'C':
+            while i + 5 < len(tokens) and not _is_cmd(tokens[i]):
+                c1x = _as_float(i)
+                c1y = _as_float(i + 1)
+                c2x = _as_float(i + 2)
+                c2y = _as_float(i + 3)
+                x = _as_float(i + 4)
+                y = _as_float(i + 5)
+                i += 6
+                c1 = np.array([c1x, c1y], dtype=float)
+                c2 = np.array([c2x, c2y], dtype=float)
+                p = np.array([x, y], dtype=float)
+                if rel:
+                    c1 = current + c1
+                    c2 = current + c2
+                    p = current + p
+                p0 = current.copy()
+                for step in range(1, curve_steps + 1):
+                    t = step / curve_steps
+                    pt = (
+                        (1 - t) ** 3 * p0
+                        + 3 * (1 - t) ** 2 * t * c1
+                        + 3 * (1 - t) * t ** 2 * c2
+                        + t ** 3 * p
+                    )
+                    vertices.append((pt[0], pt[1]))
+                current = p
+            continue
+
+        # Unsupported command in token stream: skip one token to avoid stalling.
+        if i < len(tokens):
+            i += 1
+
+    if not closed and len(vertices) >= 3:
+        p0 = np.array(vertices[0], dtype=float)
+        p1 = np.array(vertices[-1], dtype=float)
+        closed = np.linalg.norm(p0 - p1) < 1e-3
+    return vertices, closed
 
 
 def _shoelace_area(pts):
@@ -266,6 +406,23 @@ def _extract_outline_polygon(svg_path):
     pad_y : float
         Vertical offset from SVG origin to polygon min-y, in inches.
     """
+    sidecar = Path(svg_path).with_suffix('.outline.json')
+    if sidecar.exists():
+        try:
+            payload = json.loads(sidecar.read_text())
+            poly = payload.get('polygon', [])
+            if isinstance(poly, list) and len(poly) >= 3:
+                points = [(float(p[0]), float(p[1])) for p in poly if len(p) == 2]
+                if len(points) >= 3:
+                    return (
+                        points,
+                        float(payload.get('pad_x', 0.0)),
+                        float(payload.get('pad_y', 0.0)),
+                    )
+        except Exception:
+            # Invalid sidecar should not break layout generation.
+            pass
+
     tree = ET.parse(svg_path)
     root = tree.getroot()
     ns = {'svg': SVG_NS}
@@ -291,8 +448,8 @@ def _extract_outline_polygon(svg_path):
             if not style:
                 continue  # skip glyph definitions (no inline style)
             d = path_el.get('d', '')
-            verts = _parse_svg_path_data(d)
-            if len(verts) < 3:
+            verts, closed = _parse_svg_path_data(d)
+            if len(verts) < 3 or not closed:
                 continue
             area = abs(_shoelace_area(verts))
             if area > best_area:
@@ -702,6 +859,15 @@ def _offset_nest_selvedge(top_pieces, bot_pieces, fabric_width, gap=0.25,
     return nested_positions, remaining_tops, remaining_bots
 
 
+def _select_layout_candidate(candidates, preferred_label=None):
+    """Choose a layout candidate by label preference or shortest length."""
+    if preferred_label:
+        for candidate in candidates:
+            if candidate[4] == preferred_label:
+                return candidate
+    return min(candidates, key=lambda c: (c[0], c[1]))
+
+
 def polygon_nest(pieces, fabric_width, gap=0.25, prefer_offset_nest=True):
     """Polygon-aware nesting with void filling and skyline fallback.
 
@@ -926,13 +1092,10 @@ def polygon_nest(pieces, fabric_width, gap=0.25, prefer_offset_nest=True):
             (c_result[0], 3, c_result[1], False, "offset nest + skyline")
         )
 
-    if c_result is not None and prefer_offset_nest:
-        best_total, _, best_pos, best_poly, best_label = next(
-            c for c in candidates if c[4] == "offset nest + skyline"
-        )
-    else:
-        best_total, _, best_pos, best_poly, best_label = min(
-            candidates, key=lambda c: (c[0], c[1]))
+    preferred = "offset nest + skyline" if c_result is not None and prefer_offset_nest else None
+    best_total, _, best_pos, best_poly, best_label = _select_layout_candidate(
+        candidates, preferred_label=preferred
+    )
 
     # Report
     others = [(t, l) for t, _, _, _, l in candidates if l != best_label]

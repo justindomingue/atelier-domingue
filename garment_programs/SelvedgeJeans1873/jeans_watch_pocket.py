@@ -19,6 +19,7 @@ Grain line: centerline (vertical).
 import numpy as np
 import matplotlib.pyplot as plt
 
+from garment_programs.core.runtime import cache_draft, resolve_measurements
 from .jeans_front import (
     INCH, load_measurements, draft_jeans_front,
     _annotate_segment,
@@ -198,8 +199,13 @@ def plot_jeans_watch_pocket(piece, output_path='Logs/jeans_watch_pocket.svg',
 
 # -- Entry point for generic runner ------------------------------------------
 
-def run(measurements_path, output_path, debug=False, units='cm', pdf_pages=None):
-    m = load_measurements(measurements_path)
-    piece = draft_jeans_watch_pocket(m)
+def run(measurements_path, output_path, debug=False, units='cm', pdf_pages=None,
+        context=None):
+    m = resolve_measurements(context, measurements_path, load_measurements)
+    piece = cache_draft(
+        context,
+        'selvedge.watch_pocket',
+        lambda: draft_jeans_watch_pocket(m),
+    )
     plot_jeans_watch_pocket(piece, output_path, debug=debug, units=units,
                             pdf_pages=pdf_pages)
