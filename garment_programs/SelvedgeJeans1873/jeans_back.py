@@ -9,7 +9,8 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 
 from garment_programs.plot_utils import (
-    SEAMLINE, draw_seam_allowance, display_scale, setup_figure, finalize_figure,
+    SEAMLINE, draw_notch, draw_seam_allowance, display_scale, setup_figure,
+    finalize_figure,
 )
 from garment_programs.core.types import DraftData
 from garment_programs.core.runtime import cache_draft, resolve_measurements
@@ -328,13 +329,6 @@ def plot_jeans_back(front, back, output_path='Logs/jeans_back.svg', debug=False,
         ax.annotate('yoke seam', yoke_mid, textcoords="offset points",
                     xytext=(0, -14), fontsize=7, color='steelblue', ha='center',
                     bbox=dict(boxstyle='round,pad=0.2', fc='white', ec='none', alpha=0.8))
-        _seam_d    = bpts['yoke_seat'] - bpts['yoke_side']
-        _seam_norm = _seam_d / np.linalg.norm(_seam_d)
-        _perp      = np.array([-_seam_norm[1], _seam_norm[0]])
-        _nsize     = 0.25 * INCH * s
-        ax.plot([yoke_mid[0] - _perp[0]*_nsize, yoke_mid[0] + _perp[0]*_nsize],
-                [yoke_mid[1] - _perp[1]*_nsize, yoke_mid[1] + _perp[1]*_nsize],
-                color='steelblue', linewidth=1.2)
 
         # -- Gathering taper annotation (1873 variant) --
         if gathering is not None:
@@ -424,6 +418,12 @@ def plot_jeans_back(front, back, output_path='Logs/jeans_back.svg', debug=False,
             ]
 
     draw_seam_allowance(ax, sa_edges, scale=s)
+
+    # -- Yoke seam notch (matches yoke piece notch placement) --
+    seam_start = g_ext if gathering is not None else bpts['yoke_seat']
+    seam_end = bpts['yoke_side']
+    seam_mid = (seam_start + seam_end) / 2
+    draw_notch(ax, np.array([seam_start, seam_end]), seam_mid, SA_YOKE, scale=s)
 
     # -- Reference lines (clipped to piece outline at each x-position) --
     if debug:

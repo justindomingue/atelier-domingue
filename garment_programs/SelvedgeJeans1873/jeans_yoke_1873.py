@@ -11,7 +11,8 @@ from pathlib import Path
 
 from garment_programs.core.runtime import cache_draft, resolve_measurements
 from garment_programs.plot_utils import (
-    SEAMLINE, draw_seam_allowance, display_scale, setup_figure, finalize_figure,
+    SEAMLINE, draw_notch, draw_seam_allowance, display_scale, setup_figure,
+    finalize_figure,
 )
 from .jeans_front import (
     INCH, load_measurements, draft_jeans_front,
@@ -166,16 +167,6 @@ def plot_jeans_yoke(front, back, yoke, output_path='Logs/jeans_yoke.svg',
     ax.plot([ypts['yoke_side'][0], fpts['1'][0]],
             [ypts['yoke_side'][1], fpts['1'][1]], **OUTLINE)
 
-    # -- Notch on yoke seam (midpoint of straight yoke line) --
-    _notch_mid = (ypts['yoke_seat'] + ypts['yoke_side']) / 2
-    _seam_d    = ypts['yoke_seat'] - ypts['yoke_side']
-    _seam_norm = _seam_d / np.linalg.norm(_seam_d)
-    _perp      = np.array([-_seam_norm[1], _seam_norm[0]])
-    _nsize     = 0.25 * INCH * s
-    ax.plot([_notch_mid[0] - _perp[0]*_nsize, _notch_mid[0] + _perp[0]*_nsize],
-            [_notch_mid[1] - _perp[1]*_nsize, _notch_mid[1] + _perp[1]*_nsize],
-            color='black', linewidth=1.2)
-
     # -- Dart --
     ax.plot([ypts['dart_left_waist'][0],  ypts['dart_left_yoke'][0]],
             [ypts['dart_left_waist'][1],  ypts['dart_left_yoke'][1]],  **DART_STY)
@@ -235,6 +226,11 @@ def plot_jeans_yoke(front, back, yoke, output_path='Logs/jeans_yoke.svg',
         (np.array([bpts['back_waist'], fpts['1']]),              SA_WAIST_YOKE),  # waist
     ]
     draw_seam_allowance(ax, sa_edges, scale=s)
+
+    # -- Notch on yoke seam (midpoint, 1/2" from seamline) --
+    yoke_seam = np.array([ypts['yoke_side'], ypts['yoke_seat']])
+    notch_mid = (ypts['yoke_side'] + ypts['yoke_seat']) / 2
+    draw_notch(ax, yoke_seam, notch_mid, SA_WAIST_YOKE, scale=s)
 
     # --- Grainline and piece label (pattern mode only) ---
     if not debug:

@@ -125,7 +125,7 @@ def save_pattern(fig, ax, output_path, units='cm', pad_cm=1.0, calibration=False
 # -- Notch utility -----------------------------------------------------------
 
 def draw_notch(ax, curve, point, sa_distance, scale=1.0, tangent_offset=0,
-               flip=False):
+               flip=False, notch_length=0.5 * INCH):
     """Draw a notch mark perpendicular to the cut line.
 
     Parameters
@@ -136,7 +136,7 @@ def draw_notch(ax, curve, point, sa_distance, scale=1.0, tangent_offset=0,
     point : ndarray (2,)
         Location on the seamline (already display-scaled).
     sa_distance : float
-        Seam allowance in cm (pre-scaling), same as draw_seam_allowance.
+        Seam allowance in cm (pre-scaling), retained for compatibility.
     scale : float
         Display scale factor.
     tangent_offset : float
@@ -145,7 +145,13 @@ def draw_notch(ax, curve, point, sa_distance, scale=1.0, tangent_offset=0,
     flip : bool
         If True, flip the outward normal (use when the curve runs opposite
         to the SA edge winding direction).
+    notch_length : float | None
+        Notch length in cm (pre-scaling), measured from seamline outward.
+        Use None to fall back to legacy behavior (SA + 1/8").
     """
+    if len(curve) < 2:
+        return
+
     # Find tangent at nearest point on curve
     dists = np.linalg.norm(curve - point, axis=1)
     idx = np.argmin(dists)
@@ -155,18 +161,24 @@ def draw_notch(ax, curve, point, sa_distance, scale=1.0, tangent_offset=0,
         tangent = curve[-1] - curve[-2]
     else:
         tangent = curve[idx + 1] - curve[idx - 1]
-    tangent = tangent / np.linalg.norm(tangent)
+    tangent_norm = np.linalg.norm(tangent)
+    if tangent_norm == 0:
+        return
+    tangent = tangent / tangent_norm
 
     # Normal perpendicular to tangent (left of travel = outward for CW)
     normal = np.array([-tangent[1], tangent[0]])
     if flip:
         normal = -normal
-    sa = abs(sa_distance * scale)
-    extend = 0.125 * INCH * scale         # 1/8" past the cut line
+    if notch_length is None:
+        notch_len = abs(sa_distance) + 0.125 * INCH
+    else:
+        notch_len = abs(notch_length)
+    notch_len *= scale
 
     base = point + tangent * (tangent_offset * scale)
     start = base                          # on the seamline
-    end = base + normal * (sa + extend)   # through the cut line
+    end = base + normal * notch_len
     ax.plot([start[0], end[0]], [start[1], end[1]],
             color='black', linewidth=1.2, solid_capstyle='butt', zorder=6)
 
