@@ -158,7 +158,7 @@ def draft_jeans_front(m: dict[str, float]) -> DraftData:
             'fly_end': fly_end,
         },
         'metadata': {
-            'title': 'Historical Jeans Front Panel (1873)',
+            'title': 'Front',
             'cut_count': 2,
         },
     }
@@ -350,8 +350,9 @@ def plot_jeans_front(draft, output_path='Logs/jeans_front.svg', debug=False, uni
                             xytext=(6, -8), ha='left', fontsize=5, color='steelblue')
 
     # --- Seam allowances (always drawn) ---
-    from .seam_allowances import SEAM_ALLOWANCES
+    from .seam_allowances import SEAM_ALLOWANCES, SEAM_LABELS
     SA = SEAM_ALLOWANCES['front']
+    SL = SEAM_LABELS['front']
     SA_SIDE   = SA['side']
     SA_HEM    = SA['hem']
     SA_INSEAM = SA['inseam']
@@ -374,31 +375,31 @@ def plot_jeans_front(draft, output_path='Logs/jeans_front.svg', debug=False, uni
         #   → crotch(6→8) → 8→7' → rise_above(7'→pocket_upper)
         #   → opening(pocket_upper→pocket_lower)
         sa_edges = [
-            (hip_below_facing,                                       SA_SIDE),
-            (np.array([pts['4'], pts['0']]),                         SA_SIDE),
-            (np.array([pts['0'], pts["0'"]]),                        SA_HEM),
-            (np.array([pts["0'"], pts["3'"]]),                       SA_INSEAM),
-            (curves['inseam'][::-1],                                 SA_INSEAM),
-            (_crotch_body,                                           SA_CROTCH),
-            (_crotch_end,                                            SA_FLY),
-            (np.array([pts['8'], pts["7'"]]),                        SA_FLY),
-            (rise_above_facing[::-1],                                SA_WAIST),
-            (pcurves_sa['opening'],                                  SA_FACING),
+            (hip_below_facing,                                       SA_SIDE, SL['side']),
+            (np.array([pts['4'], pts['0']]),                         SA_SIDE, SL['side']),
+            (np.array([pts['0'], pts["0'"]]),                        SA_HEM, SL['hem']),
+            (np.array([pts["0'"], pts["3'"]]),                       SA_INSEAM, SL['inseam']),
+            (curves['inseam'][::-1],                                 SA_INSEAM, SL['inseam']),
+            (_crotch_body,                                           SA_CROTCH, SL['crotch']),
+            (_crotch_end,                                            SA_FLY, SL['fly']),
+            (np.array([pts['8'], pts["7'"]]),                        SA_FLY, SL['fly']),
+            (rise_above_facing[::-1],                                SA_WAIST, SL['waist']),
+            (pcurves_sa['opening'],                                  SA_FACING, SL['facing']),
         ]
     else:
         # Full outline (debug mode or no pocket data)
         sa_edges = [
-            (curves['hip'],                                          SA_SIDE),
-            (np.array([pts['4'], pts['0']]),                         SA_SIDE),
-            (np.array([pts['0'], pts["0'"]]),                        SA_HEM),
-            (np.array([pts["0'"], pts["3'"]]),                       SA_INSEAM),
-            (curves['inseam'][::-1],                                 SA_INSEAM),
-            (_crotch_body,                                           SA_CROTCH),
-            (_crotch_end,                                            SA_FLY),
-            (np.array([pts['8'], pts["7'"]]),                        SA_FLY),
-            (curves['rise'][::-1],                                   SA_WAIST),
+            (curves['hip'],                                          SA_SIDE, SL['side']),
+            (np.array([pts['4'], pts['0']]),                         SA_SIDE, SL['side']),
+            (np.array([pts['0'], pts["0'"]]),                        SA_HEM, SL['hem']),
+            (np.array([pts["0'"], pts["3'"]]),                       SA_INSEAM, SL['inseam']),
+            (curves['inseam'][::-1],                                 SA_INSEAM, SL['inseam']),
+            (_crotch_body,                                           SA_CROTCH, SL['crotch']),
+            (_crotch_end,                                            SA_FLY, SL['fly']),
+            (np.array([pts['8'], pts["7'"]]),                        SA_FLY, SL['fly']),
+            (curves['rise'][::-1],                                   SA_WAIST, SL['waist']),
         ]
-    draw_seam_allowance(ax, sa_edges, scale=s)
+    draw_seam_allowance(ax, sa_edges, scale=s, label_sas=not debug, units=units)
 
     # --- Notches: matching marks for pocket assembly ---
     if pocket is not None:
@@ -408,6 +409,16 @@ def plot_jeans_front(draft, output_path='Logs/jeans_front.svg', debug=False, uni
                    tangent_offset=NOTCH_OFFSET, flip=True)
         draw_notch(ax, curves['hip'], ppts['pocket_lower'], SA_SIDE, scale=s,
                    tangent_offset=NOTCH_OFFSET)
+
+    # --- Balance notches: knee + hem on side seam and inseam ---
+    # Hem notches are pulled slightly off the corners to avoid seam intersections.
+    hem_t = 0.06
+    side_hem_pt = pts['0'] + (pts['4'] - pts['0']) * hem_t
+    inseam_hem_pt = pts["0'"] + (pts["3'"] - pts["0'"]) * hem_t
+    draw_notch(ax, np.array([pts['4'], pts['0']]), pts['3'], SA_SIDE, scale=s)
+    draw_notch(ax, np.array([pts["0'"], pts["3'"]]), pts["3'"], SA_INSEAM, scale=s)
+    draw_notch(ax, np.array([pts['4'], pts['0']]), side_hem_pt, SA_SIDE, scale=s)
+    draw_notch(ax, np.array([pts["0'"], pts["3'"]]), inseam_hem_pt, SA_INSEAM, scale=s)
 
     # --- Grainline and piece label (pattern mode only) ---
     if not debug:
@@ -423,7 +434,8 @@ def plot_jeans_front(draft, output_path='Logs/jeans_front.svg', debug=False, uni
         all_y = [pts[k][1] for k in ('0', "1'", "7'", '6')]
         center = ((min(all_x) + max(all_x)) / 2, (min(all_y) + max(all_y)) / 2)
         draw_piece_label(ax, center, draft['metadata']['title'],
-                         draft['metadata'].get('cut_count'))
+                         draft['metadata'].get('cut_count'),
+                         metadata=draft.get('metadata'))
 
     finalize_figure(ax, fig, standalone, output_path, units=units, debug=debug,
                     pdf_pages=pdf_pages)

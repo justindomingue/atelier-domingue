@@ -24,12 +24,12 @@ from pathlib import Path
 
 from garment_programs.core.runtime import cache_draft, resolve_measurements
 from garment_programs.plot_utils import (
-    SEAMLINE, draw_seam_allowance, display_scale, setup_figure, finalize_figure,
+    SEAMLINE, CUTLINE, draw_seam_allowance, display_scale, setup_figure, finalize_figure,
 )
 from .jeans_front import (
     INCH, load_measurements, _annotate_segment,
 )
-from .seam_allowances import SEAM_ALLOWANCES
+from .seam_allowances import SEAM_ALLOWANCES, SEAM_LABELS
 
 
 # -- Drafting ----------------------------------------------------------------
@@ -68,7 +68,7 @@ def draft_jeans_waistband(m):
             'extra':       np.float64(extra),
         },
         'metadata': {
-            'title': 'Jeans Waistband',
+            'title': 'Waistband',
             'cut_count': 1,
             'length': length,
             'width': width,
@@ -79,7 +79,8 @@ def draft_jeans_waistband(m):
 # -- Visualization -----------------------------------------------------------
 
 def plot_jeans_waistband(wb, output_path='Logs/jeans_waistband.svg',
-                         debug=False, units='cm', pdf_pages=None, ax=None):
+                         debug=False, units='cm', pdf_pages=None, ax=None,
+                         include_seam_allowance=True):
     s, unit_label = display_scale(units)
 
     pts = {k: v * s for k, v in wb['points'].items()}
@@ -89,6 +90,7 @@ def plot_jeans_waistband(wb, output_path='Logs/jeans_waistband.svg',
 
     fig, ax, standalone = setup_figure(ax, figsize=(18, 4))
     SA = SEAM_ALLOWANCES['waistband']
+    SL = SEAM_LABELS['waistband']
     REF = dict(color='dimgray', linewidth=0.8, linestyle='--', alpha=0.6)
 
     # --- Seamline (finished waistband outline) ---
@@ -99,12 +101,16 @@ def plot_jeans_waistband(wb, output_path='Logs/jeans_waistband.svg',
     # --- Seam allowance outline (CUTLINE) ---
     # CW edge order: top \u2192 right \u2192 bottom \u2192 left
     sa_edges = [
-        (np.array([pts['tl'], pts['tr']]),  SA['top']),      # selvedge \u2014 SA=0
-        (np.array([pts['tr'], pts['br']]),  SA['end']),      # right end
-        (np.array([pts['br'], pts['bl']]),  SA['bottom']),   # bottom seam
-        (np.array([pts['bl'], pts['tl']]),  SA['end']),      # left end
+        (np.array([pts['tl'], pts['tr']]),  SA['top'], SL['top']),      # selvedge \u2014 SA=0
+        (np.array([pts['tr'], pts['br']]),  SA['end'], SL['end']),      # right end
+        (np.array([pts['br'], pts['bl']]),  SA['bottom'], SL['bottom']),   # bottom seam
+        (np.array([pts['bl'], pts['tl']]),  SA['end'], SL['end']),      # left end
     ]
-    draw_seam_allowance(ax, sa_edges, scale=s)
+    if include_seam_allowance:
+        draw_seam_allowance(ax, sa_edges, scale=s, label_sas=not debug, units=units)
+    else:
+        # Interfacing net shape: cut boundary equals the seamline rectangle.
+        ax.plot(xs, ys, **CUTLINE)
 
     # --- Reference lines ---
 
@@ -148,7 +154,8 @@ def plot_jeans_waistband(wb, output_path='Logs/jeans_waistband.svg',
         # Piece label
         center = (length_s / 2, width_s / 2)
         draw_piece_label(ax, center, wb['metadata']['title'],
-                         wb['metadata'].get('cut_count'))
+                         wb['metadata'].get('cut_count'),
+                         metadata=wb.get('metadata'))
 
     if debug:
         _annotate_segment(ax, pts['bl'], pts['br'], offset=(0, -10))
@@ -161,8 +168,9 @@ def plot_jeans_waistband(wb, output_path='Logs/jeans_waistband.svg',
 # -- Entry point for generic runner ------------------------------------------
 
 def run(measurements_path, output_path, debug=False, units='cm', pdf_pages=None,
-        context=None):
+        context=None, include_seam_allowance=True):
     m = resolve_measurements(context, measurements_path, load_measurements)
     wb = cache_draft(context, 'selvedge.waistband', lambda: draft_jeans_waistband(m))
     plot_jeans_waistband(wb, output_path, debug=debug, units=units,
-                         pdf_pages=pdf_pages)
+                         pdf_pages=pdf_pages,
+                         include_seam_allowance=include_seam_allowance)

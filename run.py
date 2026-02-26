@@ -3,11 +3,18 @@ import argparse
 import importlib
 import inspect
 import json
+import os
+import re
 import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
 
+from garment_programs.geometry import INCH
+from garment_programs.core.pattern_metadata import (
+    clear_active_pattern_context,
+    set_active_pattern_context,
+)
 from garment_programs.measurements import load_measurements
 from garment_programs.core.types import PieceRuntimeContext
 
@@ -78,21 +85,103 @@ def _invoke_run(module, measurements_path, output_path, debug, units, kwargs=Non
 
 
 def _run_piece(pkg, piece, measurements_path, debug, units, fmt='svg', output_dir=None,
-               context=None):
+               context=None, output_basename=None, extra_kwargs=None):
     """Import and run a single piece module, returning the output path."""
     piece_module = piece['module']
     full_module = f'garment_programs.{pkg}.{piece_module}'
     module = importlib.import_module(full_module)
     measurements_stem = Path(measurements_path).stem
+    basename = output_basename or piece_module
     if output_dir:
-        output_path = f'{output_dir}/{piece_module}.{fmt}'
+        output_path = f'{output_dir}/{basename}.{fmt}'
     else:
         timestamp = datetime.now().strftime('%Y-%m-%d_%H%M%S')
-        output_path = f'Logs/{pkg}.{piece_module}_{measurements_stem}_{timestamp}.{fmt}'
-    kwargs = piece.get('kwargs', {})
+        output_path = f'Logs/{pkg}.{basename}_{measurements_stem}_{timestamp}.{fmt}'
+    kwargs = dict(piece.get('kwargs', {}))
+    if extra_kwargs:
+        kwargs.update(extra_kwargs)
     _invoke_run(module, measurements_path, output_path, debug, units,
                 kwargs=kwargs, context=context)
     return output_path
+
+
+def _sanitize_code_token(value, default='NA'):
+    """Return an uppercase alphanumeric token safe for pattern codes."""
+    token = re.sub(r'[^A-Za-z0-9]+', '', str(value).upper())
+    return token or default
+
+
+def _infer_variant_code(garment_name):
+    """Infer a short variant token from garment name."""
+    upper = garment_name.upper()
+    if 'MODERN' in upper:
+        return 'MOD'
+    if '1873' in upper or 'HISTORICAL' in upper:
+        return 'HIST'
+    return 'STD'
+
+
+def _infer_garment_code(garment_name):
+    """Infer a stable garment token from garment name."""
+    upper = garment_name.upper()
+    if 'JEANS' in upper and '1873' in upper:
+        return 'JE1873'
+    words = [w for w in re.split(r'[^A-Za-z0-9]+', upper) if w]
+    if not words:
+        return 'GARMENT'
+    return _sanitize_code_token(''.join(w[:3] for w in words[:3]), default='GARMENT')
+
+
+def _size_code_from_measurements(measurements):
+    """Build a short printable size token from waist measurement."""
+    waist_cm = measurements.get('waist')
+    if waist_cm is None:
+        return 'CUST'
+    waist_in = float(waist_cm) / INCH
+    rounded = round(waist_in)
+    if abs(waist_in - rounded) < 0.05:
+        return f'{int(rounded):02d}'
+    return f'{waist_in:.1f}'.replace('.', 'P')
+
+
+def _build_pattern_codes(garment_name, measurements):
+    """Build set-level pattern code fields for title blocks."""
+    brand = _sanitize_code_token(os.environ.get('PATTERN_BRAND', 'AD'))
+    revision = _sanitize_code_token(os.environ.get('PATTERN_REVISION', 'R01'))
+    garment_code = _infer_garment_code(garment_name)
+    variant = _infer_variant_code(garment_name)
+    size_code = _size_code_from_measurements(measurements)
+    pattern_set_code = f'{brand}-{garment_code}-{variant}-{size_code}-{revision}'
+    return {
+        'pattern_set_code': pattern_set_code,
+        'size_code': size_code,
+        'revision': revision,
+    }
+
+
+def _piece_slug(module_name):
+    """Convert a module name to a short piece code token."""
+    slug = str(module_name)
+    if slug.startswith('jeans_'):
+        slug = slug[len('jeans_'):]
+    return _sanitize_code_token(slug.replace('_', ''), default='PIECE')[:12]
+
+
+def _build_piece_code_map(garment, pattern_set_code):
+    """Assign stable per-piece codes in garment order."""
+    piece_codes = {}
+    piece_no = 1
+    for piece in garment.get('pieces', []):
+        if piece.get('cut_count', 0) <= 0:
+            continue
+        module = piece['module']
+        if module in piece_codes:
+            continue
+        piece_codes[module] = (
+            f'{pattern_set_code}-P{piece_no:02d}-{_piece_slug(module)}'
+        )
+        piece_no += 1
+    return piece_codes
 
 
 def main():
@@ -206,22 +295,47 @@ def main():
 
         outputs = []
         fabric_pieces = {}  # fabric_name -> [(svg_path, cut_count, selvedge_edge, grain_axis)]
+        pattern_codes = _build_pattern_codes(garment['name'], runtime_context.measurements)
+        piece_code_map = _build_piece_code_map(garment, pattern_codes['pattern_set_code'])
 
         for piece in garment['pieces']:
             print(f"  Drafting {piece['name']}...")
+            set_active_pattern_context({
+                **pattern_codes,
+                'piece_code': piece_code_map.get(piece['module']),
+            })
 
-            # Always generate SVG (intermediate for layout)
-            svg_path = _run_piece(pkg, piece, measurements_path, debug, units,
-                                  fmt='svg', output_dir=output_dir,
-                                  context=runtime_context)
+            interfacing_svg_path = None
+            try:
+                # Always generate SVG (intermediate for layout)
+                svg_path = _run_piece(pkg, piece, measurements_path, debug, units,
+                                      fmt='svg', output_dir=output_dir,
+                                      context=runtime_context)
 
-            # Also generate requested format if not SVG
-            if fmt != 'svg':
-                out = _run_piece(pkg, piece, measurements_path, debug, units,
-                                 fmt=fmt, output_dir=output_dir,
-                                 context=runtime_context)
-            else:
-                out = svg_path
+                # Interfacing gets a dedicated net-shape SVG (no seam allowances)
+                if piece.get('interfacing') and not debug:
+                    interfacing_svg_path = _run_piece(
+                        pkg,
+                        piece,
+                        measurements_path,
+                        debug,
+                        units,
+                        fmt='svg',
+                        output_dir=output_dir,
+                        context=runtime_context,
+                        output_basename=f"{piece['module']}.interfacing",
+                        extra_kwargs={'include_seam_allowance': False},
+                    )
+
+                # Also generate requested format if not SVG
+                if fmt != 'svg':
+                    out = _run_piece(pkg, piece, measurements_path, debug, units,
+                                     fmt=fmt, output_dir=output_dir,
+                                     context=runtime_context)
+                else:
+                    out = svg_path
+            finally:
+                clear_active_pattern_context()
 
             outputs.append((piece['name'], out))
 
@@ -233,10 +347,11 @@ def main():
             fabric_pieces.setdefault(fabric, []).append(
                 (svg_path, cut_count, piece.get('selvedge_edge'),
                  piece.get('grain_axis', 'x')))
-            # Interfacing: same SVG, also placed on interfacing fabric
+            # Interfacing: use dedicated net-shape SVG when available.
             if piece.get('interfacing'):
+                interfacing_path = interfacing_svg_path or svg_path
                 fabric_pieces.setdefault('interfacing', []).append(
-                    (svg_path, cut_count, None,
+                    (interfacing_path, cut_count, None,
                      piece.get('grain_axis', 'x')))
 
         print(f"\nGenerated {len(outputs)} pieces:")
@@ -284,8 +399,12 @@ def main():
         if len(parts) == 2 and parts[0] in pkg_counts:
             # Build a synthetic piece dict for the single-piece run
             piece = {'module': parts[1]}
-            _run_piece(parts[0], piece, measurements_path, debug, units, fmt=fmt,
-                       context=runtime_context)
+            set_active_pattern_context({})
+            try:
+                _run_piece(parts[0], piece, measurements_path, debug, units, fmt=fmt,
+                           context=runtime_context)
+            finally:
+                clear_active_pattern_context()
         else:
             if program_name in pkg_counts:
                 # Unambiguous package names are handled above; this catches any
@@ -302,8 +421,12 @@ def main():
                 sys.exit(2)
             module = importlib.import_module(f'garment_programs.{program_name}')
             output_path = f'Logs/{program_name}_{measurements_stem}_{timestamp}.{fmt}'
-            _invoke_run(module, measurements_path, output_path, debug, units,
-                        context=runtime_context)
+            set_active_pattern_context({})
+            try:
+                _invoke_run(module, measurements_path, output_path, debug, units,
+                            context=runtime_context)
+            finally:
+                clear_active_pattern_context()
 
 
 if __name__ == '__main__':

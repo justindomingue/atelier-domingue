@@ -1274,6 +1274,86 @@ _BG_COLORS = {
 }
 
 
+def _parse_translate(transform):
+    """Parse the first SVG translate(tx[, ty]) from a transform string."""
+    if not transform:
+        return None
+    m = re.search(r'translate\(\s*([+-]?\d*\.?\d+(?:[eE][+-]?\d+)?)'
+                  r'(?:[\s,]+([+-]?\d*\.?\d+(?:[eE][+-]?\d+)?))?\s*\)', transform)
+    if not m:
+        return None
+    tx = float(m.group(1))
+    ty = float(m.group(2)) if m.group(2) is not None else 0.0
+    return tx, ty
+
+
+def _find_parent(root, child):
+    """Return (parent, index) for *child* in an ElementTree rooted at *root*."""
+    for parent in root.iter():
+        children = list(parent)
+        for idx, node in enumerate(children):
+            if node is child:
+                return parent, idx
+    return None, None
+
+
+def _infer_text_anchor(group):
+    """Infer a local anchor point for a matplotlib text group."""
+    # Matplotlib text groups usually contain a descendant with
+    # transform="translate(x y) scale(...)". Use that translation anchor.
+    for node in [group, *list(group.iter())]:
+        tr = node.get('transform')
+        parsed = _parse_translate(tr)
+        if parsed is not None:
+            return parsed
+    return None
+
+
+def _reflection_matrix_for_transform(transform):
+    """Return the reflection matrix coefficients (a,b,c,d) for a transform."""
+    return {
+        'flip_h': (-1.0, 0.0, 0.0, 1.0),
+        'flip_v': (1.0, 0.0, 0.0, -1.0),
+        'ccw_flip_h': (0.0, -1.0, -1.0, 0.0),
+        'ccw_flip_v': (0.0, 1.0, 1.0, 0.0),
+    }.get(transform)
+
+
+def _matrix_about_anchor(a, b, c, d, ax, ay):
+    """Build an SVG matrix(...) string applying linear map around anchor."""
+    e = ax - (a * ax + c * ay)
+    f = ay - (b * ax + d * ay)
+    return f'matrix({a:.6f} {b:.6f} {c:.6f} {d:.6f} {e:.6f} {f:.6f})'
+
+
+def _counter_reflect_text_groups(piece_root, transform):
+    """Counter-reflect text_* groups so mirrored placements remain readable."""
+    coeffs = _reflection_matrix_for_transform(transform)
+    if coeffs is None:
+        return
+    a, b, c, d = coeffs
+
+    text_groups = []
+    for g in piece_root.findall(f'.//{_tag("g")}'):
+        if g.get('id', '').startswith('text_'):
+            text_groups.append(g)
+
+    for group in text_groups:
+        anchor = _infer_text_anchor(group)
+        if anchor is None:
+            continue
+        ax, ay = anchor
+        corr = _matrix_about_anchor(a, b, c, d, ax, ay)
+
+        parent, idx = _find_parent(piece_root, group)
+        if parent is None:
+            continue
+        wrapper = ET.Element(_tag('g'), {'transform': corr})
+        parent.remove(group)
+        wrapper.append(group)
+        parent.insert(idx, wrapper)
+
+
 def _embed_piece_svg(container, svg_path, x_pt, y_pt, gl_pt, cw_pt,
                      transform, viewBox_override=None):
     """Parse a piece SVG and embed it into *container* with the given transform.
@@ -1291,6 +1371,10 @@ def _embed_piece_svg(container, svg_path, x_pt, y_pt, gl_pt, cw_pt,
         fig_g = piece_root.find(f'.//{_tag("g")}[@id="figure_1"]')
         if fig_g is not None:
             fig_g.remove(patch1)
+
+    # For mirrored placements, counter-reflect text groups locally so
+    # labels remain readable while preserving mirrored geometry placement.
+    _counter_reflect_text_groups(piece_root, transform=transform)
 
     viewBox = piece_root.get('viewBox')
     if not viewBox:
@@ -1362,7 +1446,6 @@ def _embed_piece_svg(container, svg_path, x_pt, y_pt, gl_pt, cw_pt,
         nested.set('viewBox', viewBox)
         for child in piece_root:
             nested.append(child)
-
 
 def _render_strip(container, pieces, positions, total_length,
                   fabric_width, units='inch', gap=0.25,

@@ -123,8 +123,9 @@ def draft_jeans_front_facing(m):
     rotated_watch = shift_curve(rotated_watch)
 
     # SA values
-    from .seam_allowances import SEAM_ALLOWANCES
+    from .seam_allowances import SEAM_ALLOWANCES, SEAM_LABELS
     _sa = SEAM_ALLOWANCES['front_facing']
+    _sl = SEAM_LABELS['front_facing']
     sa_waist = _sa['waist']
     sa_sideseam = _sa['sideseam']
     sa_opening = _sa['opening']
@@ -151,7 +152,7 @@ def draft_jeans_front_facing(m):
         },
         'construction': {},
         'metadata': {
-            'title': 'Front Pocket Facing',
+            'title': 'Facing',
             'cut_count': 2,
             'sa_waist': sa_waist,
             'sa_sideseam': sa_sideseam,
@@ -169,6 +170,8 @@ def plot_jeans_front_facing(piece, output_path='Logs/jeans_front_facing.svg',
     pts = {k: v * s for k, v in piece['points'].items()}
     curves = {k: v * s for k, v in piece['curves'].items()}
     meta = piece['metadata']
+    from .seam_allowances import SEAM_LABELS
+    _sl = SEAM_LABELS['front_facing']
 
     fig, ax, standalone = setup_figure(ax, figsize=(10, 8))
     # Finished outline: rise → opening → hip (all continuous)
@@ -192,11 +195,11 @@ def plot_jeans_front_facing(piece, output_path='Logs/jeans_front_facing.svg',
     #   → rise (pocket_upper→pt1)
     from garment_programs.plot_utils import draw_seam_allowance
     sa_edges = [
-        (hip[::-1],     meta['sa_sideseam']),   # 3/4" side seam
-        (opening[::-1], meta['sa_opening']),     # 1¼" pocket opening
-        (rise[::-1],    meta['sa_waist']),       # 3/8" waist
+        (hip[::-1],     meta['sa_sideseam'], _sl['sideseam']),   # 3/4" side seam
+        (opening[::-1], meta['sa_opening'], _sl['opening']),     # 1¼" pocket opening
+        (rise[::-1],    meta['sa_waist'], _sl['waist']),       # 3/8" waist
     ]
-    draw_seam_allowance(ax, sa_edges, scale=s)
+    draw_seam_allowance(ax, sa_edges, scale=s, label_sas=not debug, units=units)
 
     # --- Notches: matching marks for pocket assembly ---
     NOTCH_OFFSET = 0.375 * INCH   # 3/8" away from pocket mouth
@@ -216,7 +219,8 @@ def plot_jeans_front_facing(piece, output_path='Logs/jeans_front_facing.svg',
         bbox_max = all_curves.max(axis=0)
         center = ((bbox_min[0] + bbox_max[0]) / 2, (bbox_min[1] + bbox_max[1]) / 2)
         draw_piece_label(ax, center, piece['metadata']['title'],
-                         piece['metadata'].get('cut_count'))
+                         piece['metadata'].get('cut_count'),
+                         metadata=piece.get('metadata'))
 
     if debug:
         for name, pt in pts.items():

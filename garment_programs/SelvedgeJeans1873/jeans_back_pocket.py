@@ -157,8 +157,9 @@ def plot_jeans_back_pocket(pocket, output_path='Logs/jeans_back_pocket.svg',
     pts = {k: v * s for k, v in local_pts.items()}
 
     fig, ax, standalone = setup_figure(ax, figsize=(8, 10))
-    from .seam_allowances import SEAM_ALLOWANCES
+    from .seam_allowances import SEAM_ALLOWANCES, SEAM_LABELS
     SA = SEAM_ALLOWANCES['back_pocket']
+    SL = SEAM_LABELS['back_pocket']
 
     # Finished shape (pentagon: tl → tr → ref_r → bottom → ref_l → tl)
     f_order = ['f_tl', 'f_ref_l', 'f_bottom', 'f_ref_r', 'f_tr', 'f_tl']
@@ -168,13 +169,13 @@ def plot_jeans_back_pocket(pocket, output_path='Logs/jeans_back_pocket.svg',
 
     # SA outline via draw_seam_allowance (CW in local coords)
     sa_edges = [
-        (np.array([pts['f_tl'], pts['f_ref_l']]),      SA['side']),
-        (np.array([pts['f_ref_l'], pts['f_bottom']]),  SA['side']),
-        (np.array([pts['f_bottom'], pts['f_ref_r']]),  SA['side']),
-        (np.array([pts['f_ref_r'], pts['f_tr']]),      SA['side']),
-        (np.array([pts['f_tr'], pts['f_tl']]),         SA['top']),
+        (np.array([pts['f_tl'], pts['f_ref_l']]),      SA['side'], SL['side']),
+        (np.array([pts['f_ref_l'], pts['f_bottom']]),  SA['side'], SL['side']),
+        (np.array([pts['f_bottom'], pts['f_ref_r']]),  SA['side'], SL['side']),
+        (np.array([pts['f_ref_r'], pts['f_tr']]),      SA['side'], SL['side']),
+        (np.array([pts['f_tr'], pts['f_tl']]),         SA['top'], SL['top']),
     ]
-    draw_seam_allowance(ax, sa_edges, scale=s)
+    draw_seam_allowance(ax, sa_edges, scale=s, label_sas=not debug, units=units)
 
     # Grain line arrow (double-headed, now vertical in local frame)
     from garment_programs.plot_utils import draw_grainline, draw_piece_label
@@ -185,7 +186,8 @@ def plot_jeans_back_pocket(pocket, output_path='Logs/jeans_back_pocket.svg',
         centroid = (pts['f_tl'] + pts['f_tr'] + pts['f_ref_l'] + pts['f_ref_r'] + pts['f_bottom']) / 5
         draw_piece_label(ax, (centroid[0], centroid[1]),
                          pocket['metadata']['title'],
-                         pocket['metadata'].get('cut_count'))
+                         pocket['metadata'].get('cut_count'),
+                         metadata=pocket.get('metadata'))
 
     if debug:
         for name in ['f_tl', 'f_tr', 'f_ref_l', 'f_ref_r', 'f_bottom']:

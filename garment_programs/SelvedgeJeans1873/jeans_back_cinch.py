@@ -15,11 +15,11 @@ Seam allowances:
   Short ends:               1/2" each end
 """
 import numpy as np
-import matplotlib.pyplot as plt
-from pathlib import Path
 
 from garment_programs.core.runtime import cache_draft, resolve_measurements
-from garment_programs.plot_utils import display_scale, setup_figure, finalize_figure
+from garment_programs.plot_utils import (
+    SEAMLINE, CUTLINE, display_scale, setup_figure, finalize_figure,
+)
 from .jeans_front import INCH, load_measurements, _annotate_segment
 
 
@@ -43,11 +43,11 @@ def draft_jeans_back_cinch(m):
     wide_half = 5 / 8 * INCH
     narrow_half = 1 / 2 * INCH
 
-    # Finished shape (centered on y = 0)
-    f_tl = np.array([0.0, wide_half])
-    f_bl = np.array([0.0, -wide_half])
-    f_tr = np.array([length, narrow_half])
-    f_br = np.array([length, -narrow_half])
+    # Finished seamline shape (centered on y = 0)
+    seam_tl = np.array([0.0, wide_half])
+    seam_bl = np.array([0.0, -wide_half])
+    seam_tr = np.array([length, narrow_half])
+    seam_br = np.array([length, -narrow_half])
 
     # Seam allowances
     from .seam_allowances import SEAM_ALLOWANCES
@@ -56,22 +56,31 @@ def draft_jeans_back_cinch(m):
     sa_narrow = _sa['narrow']
     sa_end = _sa['end']
 
-    sa_tl = np.array([-sa_end, wide_half + sa_wide])
-    sa_bl = np.array([-sa_end, -(wide_half + sa_wide)])
-    sa_tr = np.array([length + sa_end, narrow_half + sa_narrow])
-    sa_br = np.array([length + sa_end, -(narrow_half + sa_narrow)])
+    # Cutline built directly from the drafting instructions:
+    #   - 3/4" long-edge SA at wide end
+    #   - 5/8" long-edge SA at narrow end
+    #   - 1/2" SA at both short ends
+    cut_tl = np.array([-sa_end, wide_half + sa_wide])
+    cut_bl = np.array([-sa_end, -(wide_half + sa_wide)])
+    cut_tr = np.array([length + sa_end, narrow_half + sa_narrow])
+    cut_br = np.array([length + sa_end, -(narrow_half + sa_narrow)])
 
     return {
         'points': {
-            'f_tl': f_tl, 'f_bl': f_bl, 'f_tr': f_tr, 'f_br': f_br,
-            'sa_tl': sa_tl, 'sa_bl': sa_bl, 'sa_tr': sa_tr, 'sa_br': sa_br,
+            'seam_tl': seam_tl, 'seam_bl': seam_bl,
+            'seam_tr': seam_tr, 'seam_br': seam_br,
+            'cut_tl': cut_tl, 'cut_bl': cut_bl,
+            'cut_tr': cut_tr, 'cut_br': cut_br,
         },
         'curves': {},
         'construction': {},
         'metadata': {
-            'title': 'Back Cinch Belt',
+            'title': 'Cinch Belt',
             'length': length,
             'cut_count': 1,
+            'sa_wide': sa_wide,
+            'sa_narrow': sa_narrow,
+            'sa_end': sa_end,
         },
     }
 
@@ -80,41 +89,42 @@ def draft_jeans_back_cinch(m):
 
 def plot_jeans_back_cinch(cinch, output_path='Logs/jeans_back_cinch.svg',
                           debug=False, units='cm', pdf_pages=None, ax=None):
-    s, unit_label = display_scale(units)
+    s, _unit_label = display_scale(units)
 
     pts = {k: v * s for k, v in cinch['points'].items()}
 
-    # Rotate the whole piece so the bottom SA edge is horizontal (grainline
+    # Rotate the whole piece so the bottom cut edge is horizontal (grainline
     # parallel to the selvedge).  Applied here so the draft stays clean.
-    sel_dir = pts['sa_br'] - pts['sa_bl']
+    sel_dir = pts['cut_br'] - pts['cut_bl']
     angle = np.arctan2(sel_dir[1], sel_dir[0])
     ca, sn = np.cos(-angle), np.sin(-angle)
     R = np.array([[ca, -sn], [sn, ca]])
-    pivot = pts['f_bl'].copy()
+    pivot = pts['seam_bl'].copy()
     pts = {k: pivot + R @ (v - pivot) for k, v in pts.items()}
 
     fig, ax, standalone = setup_figure(ax, figsize=(12, 4))
-    LINE = dict(color='black', linewidth=1.5)
+    REF = dict(color='dimgray', linewidth=0.8, linestyle='--', alpha=0.7)
 
-    # -- Long edges (SA top, finished top, center, finished bottom, SA bottom) --
-    for a, b in [('sa_tl', 'sa_tr'), ('f_tl', 'f_tr'),
-                 ('f_bl', 'f_br'), ('sa_bl', 'sa_br')]:
-        ax.plot([pts[a][0], pts[b][0]], [pts[a][1], pts[b][1]], **LINE)
-    # Center line (midpoints of finished ends)
-    center_l = (pts['f_tl'] + pts['f_bl']) / 2
-    center_r = (pts['f_tr'] + pts['f_br']) / 2
-    ax.plot([center_l[0], center_r[0]], [center_l[1], center_r[1]], **LINE)
+    # Seamline (finished size) and cutline (with SA) as closed outlines.
+    seam_outline = np.array([
+        pts['seam_tl'], pts['seam_tr'], pts['seam_br'], pts['seam_bl'], pts['seam_tl'],
+    ])
+    cut_outline = np.array([
+        pts['cut_tl'], pts['cut_tr'], pts['cut_br'], pts['cut_bl'], pts['cut_tl'],
+    ])
+    ax.plot(seam_outline[:, 0], seam_outline[:, 1], **SEAMLINE)
+    ax.plot(cut_outline[:, 0], cut_outline[:, 1], **CUTLINE)
 
-    # -- End lines at wide end and narrow end --
-    for t, b in [('f_tl', 'f_bl'), ('f_tr', 'f_br'),
-                 ('sa_tl', 'sa_bl'), ('sa_tr', 'sa_br')]:
-        ax.plot([pts[t][0], pts[b][0]], [pts[t][1], pts[b][1]], **LINE)
+    # Center guideline
+    center_l = (pts['seam_tl'] + pts['seam_bl']) / 2
+    center_r = (pts['seam_tr'] + pts['seam_br']) / 2
+    ax.plot([center_l[0], center_r[0]], [center_l[1], center_r[1]], **REF)
 
     # 1/2" labels beside the end SA lines
-    mid_left = (pts['sa_tl'] + pts['sa_bl']) / 2
+    mid_left = (pts['cut_tl'] + pts['cut_bl']) / 2
     ax.text(mid_left[0] - 0.15 * s, mid_left[1], '1/2"',
             fontsize=12, ha='right', va='center')
-    mid_right = (pts['sa_tr'] + pts['sa_br']) / 2
+    mid_right = (pts['cut_tr'] + pts['cut_br']) / 2
     ax.text(mid_right[0] + 0.15 * s, mid_right[1], '1/2"',
             fontsize=12, ha='left', va='center')
 
@@ -123,7 +133,6 @@ def plot_jeans_back_cinch(cinch, output_path='Logs/jeans_back_cinch.svg',
         from garment_programs.plot_utils import draw_grainline, draw_piece_label
         # Grainline along the selvedge direction (now horizontal)
         center = (center_l + center_r) / 2
-        sel_norm = sel_dir / np.linalg.norm(sel_dir)
         grain_half = np.linalg.norm(center_r - center_l) * 0.35
         grain_left = center - np.array([grain_half, 0])
         grain_right = center + np.array([grain_half, 0])
@@ -131,7 +140,8 @@ def plot_jeans_back_cinch(cinch, output_path='Logs/jeans_back_cinch.svg',
 
         # Piece label
         draw_piece_label(ax, (center[0], center[1]), cinch['metadata']['title'],
-                         cinch['metadata'].get('cut_count'))
+                         cinch['metadata'].get('cut_count'),
+                         metadata=cinch.get('metadata'))
 
     if debug:
         for name, pt in pts.items():
@@ -139,11 +149,11 @@ def plot_jeans_back_cinch(cinch, output_path='Logs/jeans_back_cinch.svg',
             ax.annotate(name, pt, textcoords="offset points",
                         xytext=(4, 4), ha='left', fontsize=6)
 
-        _annotate_segment(ax, pts['f_bl'], pts['f_br'], offset=(0, -10))
-        _annotate_segment(ax, pts['f_tl'], pts['f_bl'], offset=(-14, 0))
-        _annotate_segment(ax, pts['f_tr'], pts['f_br'], offset=(10, 0))
+        _annotate_segment(ax, pts['seam_bl'], pts['seam_br'], offset=(0, -10))
+        _annotate_segment(ax, pts['seam_tl'], pts['seam_bl'], offset=(-14, 0))
+        _annotate_segment(ax, pts['seam_tr'], pts['seam_br'], offset=(10, 0))
 
-        sel_mid = (pts['f_bl'] + pts['f_br']) / 2
+        sel_mid = (pts['cut_bl'] + pts['cut_br']) / 2
         ax.annotate('selvedge edge', (sel_mid[0], sel_mid[1]),
                     textcoords="offset points", xytext=(0, -6),
                     fontsize=6, color='gray', ha='center')

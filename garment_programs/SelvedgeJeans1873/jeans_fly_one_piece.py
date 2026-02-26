@@ -70,7 +70,7 @@ def draft_jeans_fly_one_piece(m, front):
             'sa_right_x': np.float64(width - sa),
         },
         'metadata': {
-            'title': 'One-Piece Fly',
+            'title': 'Fly',
             'cut_count': 1,
             'length': length,
             'width': width,
@@ -117,7 +117,8 @@ def plot_jeans_fly_one_piece(fly, output_path='Logs/jeans_fly_one_piece.svg',
         # Piece label
         center = (width_s / 2, length_s / 2)
         draw_piece_label(ax, center, fly['metadata']['title'],
-                         fly['metadata'].get('cut_count'))
+                         fly['metadata'].get('cut_count'),
+                         metadata=fly.get('metadata'))
 
     if debug:
         # Seam allowance lines

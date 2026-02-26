@@ -103,7 +103,7 @@ def draft_jeans_yoke(m, front, back):
             'waist_thirds_2': waist_thirds_2,
         },
         'metadata': {
-            'title': 'Historical Jeans Yoke (1873)',
+            'title': 'Yoke',
             'cut_count': 2,
             'yoke_seat_dist': yoke_seat_dist,
         },
@@ -211,8 +211,9 @@ def plot_jeans_yoke(front, back, yoke, output_path='Logs/jeans_yoke.svg',
                         color='gray', alpha=0.4)
 
     # --- Seam allowances (always drawn) ---
-    from .seam_allowances import SEAM_ALLOWANCES
+    from .seam_allowances import SEAM_ALLOWANCES, SEAM_LABELS
     _sa = SEAM_ALLOWANCES['yoke']
+    _sl = SEAM_LABELS['yoke']
     SA_SEAT_YOKE  = _sa['seat']
     SA_SIDE_YOKE  = _sa['side']
     SA_WAIST_YOKE = _sa['waist']
@@ -220,17 +221,17 @@ def plot_jeans_yoke(front, back, yoke, output_path='Logs/jeans_yoke.svg',
     # CW outline: outseam(1→yoke_side) → yoke_line(yoke_side→yoke_seat)
     #   → seat_seg reversed(yoke_seat→back_waist) → waist(back_waist→1)
     sa_edges = [
-        (np.array([fpts['1'], ypts['yoke_side']]),               SA_SIDE_YOKE),   # side seam
-        (np.array([ypts['yoke_side'], ypts['yoke_seat']]),       SA_WAIST_YOKE),  # yoke seam (bottom)
-        (seat_seg[::-1],                                         SA_SEAT_YOKE),   # seat seam segment (reversed)
-        (np.array([bpts['back_waist'], fpts['1']]),              SA_WAIST_YOKE),  # waist
+        (np.array([fpts['1'], ypts['yoke_side']]),               SA_SIDE_YOKE, _sl['side']),   # side seam
+        (np.array([ypts['yoke_side'], ypts['yoke_seat']]),       SA_WAIST_YOKE, _sl['waist']),  # yoke seam (bottom)
+        (seat_seg[::-1],                                         SA_SEAT_YOKE, _sl['seat']),   # seat seam segment (reversed)
+        (np.array([bpts['back_waist'], fpts['1']]),              SA_WAIST_YOKE, _sl['waist']),  # waist
     ]
-    draw_seam_allowance(ax, sa_edges, scale=s)
+    draw_seam_allowance(ax, sa_edges, scale=s, label_sas=not debug, units=units)
 
     # -- Notch on yoke seam (midpoint, 1/2" from seamline) --
     yoke_seam = np.array([ypts['yoke_side'], ypts['yoke_seat']])
     notch_mid = (ypts['yoke_side'] + ypts['yoke_seat']) / 2
-    draw_notch(ax, yoke_seam, notch_mid, SA_WAIST_YOKE, scale=s)
+    draw_notch(ax, yoke_seam, notch_mid, SA_WAIST_YOKE, scale=s, count=2)
 
     # --- Grainline and piece label (pattern mode only) ---
     if not debug:
@@ -246,7 +247,8 @@ def plot_jeans_yoke(front, back, yoke, output_path='Logs/jeans_yoke.svg',
         # Piece label
         draw_piece_label(ax, (grain_center[0], grain_center[1]),
                          yoke['metadata']['title'],
-                         yoke['metadata'].get('cut_count'))
+                         yoke['metadata'].get('cut_count'),
+                         metadata=yoke.get('metadata'))
 
     finalize_figure(ax, fig, standalone, output_path, units=units, debug=debug,
                     pdf_pages=pdf_pages)

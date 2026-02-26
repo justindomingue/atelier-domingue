@@ -25,7 +25,7 @@ from .jeans_front import (
     INCH, load_measurements, draft_jeans_front,
     _bezier_cubic, _curve_length, _annotate_segment,
 )
-from .seam_allowances import SEAM_ALLOWANCES
+from .seam_allowances import SEAM_ALLOWANCES, SEAM_LABELS
 
 
 # -- Drafting ----------------------------------------------------------------
@@ -79,7 +79,7 @@ def draft_jeans_fly_1873(m, front):
             'inlay_y': np.float64(fly_height),
         },
         'metadata': {
-            'title': '1873 Jeans Fly (Two-Piece, cut on fold)',
+            'title': 'Fly',
             'cut_count': 2,
             'fly_height': fly_height,
             'half_width': half_width,
@@ -90,7 +90,8 @@ def draft_jeans_fly_1873(m, front):
 # -- Visualization -----------------------------------------------------------
 
 def plot_jeans_fly_1873(fly, output_path='Logs/jeans_fly_1873.svg',
-                        debug=False, units='cm', pdf_pages=None, ax=None):
+                        debug=False, units='cm', pdf_pages=None, ax=None,
+                        include_seam_allowance=True):
     s, unit_label = display_scale(units)
 
     pts = {k: v * s for k, v in fly['points'].items()}
@@ -99,6 +100,7 @@ def plot_jeans_fly_1873(fly, output_path='Logs/jeans_fly_1873.svg',
 
     fig, ax, standalone = setup_figure(ax, figsize=(6, 12))
     SA = SEAM_ALLOWANCES['fly_1873']
+    SL = SEAM_LABELS['fly_1873']
 
     # Fold line (dashed — visual reference, not a cut edge)
     ax.plot([pts['fold_bottom'][0], pts['fold_top'][0]],
@@ -117,12 +119,21 @@ def plot_jeans_fly_1873(fly, output_path='Logs/jeans_fly_1873.svg',
     # Edges ordered CW (in matplotlib Y-up coords: top→right→bottom→left).
     # The fold edge (left side) gets SA=0 since the piece is cut on fold.
     sa_edges = [
-        (np.array([pts['fold_top'], pts['outer_top']]),       SA['top']),
-        (np.array([pts['outer_top'], pts['curve_start']]),    SA['outer']),
-        (curves['bottom'],                                     SA['bottom']),
-        (np.array([pts['fold_bottom'], pts['fold_top']]),     SA['fold']),
+        (np.array([pts['fold_top'], pts['outer_top']]),       SA['top'], SL['top']),
+        (np.array([pts['outer_top'], pts['curve_start']]),    SA['outer'], SL['outer']),
+        (curves['bottom'],                                     SA['bottom'], SL['bottom']),
+        (np.array([pts['fold_bottom'], pts['fold_top']]),     SA['fold'], SL['fold']),
     ]
-    draw_seam_allowance(ax, sa_edges, scale=s)
+    if include_seam_allowance:
+        draw_seam_allowance(ax, sa_edges, scale=s, label_sas=not debug, units=units)
+    else:
+        # Interfacing net shape: use the seamline/fold boundary (no SA).
+        net_outline = np.vstack([
+            np.array([pts['fold_top'], pts['outer_top'], pts['curve_start']]),
+            curves['bottom'],
+            np.array([pts['fold_top']]),
+        ])
+        ax.plot(net_outline[:, 0], net_outline[:, 1], **CUTLINE)
 
     # Thin boundary line at the trim/inlay separation
     ax.plot([0, pts['outer_top'][0]],
@@ -151,7 +162,8 @@ def plot_jeans_fly_1873(fly, output_path='Logs/jeans_fly_1873.svg',
         center = (pts['outer_top'][0] / 2,
                   (pts['fold_bottom'][1] + pts['fold_top'][1]) / 2)
         draw_piece_label(ax, center, fly['metadata']['title'],
-                         fly['metadata'].get('cut_count'))
+                         fly['metadata'].get('cut_count'),
+                         metadata=fly.get('metadata'))
 
     if debug:
         for name, pt in pts.items():
@@ -170,7 +182,7 @@ def plot_jeans_fly_1873(fly, output_path='Logs/jeans_fly_1873.svg',
 # -- Entry point for generic runner ------------------------------------------
 
 def run(measurements_path, output_path, debug=False, units='cm', pdf_pages=None,
-        context=None):
+        context=None, include_seam_allowance=True):
     m = resolve_measurements(context, measurements_path, load_measurements)
     front = cache_draft(context, 'selvedge.front', lambda: draft_jeans_front(m))
     fly = cache_draft(
@@ -179,4 +191,5 @@ def run(measurements_path, output_path, debug=False, units='cm', pdf_pages=None,
         lambda: draft_jeans_fly_1873(m, front),
     )
     plot_jeans_fly_1873(fly, output_path, debug=debug, units=units,
-                        pdf_pages=pdf_pages)
+                        pdf_pages=pdf_pages,
+                        include_seam_allowance=include_seam_allowance)

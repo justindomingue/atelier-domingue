@@ -72,3 +72,58 @@ SEAM_ALLOWANCES = {
         'bottom':  S['narrow'],         # 1/2" — bottom curve
     },
 }
+
+# Plain-language seam annotations used in pattern SA callouts.
+SEAM_LABELS = {
+    'front': {
+        'side': 'Flat-felled seam',
+        'hem': 'Turned hem',
+        'inseam': 'Flat-felled seam',
+        'crotch': 'Flat-felled seam',
+        'fly': 'Fly extension seam',
+        'waist': 'Waistband join seam',
+        'facing': 'Pocket opening facing',
+    },
+    'back': {
+        'side': 'Flat-felled seam',
+        'hem': 'Turned hem',
+        'inseam': 'Flat-felled seam',
+        'seat': 'Seat seam',
+        'yoke': 'Yoke join seam',
+    },
+    'yoke': {
+        'seat': 'Seat seam',
+        'side': 'Flat-felled seam',
+        'waist': 'Waistband join seam',
+    },
+    'back_pocket': {
+        'side': 'Pocket attach seam',
+        'top': 'Pocket top double-turn hem',
+    },
+    'watch_pocket': {
+        'top': 'Pocket top double-turn hem',
+        'sides': 'Pocket attach seam',
+        'bottom': 'Pocket attach seam',
+    },
+    'front_facing': {
+        'waist': 'Waistband join seam',
+        'sideseam': 'Side seam',
+        'opening': 'Pocket opening facing',
+    },
+    'front_pocket_bag': {
+        'waist': 'Caught in waistband seam',
+        'sideseam': 'Caught in side seam',
+        'bottom': 'Pocket bag seam',
+    },
+    'waistband': {
+        'top': 'Selvedge edge',
+        'bottom': 'Waistband join seam',
+        'end': 'Waistband end finish',
+    },
+    'fly_1873': {
+        'fold': 'Cut on fold',
+        'top': 'Fly top seam',
+        'outer': 'Fly outer seam',
+        'bottom': 'Fly bottom seam',
+    },
+}

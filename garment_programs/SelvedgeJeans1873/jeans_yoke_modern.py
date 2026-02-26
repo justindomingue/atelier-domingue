@@ -31,7 +31,7 @@ from .jeans_front import (
     _point_at_arclength, _curve_up_to_arclength,
 )
 from .jeans_back import draft_jeans_back
-from .seam_allowances import SEAM_ALLOWANCES, YOKE_SEAT_DEPTH
+from .seam_allowances import SEAM_ALLOWANCES, SEAM_LABELS, YOKE_SEAT_DEPTH
 
 
 # -- Helpers -----------------------------------------------------------------
@@ -217,7 +217,7 @@ def draft_jeans_yoke_modern(m, front, back):
             'd2_left_y':  d2_left_y,  'd2_right_y': d2_right_y,
         },
         'metadata': {
-            'title': 'Historical Jeans Yoke \u2013 Modern (Curved)',
+            'title': 'Yoke',
             'cut_count': 2,
         },
     }
@@ -280,17 +280,18 @@ def plot_jeans_yoke_modern(front, back, yoke,
 
     # -- Seam allowances (from centralized SEAM_ALLOWANCES) --
     _sa = SEAM_ALLOWANCES['yoke']
+    _sl = SEAM_LABELS['yoke']
 
     # Edges CW (matching 1873 yoke convention):
     #   outseam(1→yoke_side) → yoke_line(yoke_side→yoke_seat) →
     #   seat(yoke_seat→back_waist) → waist reversed(back_waist→1)
     sa_edges = [
-        (np.array([ypts['pt1_rot'], ypts['yoke_side_rot']]),              _sa['side']),
-        (ycurves['yoke_line'],                                             _sa['waist']),
-        (np.array([ypts['yoke_seat_rot'], ypts['back_waist_rot']]),       _sa['seat']),
-        (ycurves['waist_line'][::-1],                                      _sa['waist']),
+        (np.array([ypts['pt1_rot'], ypts['yoke_side_rot']]),              _sa['side'], _sl['side']),
+        (ycurves['yoke_line'],                                             _sa['waist'], _sl['waist']),
+        (np.array([ypts['yoke_seat_rot'], ypts['back_waist_rot']]),       _sa['seat'], _sl['seat']),
+        (ycurves['waist_line'][::-1],                                      _sa['waist'], _sl['waist']),
     ]
-    draw_seam_allowance(ax, sa_edges, scale=s)
+    draw_seam_allowance(ax, sa_edges, scale=s, label_sas=not debug, units=units)
 
     # -- Grain line --
     ax.annotate('', xy=ypts['grain_top'], xytext=ypts['grain_bottom'],
@@ -367,7 +368,8 @@ def plot_jeans_yoke_modern(front, back, yoke,
         # Piece label
         draw_piece_label(ax, (grain_center[0], grain_center[1]),
                          yoke['metadata']['title'],
-                         yoke['metadata'].get('cut_count'))
+                         yoke['metadata'].get('cut_count'),
+                         metadata=yoke.get('metadata'))
 
     finalize_figure(ax, fig, standalone, output_path, units=units, debug=debug,
                     pdf_pages=pdf_pages)

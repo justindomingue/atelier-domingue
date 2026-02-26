@@ -238,7 +238,7 @@ def draft_jeans_back(m: dict[str, float], front: DraftData,
         },
         'gathering': gathering,
         'metadata': {
-            'title': 'Historical Jeans Back Panel (1873)',
+            'title': 'Back',
             'cut_count': 2,
         },
     }
@@ -293,8 +293,9 @@ def plot_jeans_back(front, back, output_path='Logs/jeans_back.svg', debug=False,
                 [bcon['waist_line_start'][1], bcon['waist_line_end'][1]], **CON_STYLE)
 
     # -- Outline and seam allowances (mode-dependent) --
-    from .seam_allowances import SEAM_ALLOWANCES
+    from .seam_allowances import SEAM_ALLOWANCES, SEAM_LABELS
     SA = SEAM_ALLOWANCES['back']
+    SL = SEAM_LABELS['back']
     SA_SIDE    = SA['side']
     SA_HEM     = SA['hem']
     SA_INSEAM  = SA['inseam']
@@ -344,14 +345,14 @@ def plot_jeans_back(front, back, output_path='Logs/jeans_back.svg', debug=False,
 
         # -- SA on full outline --
         sa_edges = [
-            (np.array([fpts['1'], fpts['4']]),                       SA_SIDE),
-            (np.array([fpts['4'], fpts['0']]),                       SA_SIDE),
-            (np.array([fpts['0'], bpts['back_hem']]),                SA_HEM),
-            (np.array([bpts['back_hem'], bpts['12']]),               SA_INSEAM),
-            (bcurves['back_inseam'][::-1],                           SA_INSEAM),
-            (bcurves['seat_lower'][::-1],                            SA_SEAT),
-            (bcurves['seat_upper'][::-1],                            SA_SEAT),
-            (np.array([bpts['back_waist'], fpts['1']]),              SA_YOKE),
+            (np.array([fpts['1'], fpts['4']]),                       SA_SIDE, SL['side']),
+            (np.array([fpts['4'], fpts['0']]),                       SA_SIDE, SL['side']),
+            (np.array([fpts['0'], bpts['back_hem']]),                SA_HEM, SL['hem']),
+            (np.array([bpts['back_hem'], bpts['12']]),               SA_INSEAM, SL['inseam']),
+            (bcurves['back_inseam'][::-1],                           SA_INSEAM, SL['inseam']),
+            (bcurves['seat_lower'][::-1],                            SA_SEAT, SL['seat']),
+            (bcurves['seat_upper'][::-1],                            SA_SEAT, SL['seat']),
+            (np.array([bpts['back_waist'], fpts['1']]),              SA_YOKE, SL['yoke']),
         ]
     else:
         # -- Body below yoke (pattern mode) --
@@ -390,14 +391,14 @@ def plot_jeans_back(front, back, output_path='Logs/jeans_back.svg', debug=False,
                         bbox=dict(boxstyle='round,pad=0.2', fc='white',
                                   ec='none', alpha=0.8))
             sa_edges = [
-                (np.array([bpts['yoke_side'], fpts['4']]),           SA_SIDE),
-                (np.array([fpts['4'], fpts['0']]),                   SA_SIDE),
-                (np.array([fpts['0'], bpts['back_hem']]),            SA_HEM),
-                (np.array([bpts['back_hem'], bpts['12']]),           SA_INSEAM),
-                (bcurves['back_inseam'][::-1],                       SA_INSEAM),
-                (bcurves['seat_lower'][::-1],                        SA_SEAT),
-                (g_taper[::-1],                                      SA_SEAT),
-                (np.array([g_ext, bpts['yoke_side']]),               SA_YOKE),
+                (np.array([bpts['yoke_side'], fpts['4']]),           SA_SIDE, SL['side']),
+                (np.array([fpts['4'], fpts['0']]),                   SA_SIDE, SL['side']),
+                (np.array([fpts['0'], bpts['back_hem']]),            SA_HEM, SL['hem']),
+                (np.array([bpts['back_hem'], bpts['12']]),           SA_INSEAM, SL['inseam']),
+                (bcurves['back_inseam'][::-1],                       SA_INSEAM, SL['inseam']),
+                (bcurves['seat_lower'][::-1],                        SA_SEAT, SL['seat']),
+                (g_taper[::-1],                                      SA_SEAT, SL['seat']),
+                (np.array([g_ext, bpts['yoke_side']]),               SA_YOKE, SL['yoke']),
             ]
         else:
             # Seat upper below yoke
@@ -407,23 +408,34 @@ def plot_jeans_back(front, back, output_path='Logs/jeans_back.svg', debug=False,
             ax.plot([bpts['yoke_seat'][0], bpts['yoke_side'][0]],
                     [bpts['yoke_seat'][1], bpts['yoke_side'][1]], **OUTLINE)
             sa_edges = [
-                (np.array([bpts['yoke_side'], fpts['4']]),           SA_SIDE),
-                (np.array([fpts['4'], fpts['0']]),                   SA_SIDE),
-                (np.array([fpts['0'], bpts['back_hem']]),            SA_HEM),
-                (np.array([bpts['back_hem'], bpts['12']]),           SA_INSEAM),
-                (bcurves['back_inseam'][::-1],                       SA_INSEAM),
-                (bcurves['seat_lower'][::-1],                        SA_SEAT),
-                (bcurves['seat_upper_below_yoke'][::-1],             SA_SEAT),
-                (np.array([bpts['yoke_seat'], bpts['yoke_side']]),   SA_YOKE),
+                (np.array([bpts['yoke_side'], fpts['4']]),           SA_SIDE, SL['side']),
+                (np.array([fpts['4'], fpts['0']]),                   SA_SIDE, SL['side']),
+                (np.array([fpts['0'], bpts['back_hem']]),            SA_HEM, SL['hem']),
+                (np.array([bpts['back_hem'], bpts['12']]),           SA_INSEAM, SL['inseam']),
+                (bcurves['back_inseam'][::-1],                       SA_INSEAM, SL['inseam']),
+                (bcurves['seat_lower'][::-1],                        SA_SEAT, SL['seat']),
+                (bcurves['seat_upper_below_yoke'][::-1],             SA_SEAT, SL['seat']),
+                (np.array([bpts['yoke_seat'], bpts['yoke_side']]),   SA_YOKE, SL['yoke']),
             ]
 
-    draw_seam_allowance(ax, sa_edges, scale=s)
+    draw_seam_allowance(ax, sa_edges, scale=s, label_sas=not debug, units=units)
 
     # -- Yoke seam notch (matches yoke piece notch placement) --
     seam_start = g_ext if gathering is not None else bpts['yoke_seat']
     seam_end = bpts['yoke_side']
     seam_mid = (seam_start + seam_end) / 2
-    draw_notch(ax, np.array([seam_start, seam_end]), seam_mid, SA_YOKE, scale=s)
+    draw_notch(ax, np.array([seam_start, seam_end]), seam_mid, SA_YOKE, scale=s,
+               count=2)
+
+    # -- Balance notches: knee + hem on side seam and inseam --
+    # Hem notches are pulled slightly off the corners to avoid seam intersections.
+    hem_t = 0.06
+    side_hem_pt = fpts['0'] + (fpts['4'] - fpts['0']) * hem_t
+    inseam_hem_pt = bpts['back_hem'] + (bpts['12'] - bpts['back_hem']) * hem_t
+    draw_notch(ax, np.array([fpts['4'], fpts['0']]), fpts['3'], SA_SIDE, scale=s)
+    draw_notch(ax, np.array([bpts['back_hem'], bpts['12']]), bpts['12'], SA_INSEAM, scale=s)
+    draw_notch(ax, np.array([fpts['4'], fpts['0']]), side_hem_pt, SA_SIDE, scale=s)
+    draw_notch(ax, np.array([bpts['back_hem'], bpts['12']]), inseam_hem_pt, SA_INSEAM, scale=s)
 
     # -- Reference lines (clipped to piece outline at each x-position) --
     if debug:
@@ -512,7 +524,8 @@ def plot_jeans_back(front, back, output_path='Logs/jeans_back.svg', debug=False,
         all_y = [fpts['0'][1], bpts['yoke_side'][1], bpts['back_hem'][1], bpts['11'][1]]
         center = ((min(all_x) + max(all_x)) / 2, (min(all_y) + max(all_y)) / 2)
         draw_piece_label(ax, center, back['metadata']['title'],
-                         back['metadata'].get('cut_count'))
+                         back['metadata'].get('cut_count'),
+                         metadata=back.get('metadata'))
 
     finalize_figure(ax, fig, standalone, output_path, units=units, debug=debug,
                     pdf_pages=pdf_pages)

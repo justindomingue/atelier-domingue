@@ -1,4 +1,5 @@
 import warnings
+from fractions import Fraction
 from pathlib import Path
 
 import numpy as np
@@ -6,6 +7,7 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 
 from garment_programs.geometry import INCH
+from garment_programs.core.pattern_metadata import get_active_pattern_context
 
 CM_PER_INCH = INCH  # alias for backward compat in save_pattern / lay_plan
 
@@ -27,28 +29,49 @@ def draw_fold_line(ax, top, bottom):
             bbox=dict(boxstyle='round,pad=0.2', fc='white', ec='none', alpha=0.7))
 
 
-def draw_piece_label(ax, center, title, cut_count=None, fold=False, fontsize=9):
-    """Render piece name and cut count at center of the pattern piece."""
-    label = title
+def draw_piece_label(ax, center, title, cut_count=None, fold=False, fontsize=9,
+                     metadata=None):
+    """Render a piece title block with cut/count info and pattern codes."""
+    metadata = metadata or {}
+    context = get_active_pattern_context()
+
+    pattern_set_code = metadata.get('pattern_set_code') or context.get('pattern_set_code')
+    size_code = metadata.get('size_code') or context.get('size_code')
+
+    label_lines = [title]
     if cut_count:
-        label += f'\nCut {cut_count}'
+        cut_line = f'Cut {cut_count}'
         if fold:
-            label += ' on fold'
+            cut_line += ' on fold'
+        label_lines.append(cut_line)
+    if pattern_set_code:
+        label_lines.append(f'Pattern {pattern_set_code}')
+    if size_code:
+        attrs = []
+        if size_code:
+            attrs.append(f'Size {size_code}')
+        label_lines.append(' | '.join(attrs))
+    label = '\n'.join(label_lines)
+
     ax.text(center[0], center[1], label,
             fontsize=fontsize, ha='center', va='center',
             color='black', alpha=0.6,
             bbox=dict(boxstyle='round,pad=0.3', fc='white', ec='none', alpha=0.5))
 
 
-def draw_grainline(ax, top, bottom, label='GRAIN'):
-    """Draw a double-headed grainline arrow between two points."""
+def draw_grainline(ax, top, bottom, label=None):
+    """Draw a double-headed grainline arrow between two points.
+
+    If ``label`` is provided, it is drawn centered on the arrow.
+    """
     ax.annotate('', xy=top, xytext=bottom,
                 arrowprops=dict(arrowstyle='<->', color='black', lw=0.8))
-    mid = ((top[0] + bottom[0]) / 2, (top[1] + bottom[1]) / 2)
-    angle = np.degrees(np.arctan2(top[1] - bottom[1], top[0] - bottom[0]))
-    ax.text(mid[0], mid[1], label, fontsize=7, ha='center', va='center',
-            rotation=angle, color='black', alpha=0.6,
-            bbox=dict(boxstyle='round,pad=0.2', fc='white', ec='none', alpha=0.7))
+    if label:
+        mid = ((top[0] + bottom[0]) / 2, (top[1] + bottom[1]) / 2)
+        angle = np.degrees(np.arctan2(top[1] - bottom[1], top[0] - bottom[0]))
+        ax.text(mid[0], mid[1], label, fontsize=7, ha='center', va='center',
+                rotation=angle, color='black', alpha=0.6,
+                bbox=dict(boxstyle='round,pad=0.2', fc='white', ec='none', alpha=0.7))
 
 
 def draw_calibration_square(ax, size_cm=5.0):
@@ -125,8 +148,10 @@ def save_pattern(fig, ax, output_path, units='cm', pad_cm=1.0, calibration=False
 # -- Notch utility -----------------------------------------------------------
 
 def draw_notch(ax, curve, point, sa_distance, scale=1.0, tangent_offset=0,
-               flip=False, notch_length=0.5 * INCH):
-    """Draw a notch mark perpendicular to the cut line.
+               flip=False, notch_length=0.5 * INCH, style='line',
+               count=1, notch_spacing=0.25 * INCH, notch_width=0.25 * INCH,
+               line_from_cutline=True, line_to_seamline=False):
+    """Draw notch marks perpendicular to the cut line.
 
     Parameters
     ----------
@@ -146,8 +171,23 @@ def draw_notch(ax, curve, point, sa_distance, scale=1.0, tangent_offset=0,
         If True, flip the outward normal (use when the curve runs opposite
         to the SA edge winding direction).
     notch_length : float | None
-        Notch length in cm (pre-scaling), measured from seamline outward.
+        Notch depth in cm (pre-scaling). For line notches drawn from cutline,
+        depth is measured inward toward the garment interior.
         Use None to fall back to legacy behavior (SA + 1/8").
+    style : str
+        ``'line'`` (default) or ``'triangle'``.
+    count : int
+        Number of notch marks (1=single, 2=double, 3=triple).
+    notch_spacing : float
+        Spacing between notch centers in cm (pre-scaling) for multiple notches.
+    notch_width : float
+        Base width of triangular notch in cm (pre-scaling).
+    line_from_cutline : bool
+        For ``style='line'``, start the notch at the cut line (default).
+        When False, uses legacy seamline-origin behavior.
+    line_to_seamline : bool
+        For ``style='line'`` with cutline origin, end the notch exactly at
+        the seamline, ignoring ``notch_length``.
     """
     if len(curve) < 2:
         return
@@ -177,10 +217,41 @@ def draw_notch(ax, curve, point, sa_distance, scale=1.0, tangent_offset=0,
     notch_len *= scale
 
     base = point + tangent * (tangent_offset * scale)
-    start = base                          # on the seamline
-    end = base + normal * notch_len
-    ax.plot([start[0], end[0]], [start[1], end[1]],
-            color='black', linewidth=1.2, solid_capstyle='butt', zorder=6)
+    count = max(1, int(count))
+    spacing = notch_spacing * scale
+    half_span = (count - 1) / 2
+
+    sa_depth = abs(sa_distance) * scale
+    for i in range(count):
+        center = base + tangent * ((i - half_span) * spacing)
+        if style == 'line':
+            if line_from_cutline:
+                start = center + normal * sa_depth
+                if line_to_seamline:
+                    end = center
+                else:
+                    end = start - normal * notch_len
+            else:
+                start = center
+                end = center + normal * notch_len
+            ax.plot([start[0], end[0]], [start[1], end[1]],
+                    color='black', linewidth=1.2, solid_capstyle='butt', zorder=6)
+            continue
+
+        # Default standard: triangular notch with base on seamline.
+        half_w = (notch_width * scale) / 2
+        left = center - tangent * half_w
+        right = center + tangent * half_w
+        apex = center + normal * notch_len
+        tri = mpatches.Polygon(
+            [left, right, apex],
+            closed=True,
+            fill=False,
+            edgecolor='black',
+            linewidth=1.0,
+            zorder=6,
+        )
+        ax.add_patch(tri)
 
 
 # -- Seam-allowance offset utilities ----------------------------------------
@@ -248,7 +319,121 @@ def _line_line_intersect(p1, p2, p3, p4):
     return np.asarray(p1, dtype=float) + t * d1
 
 
-def draw_seam_allowance(ax, edges, scale=1.0):
+def _polyline_length(pts):
+    """Return total length of a polyline."""
+    if len(pts) < 2:
+        return 0.0
+    diffs = np.diff(pts, axis=0)
+    return float(np.sum(np.linalg.norm(diffs, axis=1)))
+
+
+def _polyline_midpoint_tangent(pts):
+    """Return midpoint and unit tangent at midpoint of a polyline."""
+    pts = np.asarray(pts, dtype=float)
+    if len(pts) < 2:
+        return pts[0], np.array([1.0, 0.0])
+
+    segs = np.diff(pts, axis=0)
+    seg_lens = np.linalg.norm(segs, axis=1)
+    total = float(np.sum(seg_lens))
+    if total < 1e-12:
+        tangent = segs[0]
+        norm = np.linalg.norm(tangent)
+        if norm < 1e-12:
+            tangent = np.array([1.0, 0.0])
+        else:
+            tangent = tangent / norm
+        return pts[0], tangent
+
+    target = total / 2.0
+    run = 0.0
+    for i, seg_len in enumerate(seg_lens):
+        next_run = run + seg_len
+        if next_run >= target:
+            if seg_len < 1e-12:
+                return pts[i], np.array([1.0, 0.0])
+            t = (target - run) / seg_len
+            point = pts[i] + segs[i] * t
+            tangent = segs[i] / seg_len
+            return point, tangent
+        run = next_run
+
+    last = segs[-1]
+    norm = np.linalg.norm(last)
+    tangent = np.array([1.0, 0.0]) if norm < 1e-12 else last / norm
+    return pts[-1], tangent
+
+
+def _format_inch_fraction(value_in):
+    """Format inches with 1/16\" precision as a mixed fraction."""
+    frac = Fraction(value_in).limit_denominator(16)
+    whole = frac.numerator // frac.denominator
+    rem = Fraction(frac.numerator % frac.denominator, frac.denominator)
+    if whole and rem:
+        return f'{whole} {rem.numerator}/{rem.denominator}'
+    if whole:
+        return str(whole)
+    return f'{rem.numerator}/{rem.denominator}'
+
+
+def _format_sa_label(sa_cm, units, seam_label=None):
+    """Format seam allowance text label."""
+    value = abs(float(sa_cm))
+    if value < 1e-9:
+        return None
+    if units == 'inch':
+        base = f'SA {_format_inch_fraction(value / INCH)}"'
+    else:
+        base = f'SA {value:.1f} cm'
+    if seam_label:
+        return f'{base} | {seam_label}'
+    return base
+
+
+def _draw_seam_allowance_labels(ax, edges, scale, units='cm', fontsize=6):
+    """Draw per-edge seam-allowance callouts near the cutline."""
+    min_edge_len = 0.35 if units == 'inch' else 1.0
+    placed = []
+    for pts, sa_cm, seam_label in edges:
+        pts = np.asarray(pts, dtype=float)
+        if len(pts) < 2:
+            continue
+        label = _format_sa_label(sa_cm, units, seam_label=seam_label)
+        if not label:
+            continue
+        if _polyline_length(pts) < min_edge_len:
+            continue
+
+        midpoint, tangent = _polyline_midpoint_tangent(pts)
+        normal = np.array([-tangent[1], tangent[0]])
+        normal_norm = np.linalg.norm(normal)
+        if normal_norm < 1e-12:
+            continue
+        normal = normal / normal_norm
+        offset = max(abs(sa_cm) * scale * 0.55, 0.12 if units == 'inch' else 0.3)
+        position = midpoint + normal * offset
+
+        # Skip labels that would stack nearly on top of one another.
+        if any(np.linalg.norm(position - p) < (0.45 if units == 'inch' else 1.2) for p in placed):
+            continue
+        placed.append(position)
+
+        angle = np.degrees(np.arctan2(tangent[1], tangent[0]))
+        if angle > 90:
+            angle -= 180
+        if angle < -90:
+            angle += 180
+        ax.text(
+            position[0], position[1], label,
+            fontsize=fontsize, ha='center', va='center',
+            rotation=angle, color='dimgray',
+            bbox=dict(boxstyle='round,pad=0.15', fc='white', ec='none', alpha=0.75),
+            zorder=7,
+        )
+
+
+def draw_seam_allowance(ax, edges, scale=1.0, label_sas=False, units=None,
+                        label_fontsize=6):
     """Draw a continuous seam-allowance boundary for an ordered list of edges.
 
     Edges must be ordered so that they form a continuous CW perimeter
@@ -259,15 +444,33 @@ def draw_seam_allowance(ax, edges, scale=1.0):
     Parameters
     ----------
     ax : matplotlib Axes
-    edges : list of (pts, sa_distance) tuples
+    edges : list of tuples
         *pts* is an (N,2) ndarray (already display-scaled),
-        *sa_distance* is the seam allowance in **cm** (pre-scaling).
+        *sa_distance* is the seam allowance in **cm** (pre-scaling),
+        and optional third value is plain-language seam text for labels.
     scale : float
         Display scale factor (e.g. 1/INCH for inch mode).
+    label_sas : bool
+        When True, place a seam-allowance text callout on each major edge.
+    units : str | None
+        ``'cm'`` or ``'inch'``. If omitted, inferred from ``scale``.
+    label_fontsize : float
+        Font size for SA callouts.
     """
+    norm_edges = []
+    for edge in edges:
+        if len(edge) == 2:
+            pts, sa_cm = edge
+            seam_label = None
+        elif len(edge) == 3:
+            pts, sa_cm, seam_label = edge
+        else:
+            raise ValueError("Each seam allowance edge must be (pts, sa) or (pts, sa, label)")
+        norm_edges.append((np.asarray(pts, dtype=float), float(sa_cm), seam_label))
+
     # Validate CW winding via signed area of edge start-points
     if len(edges) >= 3:
-        verts = np.array([np.asarray(e[0])[0] for e in edges])
+        verts = np.array([e[0][0] for e in norm_edges])
         x, y = verts[:, 0], verts[:, 1]
         signed_area = np.sum(x * np.roll(y, -1) - np.roll(x, -1) * y) / 2
         if signed_area > 1e-6:
@@ -280,7 +483,7 @@ def draw_seam_allowance(ax, edges, scale=1.0):
     # Offset each edge independently
     offsets = []
     scaled_sas = []
-    for pts, sa_cm in edges:
+    for pts, sa_cm, _ in norm_edges:
         sa = sa_cm * scale
         scaled_sas.append(abs(sa))
         offsets.append(offset_polyline(pts, sa))
@@ -310,6 +513,13 @@ def draw_seam_allowance(ax, edges, scale=1.0):
     sa_pts.append(sa_pts[0])
     sa_path = np.array(sa_pts)
     ax.plot(sa_path[:, 0], sa_path[:, 1], **CUTLINE)
+
+    if label_sas:
+        if units is None:
+            units = 'inch' if np.isclose(scale, 1 / INCH, atol=1e-6) else 'cm'
+        _draw_seam_allowance_labels(
+            ax, norm_edges, scale=scale, units=units, fontsize=label_fontsize
+        )
 
 
 # -- Plot boilerplate helpers ------------------------------------------------

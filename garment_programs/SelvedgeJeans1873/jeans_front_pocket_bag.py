@@ -25,7 +25,7 @@ from .jeans_front import (
     _point_at_arclength,
     _curve_up_to_arclength,
 )
-from .seam_allowances import SEAM_ALLOWANCES
+from .seam_allowances import SEAM_ALLOWANCES, SEAM_LABELS
 from garment_programs.plot_utils import (
     SEAMLINE, CUTLINE, offset_polyline, draw_seam_allowance, draw_notch,
     display_scale, setup_figure, finalize_figure, draw_fold_line,
@@ -101,7 +101,7 @@ def _draft_watch_pocket(m, front, pocket_upper, pocket_lower, opening_curve):
         },
         'outline': pts,
         'metadata': {
-            'title': '1873 Watch Pocket',
+            'title': 'Watch Pocket',
             'sa_top': SEAM_ALLOWANCES['watch_pocket']['top'],
             'sa_sides': SEAM_ALLOWANCES['watch_pocket']['sides'],
             'sa_bottom': SEAM_ALLOWANCES['watch_pocket']['bottom'],
@@ -271,7 +271,7 @@ def draft_jeans_front_pocket(m, front):
         },
         'watch_pocket': watch,
         'metadata': {
-            'title': 'Front Pocket Bag',
+            'title': 'Pocket Bag',
             'cut_count': 1,
             'fold': True,
         },
@@ -399,15 +399,16 @@ def plot_jeans_front_pocket(piece, output_path='Logs/jeans_front_pocket.svg',
 
     # --- Seam allowances (all edges except fold, CW winding) ---
     _sa = SEAM_ALLOWANCES['front_pocket_bag']
+    _sl = SEAM_LABELS['front_pocket_bag']
     sa_edges = [
-        (rot_hip,                  _sa['sideseam']),
-        (rot_bottom[::-1],         _sa['bottom']),
-        (rot_mirror_bottom,        _sa['bottom']),
-        (rot_mirror_hip[::-1],     _sa['sideseam']),
-        (rot_mirror_rise,          _sa['waist']),
-        (rot_rise[::-1],           _sa['waist']),
+        (rot_hip,                  _sa['sideseam'], _sl['sideseam']),
+        (rot_bottom[::-1],         _sa['bottom'], _sl['bottom']),
+        (rot_mirror_bottom,        _sa['bottom'], _sl['bottom']),
+        (rot_mirror_hip[::-1],     _sa['sideseam'], _sl['sideseam']),
+        (rot_mirror_rise,          _sa['waist'], _sl['waist']),
+        (rot_rise[::-1],           _sa['waist'], _sl['waist']),
     ]
-    draw_seam_allowance(ax, sa_edges, scale=s)
+    draw_seam_allowance(ax, sa_edges, scale=s, label_sas=not debug, units=units)
 
     # --- Notches: matching marks for pocket assembly ---
     rot_pocket_upper = rot_opening[0]
@@ -435,7 +436,8 @@ def plot_jeans_front_pocket(piece, output_path='Logs/jeans_front_pocket.svg',
         center = (bbox_max[0] / 2, bbox_max[1] / 2)
         draw_piece_label(ax, center, piece['metadata']['title'],
                          piece['metadata'].get('cut_count'),
-                         fold=piece['metadata'].get('fold', False))
+                         fold=piece['metadata'].get('fold', False),
+                         metadata=piece.get('metadata'))
 
     finalize_figure(ax, fig, standalone, output_path, units=units, debug=debug,
                     pdf_pages=pdf_pages)

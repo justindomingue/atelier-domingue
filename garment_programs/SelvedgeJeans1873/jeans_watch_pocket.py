@@ -113,7 +113,7 @@ def draft_jeans_watch_pocket(m):
         'construction': {},
         'outline': new_outline,
         'metadata': {
-            'title': '1873 Watch Pocket',
+            'title': 'Watch Pocket',
             'cut_count': 1,
             'width': width,
             'height': height,
@@ -148,15 +148,17 @@ def plot_jeans_watch_pocket(piece, output_path='Logs/jeans_watch_pocket.svg',
     sa_top = meta['sa_top']
     sa_sides = meta['sa_sides']
     sa_bottom = meta['sa_bottom']
+    seam_top = 'Pocket top double-turn hem'
+    seam_side = 'Pocket attach seam'
 
     sa_edges = [
-        (np.array([pts['top_left'], pts['top_right']]),       sa_top),     # top
-        (np.array([pts['top_right'], pts['bottom_right']]),   sa_sides),   # right side
-        (np.array([pts['bottom_right'], pts['v_point']]),     sa_bottom),  # lower-right
-        (np.array([pts['v_point'], pts['bottom_left']]),      sa_bottom),  # lower-left
-        (np.array([pts['bottom_left'], pts['top_left']]),     sa_sides),   # left side
+        (np.array([pts['top_left'], pts['top_right']]),       sa_top, seam_top),     # top
+        (np.array([pts['top_right'], pts['bottom_right']]),   sa_sides, seam_side),   # right side
+        (np.array([pts['bottom_right'], pts['v_point']]),     sa_bottom, seam_side),  # lower-right
+        (np.array([pts['v_point'], pts['bottom_left']]),      sa_bottom, seam_side),  # lower-left
+        (np.array([pts['bottom_left'], pts['top_left']]),     sa_sides, seam_side),   # left side
     ]
-    draw_seam_allowance(ax, sa_edges, scale=s)
+    draw_seam_allowance(ax, sa_edges, scale=s, label_sas=not debug, units=units)
 
     # Grain line arrow (double-headed)
     from garment_programs.plot_utils import draw_grainline, draw_piece_label
@@ -167,7 +169,8 @@ def plot_jeans_watch_pocket(piece, output_path='Logs/jeans_watch_pocket.svg',
         center = ((pts['top_left'][0] + pts['top_right'][0]) / 2,
                   (pts['top_center'][1] + pts['v_point'][1]) / 2)
         draw_piece_label(ax, center, piece['metadata']['title'],
-                         piece['metadata'].get('cut_count'))
+                         piece['metadata'].get('cut_count'),
+                         metadata=piece.get('metadata'))
 
     if debug:
         # Point labels
