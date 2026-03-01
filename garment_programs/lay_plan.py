@@ -1676,13 +1676,116 @@ def _write_pdf(layouts, output_path, units, gap):
         # Convert to PDF via cairosvg
         pdf_bytes = cairosvg.svg2pdf(bytestring=svg_bytes)
 
-        # Add page(s) to the writer
-        reader = PdfReader(io.BytesIO(pdf_bytes))
-        for page in reader.pages:
-            writer.add_page(page)
-
-    with open(output_path, 'wb') as f:
         writer.write(f)
+
+
+def _write_dxf(layouts, output_path, units, gap):
+    """Write a multi-layer DXF (one layer per fabric) at 1:1 scale."""
+    try:
+        import ezdxf
+    except ImportError:
+        print("ezdxf not installed — install with: pip install ezdxf")
+        print("Falling back to SVG output.")
+        _write_svg(layouts, output_path.with_suffix('.svg'), units, gap)
+        return
+
+    doc = ezdxf.new('R2010')
+
+    if units == 'cm':
+        doc.header['$INSUNITS'] = 5
+        scale_factor = CM_PER_INCH / PTS_PER_INCH
+    else:
+        doc.header['$INSUNITS'] = 1
+        scale_factor = 1.0 / PTS_PER_INCH
+
+    msp = doc.modelspace()
+    colors = [1, 5, 2, 3, 4, 6]  # Red, Blue, Yellow, Green, Cyan, Magenta
+
+    for i, (group, pieces, positions, total_length) in enumerate(layouts):
+        layer_name = group['name'].upper()
+        color = colors[i % len(colors)]
+        try:
+            doc.layers.add(layer_name, color=color)
+        except Exception:
+            pass # Error if layer already exists
+
+        fabric_w_pt = group['fabric_width'] * PTS_PER_INCH
+
+        for name, grain_len, cross_w, svg_path, transform, edge in pieces:
+            x_in, y_in = positions[name]
+            x_pt = x_in * PTS_PER_INCH
+            y_pt = y_in * PTS_PER_INCH
+
+            tree = ET.parse(svg_path)
+            root = tree.getroot()
+
+            viewBox = root.get('viewBox')
+            if not viewBox:
+                pw = float(root.get('width', '0').replace('pt','').replace('in','').replace('px',''))
+                ph = float(root.get('height', '0').replace('pt','').replace('in','').replace('px',''))
+                vw, vh = pw, ph
+            else:
+                vb_parts = viewBox.split()
+                vw, vh = float(vb_parts[2]), float(vb_parts[3])
+
+            axes = root.find(f'.//{{http://www.w3.org/2000/svg}}g[@id="axes_1"]')
+            if axes is None:
+                continue
+
+            for g in axes.iter(f'{{http://www.w3.org/2000/svg}}g'):
+                if not g.get('id', '').startswith('line2d_'):
+                    continue
+                for path_el in g.findall(f'{{http://www.w3.org/2000/svg}}path'):
+                    d = path_el.get('d', '')
+                    style = path_el.get('style', '')
+                    if not d: continue
+                    verts, closed = _parse_svg_path_data(d, curve_steps=20)
+                    if len(verts) < 2: continue
+
+                    dxf_verts = []
+                    for px, py in verts:
+                        if transform == 'cw':
+                            tx, ty = vh - py, px
+                        elif transform == 'ccw':
+                            tx, ty = py, vw - px
+                        elif transform == 'flip_h':
+                            tx, ty = vw - px, py
+                        elif transform == 'ccw_flip_h':
+                            tx, ty = vh - py, vw - px
+                        elif transform == 'ccw_flip_v':
+                            tx, ty = py, px
+                        elif transform == 'flip_v':
+                            tx, ty = px, vh - py
+                        else:
+                            tx, ty = px, py
+
+                        fx_pt = tx + x_pt
+                        fy_pt = ty + y_pt
+
+                        dxf_x = fx_pt * scale_factor
+                        dxf_y = (fabric_w_pt - fy_pt) * scale_factor
+                        dxf_verts.append((dxf_x, dxf_y))
+
+                    # Map plot_utils SEAMLINE (blue) and CUTLINE (black) to layers
+                    # SEAMLINE = dict(color='blue', linewidth=1.0) -> #0000ff
+                    # CUTLINE = dict(color='black', linewidth=1.5) -> #000000
+                    target_layer = layer_name
+                    if 'stroke:#0000ff' in style or 'stroke:blue' in style:
+                        target_layer = layer_name + '_SEAM'
+                        try:
+                            doc.layers.add(target_layer, color=color)
+                        except Exception:
+                            pass
+                    elif 'stroke:#000000' in style or 'stroke:black' in style:
+                        target_layer = layer_name + '_CUT'
+                        try:
+                            doc.layers.add(target_layer, color=color)
+                        except Exception:
+                            pass
+
+                    msp.add_lwpolyline(dxf_verts, close=closed, dxfattribs={'layer': target_layer})
+
+    doc.saveas(output_path)
 
 
 # ---------------------------------------------------------------------------
@@ -1740,6 +1843,8 @@ def generate_lay_plan(fabric_groups, output_path, units='inch', gap=0.25,
     # --- Write output ---
     if fmt == 'pdf':
         _write_pdf(layouts, output_path, units, gap)
+    elif fmt == 'dxf':
+        _write_dxf(layouts, output_path, units, gap)
     else:
         _write_svg(layouts, output_path, units, gap)
 

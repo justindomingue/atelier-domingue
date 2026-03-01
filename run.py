@@ -196,7 +196,7 @@ def main():
                         help='show construction lines, point labels, and grid')
     parser.add_argument('--units', '-u', choices=['cm', 'inch'], default=None,
                         help='display units for the plot (default: prompt via fzf)')
-    parser.add_argument('--format', '-f', choices=['svg', 'pdf'], default=None,
+    parser.add_argument('--format', '-f', choices=['svg', 'pdf', 'dxf'], default=None,
                         help='output format (default: prompt via fzf)')
     parser.add_argument('--fabric-width', type=float, default=None,
                         help='fabric width in inches (overrides garment default)')
@@ -258,7 +258,7 @@ def main():
     if args.format:
         fmt = args.format
     else:
-        fmt = _fzf_select(['pdf', 'svg'], 'Output format')
+        fmt = _fzf_select(['pdf', 'svg', 'dxf'], 'Output format')
 
     # --- import and run ---
     timestamp = datetime.now().strftime('%Y-%m-%d_%H%M%S')
@@ -327,8 +327,8 @@ def main():
                         extra_kwargs={'include_seam_allowance': False},
                     )
 
-                # Also generate requested format if not SVG
-                if fmt != 'svg':
+                # Also generate requested format if not SVG or DXF
+                if fmt not in ['svg', 'dxf']:
                     out = _run_piece(pkg, piece, measurements_path, debug, units,
                                      fmt=fmt, output_dir=output_dir,
                                      context=runtime_context)
@@ -401,7 +401,9 @@ def main():
             piece = {'module': parts[1]}
             set_active_pattern_context({})
             try:
-                _run_piece(parts[0], piece, measurements_path, debug, units, fmt=fmt,
+                # Single pieces can only be output to SVG or PDF directly from matplotlib
+                output_fmt = 'svg' if fmt == 'dxf' else fmt
+                _run_piece(parts[0], piece, measurements_path, debug, units, fmt=output_fmt,
                            context=runtime_context)
             finally:
                 clear_active_pattern_context()
