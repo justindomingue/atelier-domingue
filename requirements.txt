@@ -4,3 +4,9 @@ pyyaml
 scipy
 cairosvg
 pypdf
+cairosvg
+matplotlib
+numpy
+pypdf
+pyyaml
+scipy
