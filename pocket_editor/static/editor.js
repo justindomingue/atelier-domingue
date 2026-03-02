@@ -5,6 +5,7 @@ let controlPoints = [];
 let defaultControlPoints = [];
 let frontPanel = null;
 let watchOutline = null;
+let panelBounds = null;
 let draggingIndex = -1;
 let scale = 1;
 let offsetX = 0;
@@ -38,6 +39,52 @@ function toWorld(cx, cy) {
         cx / scale + offsetX,
         ((canvas.height / dpr) - cy) / scale + offsetY
     ];
+}
+
+function buildPanelBounds() {
+    if (!frontPanel) return;
+    const fp = frontPanel;
+    const poly = [];
+    poly.push(fp.pt1);
+    for (let i = 0; i < fp.hip.length; i++) poly.push(fp.hip[i]);
+    for (let i = 0; i < fp.crotch.length; i++) poly.push(fp.crotch[i]);
+    for (let i = 0; i < fp.inseam.length; i++) poly.push(fp.inseam[i]);
+    poly.push(fp.pt0);
+    poly.push(fp.pt9);
+    for (let i = fp.rise.length - 1; i >= 0; i--) poly.push(fp.rise[i]);
+    poly.push(fp.pt7);
+    panelBounds = poly;
+}
+
+function pointInPolygon(x, y, poly) {
+    let inside = false;
+    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+        const xi = poly[i][0], yi = poly[i][1];
+        const xj = poly[j][0], yj = poly[j][1];
+        if (((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi)) {
+            inside = !inside;
+        }
+    }
+    return inside;
+}
+
+function clampToPanel(wx, wy) {
+    if (!panelBounds || pointInPolygon(wx, wy, panelBounds)) return [wx, wy];
+
+    let bestX = wx, bestY = wy, bestDist = Infinity;
+    for (let i = 0, j = panelBounds.length - 1; i < panelBounds.length; j = i++) {
+        const ax = panelBounds[j][0], ay = panelBounds[j][1];
+        const bx = panelBounds[i][0], by = panelBounds[i][1];
+        const dx = bx - ax, dy = by - ay;
+        const len2 = dx * dx + dy * dy;
+        if (len2 === 0) continue;
+        let t = ((wx - ax) * dx + (wy - ay) * dy) / len2;
+        t = Math.max(0, Math.min(1, t));
+        const px = ax + t * dx, py = ay + t * dy;
+        const d = (wx - px) ** 2 + (wy - py) ** 2;
+        if (d < bestDist) { bestDist = d; bestX = px; bestY = py; }
+    }
+    return [bestX, bestY];
 }
 
 function computeTransform() {
@@ -132,21 +179,15 @@ function curveLength(points) {
 
 function drawFrontPanel() {
     if (!frontPanel) return;
-
     const fp = frontPanel;
 
-    const waistLine = [fp.pt1, fp.pt7];
-    drawCurve(waistLine, '#bbb', 1.5);
+    drawCurve([fp.pt1, fp.pt7], '#bbb', 1.5);
     drawCurve(fp.hip, '#999', 1.5);
     drawCurve(fp.rise, '#999', 1.5);
     drawCurve(fp.crotch, '#999', 1.5);
     drawCurve(fp.inseam, '#999', 1.5);
-
-    const hemLine = [fp.pt0, fp.pt9];
-    drawCurve(hemLine, '#bbb', 1.5);
-
-    const cf = [fp.pt10, fp.pt0];
-    drawCurve(cf, '#ddd', 1, [4, 4]);
+    drawCurve([fp.pt0, fp.pt9], '#bbb', 1.5);
+    drawCurve([fp.pt10, fp.pt0], '#ddd', 1, [4, 4]);
 
     ctx.save();
     ctx.fillStyle = '#bbb';
@@ -249,10 +290,7 @@ function updateInfo(curve) {
 
 function getMousePos(e) {
     const rect = canvas.getBoundingClientRect();
-    return [
-        e.clientX - rect.left,
-        e.clientY - rect.top
-    ];
+    return [e.clientX - rect.left, e.clientY - rect.top];
 }
 
 function findClosest(mx, my) {
@@ -274,29 +312,29 @@ canvas.addEventListener('mousedown', (e) => {
 canvas.addEventListener('mousemove', (e) => {
     const [mx, my] = getMousePos(e);
     if (draggingIndex >= 0) {
-        controlPoints[draggingIndex] = toWorld(mx, my);
+        const [wx, wy] = toWorld(mx, my);
+        controlPoints[draggingIndex] = clampToPanel(wx, wy);
         draw();
     } else {
-        canvas.style.cursor = findClosest(mx, my) >= 0 ? 'grab' : 'crosshair';
+        canvas.style.cursor = findClosest(mx, my) >= 0 ? 'grab' : 'default';
     }
 });
 
-canvas.addEventListener('mouseup', () => { draggingIndex = -1; canvas.style.cursor = 'crosshair'; });
-canvas.addEventListener('mouseleave', () => { draggingIndex = -1; canvas.style.cursor = 'crosshair'; });
+canvas.addEventListener('mouseup', () => { draggingIndex = -1; canvas.style.cursor = 'default'; });
+canvas.addEventListener('mouseleave', () => { draggingIndex = -1; });
 
 canvas.addEventListener('touchstart', (e) => {
     e.preventDefault();
-    const t = e.touches[0];
-    const [mx, my] = getMousePos(t);
+    const [mx, my] = getMousePos(e.touches[0]);
     draggingIndex = findClosest(mx, my);
 });
 
 canvas.addEventListener('touchmove', (e) => {
     e.preventDefault();
     if (draggingIndex >= 0) {
-        const t = e.touches[0];
-        const [mx, my] = getMousePos(t);
-        controlPoints[draggingIndex] = toWorld(mx, my);
+        const [mx, my] = getMousePos(e.touches[0]);
+        const [wx, wy] = toWorld(mx, my);
+        controlPoints[draggingIndex] = clampToPanel(wx, wy);
         draw();
     }
 });
@@ -313,6 +351,7 @@ async function loadDefaultShape() {
         defaultControlPoints = data.control_points.map(p => [...p]);
         frontPanel = data.front_panel;
         watchOutline = data.watch_pocket_outline;
+        buildPanelBounds();
         resize();
     } catch (err) {
         console.error('Failed to load:', err);
