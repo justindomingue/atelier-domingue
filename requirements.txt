@@ -10,3 +10,4 @@ numpy
 pypdf
 pyyaml
 scipy
+flask
