@@ -6,6 +6,8 @@ let defaultControlPoints = [];
 let frontPanel = null;
 let watchOutline = null;
 let panelBounds = null;
+let risePath = null;
+let hipPath = null;
 let draggingIndex = -1;
 let scale = 1;
 let offsetRX = 0;
@@ -62,6 +64,13 @@ function buildPanelBounds() {
     poly.push(fp.pt9);
     for (let i = fp.rise.length - 1; i >= 0; i--) poly.push(fp.rise[i]);
     panelBounds = poly;
+
+    risePath = [fp.pt1];
+    for (let i = fp.rise.length - 1; i >= 0; i--) risePath.push(fp.rise[i]);
+    risePath.push(fp.pt7);
+
+    hipPath = [fp.pt1];
+    for (let i = 0; i < fp.hip.length; i++) hipPath.push(fp.hip[i]);
 }
 
 function pointInPolygon(x, y, poly) {
@@ -76,7 +85,30 @@ function pointInPolygon(x, y, poly) {
     return inside;
 }
 
-function clampToPanel(wx, wy) {
+function snapToPath(wx, wy, path) {
+    let bestX = path[0][0], bestY = path[0][1], bestDist = Infinity;
+    for (let i = 0; i < path.length - 1; i++) {
+        const ax = path[i][0], ay = path[i][1];
+        const bx = path[i+1][0], by = path[i+1][1];
+        const dx = bx - ax, dy = by - ay;
+        const len2 = dx * dx + dy * dy;
+        if (len2 === 0) continue;
+        let t = ((wx - ax) * dx + (wy - ay) * dy) / len2;
+        t = Math.max(0, Math.min(1, t));
+        const px = ax + t * dx, py = ay + t * dy;
+        const d = (wx - px) ** 2 + (wy - py) ** 2;
+        if (d < bestDist) { bestDist = d; bestX = px; bestY = py; }
+    }
+    return [bestX, bestY];
+}
+
+function clampPoint(index, wx, wy) {
+    if (index === 0 && risePath) {
+        return snapToPath(wx, wy, risePath);
+    }
+    if (index === 3 && hipPath) {
+        return snapToPath(wx, wy, hipPath);
+    }
     if (!panelBounds || pointInPolygon(wx, wy, panelBounds)) return [wx, wy];
 
     let bestX = wx, bestY = wy, bestDist = Infinity;
@@ -377,7 +409,7 @@ canvas.addEventListener('mousemove', (e) => {
     const [mx, my] = getMousePos(e);
     if (draggingIndex >= 0) {
         const [wx, wy] = toWorld(mx, my);
-        controlPoints[draggingIndex] = clampToPanel(wx, wy);
+        controlPoints[draggingIndex] = clampPoint(draggingIndex, wx, wy);
         draw();
     } else {
         canvas.style.cursor = findClosest(mx, my) >= 0 ? 'grab' : 'default';
@@ -398,7 +430,7 @@ canvas.addEventListener('touchmove', (e) => {
     if (draggingIndex >= 0) {
         const [mx, my] = getMousePos(e.touches[0]);
         const [wx, wy] = toWorld(mx, my);
-        controlPoints[draggingIndex] = clampToPanel(wx, wy);
+        controlPoints[draggingIndex] = clampPoint(draggingIndex, wx, wy);
         draw();
     }
 });
