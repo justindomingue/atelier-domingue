@@ -244,19 +244,19 @@ function drawFrontPanel() {
     const fp = frontPanel;
 
     if (panelBounds && panelBounds.length > 2) {
-        drawClosedShape(panelBounds, 'rgba(200,200,195,0.15)', 'rgba(180,180,175,0.3)', 0.5);
+        drawClosedShape(panelBounds, 'rgba(40,60,90,0.35)', 'rgba(30,50,80,0.5)', 0.5);
     }
 
-    drawCurve([fp.pt1, fp.pt7], '#ccc', 1.5);
-    drawCurve(fp.hip, '#aaa', 1.5);
-    drawCurve(fp.rise, '#aaa', 1.5);
-    drawCurve(fp.crotch, '#aaa', 1.5);
-    drawCurve(fp.inseam, '#aaa', 1.5);
-    drawCurve([fp.pt0, fp.pt9], '#ccc', 1.5);
-    drawCurve([fp.pt10, fp.pt0], '#ddd', 1, [4, 4]);
+    drawCurve([fp.pt1, fp.pt7], 'rgba(20,40,70,0.6)', 1.5);
+    drawCurve(fp.hip, 'rgba(20,40,70,0.6)', 1.5);
+    drawCurve(fp.rise, 'rgba(20,40,70,0.6)', 1.5);
+    drawCurve(fp.crotch, 'rgba(20,40,70,0.5)', 1.5);
+    drawCurve(fp.inseam, 'rgba(20,40,70,0.5)', 1.5);
+    drawCurve([fp.pt0, fp.pt9], 'rgba(20,40,70,0.5)', 1.5);
+    drawCurve([fp.pt10, fp.pt0], 'rgba(20,40,70,0.3)', 1, [4, 4]);
 
     ctx.save();
-    ctx.fillStyle = '#bbb';
+    ctx.fillStyle = 'rgba(200,210,220,0.7)';
     ctx.font = '10px sans-serif';
     const [wx, wy] = toCanvas(fp.pt7[0], fp.pt7[1]);
     ctx.fillText('waist', wx + 4, wy - 4);
@@ -277,8 +277,8 @@ function drawTopstitching(curve) {
 
     [row1, row2].forEach(row => {
         ctx.save();
-        ctx.strokeStyle = '#222';
-        ctx.lineWidth = 0.8;
+        ctx.strokeStyle = '#d4a017';
+        ctx.lineWidth = 1;
         ctx.setLineDash([3 * scale / 4, 2.5 * scale / 4]);
         ctx.beginPath();
         const [sx, sy] = toCanvas(row[0][0], row[0][1]);
@@ -306,7 +306,7 @@ function draw() {
     const curve = evaluateBezier(p0, p1, p2, p3, 100);
 
     ctx.save();
-    ctx.strokeStyle = '#1a1a2e';
+    ctx.strokeStyle = '#0a0a18';
     ctx.lineWidth = 2.5;
     ctx.beginPath();
     const [sx, sy] = toCanvas(curve[0][0], curve[0][1]);
