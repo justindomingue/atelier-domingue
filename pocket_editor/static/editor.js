@@ -243,9 +243,6 @@ function drawFrontPanel() {
     if (!frontPanel) return;
     const fp = frontPanel;
 
-    if (panelBounds && panelBounds.length > 2) {
-        drawClosedShape(panelBounds, 'rgba(40,60,90,0.35)', 'rgba(30,50,80,0.5)', 0.5);
-    }
 
     drawCurve([fp.pt1, fp.pt7], 'rgba(20,40,70,0.6)', 1.5);
     drawCurve(fp.hip, 'rgba(20,40,70,0.6)', 1.5);
