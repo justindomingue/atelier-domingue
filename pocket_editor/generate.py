@@ -92,16 +92,33 @@ def get_default_control_points(measurements_path):
     p1 = p0 + depart * (chord_len * 0.50)
     p2 = p3 + arrive * (chord_len * 0.45)
 
+    def _downsample(curve, n=50):
+        """Downsample a curve to n points for lighter JSON payload."""
+        if len(curve) <= n:
+            return curve.tolist()
+        indices = np.linspace(0, len(curve) - 1, n, dtype=int)
+        return curve[indices].tolist()
+
+    front_panel = {
+        'pt1': fpts["1'"].tolist(),
+        'pt7': fpts["7'"].tolist(),
+        'pt0': fpts["0'"].tolist(),
+        'pt9': fpts["9"].tolist(),
+        'pt10': fpts["10"].tolist(),
+        'hip': _downsample(front['curves']['hip']),
+        'rise': _downsample(front['curves']['rise']),
+        'crotch': _downsample(front['curves']['crotch']),
+        'inseam': _downsample(front['curves']['inseam']),
+    }
+
+    watch_outline = pocket['watch_pocket']['outline'].tolist()
+
     return {
         'control_points': [p0.tolist(), p1.tolist(), p2.tolist(), p3.tolist()],
         'pocket_upper': p0.tolist(),
         'pocket_lower': p3.tolist(),
-        'front_bounds': {
-            'pt1': fpts["1'"].tolist(),
-            'pt7': fpts["7'"].tolist(),
-            'hip_start': front['curves']['hip'][0].tolist(),
-            'hip_end': front['curves']['hip'][-1].tolist(),
-        },
+        'front_panel': front_panel,
+        'watch_pocket_outline': watch_outline,
     }
 
 
