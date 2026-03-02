@@ -101,28 +101,26 @@ function computeTransform() {
     const w = canvas.width / dpr;
     const h = canvas.height / dpr;
 
-    let allRX = [], allRY = [];
-    const addPt = (p) => {
+    let focusRX = [], focusRY = [];
+    const addFocus = (p) => {
         const [rx, ry] = worldToRotated(p[0], p[1]);
-        allRX.push(rx); allRY.push(ry);
+        focusRX.push(rx); focusRY.push(ry);
     };
-    const addCurve = (c) => c.forEach(addPt);
 
-    addPt(frontPanel.pt1);
-    addPt(frontPanel.pt7);
-    addPt(frontPanel.pt0);
-    addPt(frontPanel.pt9);
-    addPt(frontPanel.pt10);
-    addCurve(frontPanel.hip);
-    addCurve(frontPanel.rise);
-    addCurve(frontPanel.crotch);
-    addCurve(frontPanel.inseam);
+    controlPoints.forEach(addFocus);
 
-    const pad = 3;
-    const minRX = Math.min(...allRX) - pad;
-    const maxRX = Math.max(...allRX) + pad;
-    const minRY = Math.min(...allRY) - pad;
-    const maxRY = Math.max(...allRY) + pad;
+    addFocus(frontPanel.pt1);
+    addFocus(frontPanel.pt7);
+    if (frontPanel.hip.length) addFocus(frontPanel.hip[frontPanel.hip.length - 1]);
+    if (frontPanel.rise.length) addFocus(frontPanel.rise[0]);
+
+    if (watchOutline) watchOutline.forEach(addFocus);
+
+    const pad = 4;
+    const minRX = Math.min(...focusRX) - pad;
+    const maxRX = Math.max(...focusRX) + pad;
+    const minRY = Math.min(...focusRY) - pad;
+    const maxRY = Math.max(...focusRY) + pad;
 
     const rangeX = maxRX - minRX;
     const rangeY = maxRY - minRY;
