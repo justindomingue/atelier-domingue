@@ -53,6 +53,7 @@ function buildPanelBounds() {
     if (!frontPanel) return;
     const fp = frontPanel;
     const poly = [];
+    poly.push(fp.pt7);
     poly.push(fp.pt1);
     for (let i = 0; i < fp.hip.length; i++) poly.push(fp.hip[i]);
     for (let i = 0; i < fp.crotch.length; i++) poly.push(fp.crotch[i]);
@@ -60,7 +61,6 @@ function buildPanelBounds() {
     poly.push(fp.pt0);
     poly.push(fp.pt9);
     for (let i = fp.rise.length - 1; i >= 0; i--) poly.push(fp.rise[i]);
-    poly.push(fp.pt7);
     panelBounds = poly;
 }
 
@@ -211,6 +211,10 @@ function drawFrontPanel() {
     if (!frontPanel) return;
     const fp = frontPanel;
 
+    if (panelBounds && panelBounds.length > 2) {
+        drawClosedShape(panelBounds, 'rgba(200,200,195,0.15)', 'rgba(180,180,175,0.3)', 0.5);
+    }
+
     drawCurve([fp.pt1, fp.pt7], '#ccc', 1.5);
     drawCurve(fp.hip, '#aaa', 1.5);
     drawCurve(fp.rise, '#aaa', 1.5);
@@ -236,8 +240,8 @@ function drawWatchPocket() {
 
 function drawTopstitching(curve) {
     const INCH = 2.54;
-    const row1 = offsetCurve(curve, 0.15 * INCH);
-    const row2 = offsetCurve(curve, 0.40 * INCH);
+    const row1 = offsetCurve(curve, -0.15 * INCH);
+    const row2 = offsetCurve(curve, -0.40 * INCH);
 
     [row1, row2].forEach(row => {
         ctx.save();
