@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pocket Shape Editor — Atelier Domingue</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <header>
+        <h1>Pocket Shape Editor</h1>
+        <p class="subtitle">Bézier curve manipulator for front pocket opening</p>
+    </header>
+
+    <main>
+        <div class="editor-panel">
+            <div class="toolbar">
+                <div class="toolbar-group">
+                    <label for="measurements-select">Measurements:</label>
+                    <select id="measurements-select">
+                        {% for m in measurements %}
+                        <option value="{{ m }}" {% if m == 'justin_1873_jeans.yaml' %}selected{% endif %}>{{ m | replace('.yaml', '') }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="toolbar-group">
+                    <label for="units-select">Units:</label>
+                    <select id="units-select">
+                        <option value="cm" selected>cm</option>
+                        <option value="inch">inch</option>
+                    </select>
+                </div>
+                <div class="toolbar-group">
+                    <button id="reset-btn" class="btn btn-secondary">Reset</button>
+                    <button id="generate-btn" class="btn btn-primary">Generate Pieces</button>
+                </div>
+            </div>
+
+            <div class="canvas-container">
+                <canvas id="editor-canvas" width="700" height="600"></canvas>
+            </div>
+
+            <div class="info-panel">
+                <div class="info-item">
+                    <span class="info-label">Curve Length:</span>
+                    <span id="curve-length">—</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Width:</span>
+                    <span id="curve-width">—</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Height:</span>
+                    <span id="curve-height">—</span>
+                </div>
+                <div class="help-text">
+                    Drag control points to reshape the pocket opening curve.
+                    Squares are on-curve endpoints, circles are Bézier handles.
+                </div>
+            </div>
+        </div>
+
+        <div class="preview-panel">
+            <h2>Generated Pattern Pieces</h2>
+            <div id="loading-indicator" class="hidden">Generating pieces...</div>
+            <div id="pieces-container">
+                <div class="piece-placeholder">
+                    Click "Generate Pieces" to create pattern pieces from your pocket shape.
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script src="/static/editor.js"></script>
+</body>
+</html>
