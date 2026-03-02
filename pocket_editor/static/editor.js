@@ -8,8 +8,8 @@ let watchOutline = null;
 let panelBounds = null;
 let draggingIndex = -1;
 let scale = 1;
-let offsetX = 0;
-let offsetY = 0;
+let offsetRX = 0;
+let offsetRY = 0;
 
 function resize() {
     const area = canvas.parentElement;
@@ -25,20 +25,28 @@ function resize() {
 
 window.addEventListener('resize', resize);
 
+function worldToRotated(wx, wy) {
+    return [wy, -wx];
+}
+
+function rotatedToWorld(rx, ry) {
+    return [-ry, rx];
+}
+
 function toCanvas(wx, wy) {
+    const [rx, ry] = worldToRotated(wx, wy);
     const dpr = window.devicePixelRatio || 1;
     return [
-        (wx - offsetX) * scale,
-        (canvas.height / dpr) - (wy - offsetY) * scale
+        (rx - offsetRX) * scale,
+        (canvas.height / dpr) - (ry - offsetRY) * scale
     ];
 }
 
 function toWorld(cx, cy) {
     const dpr = window.devicePixelRatio || 1;
-    return [
-        cx / scale + offsetX,
-        ((canvas.height / dpr) - cy) / scale + offsetY
-    ];
+    const rx = cx / scale + offsetRX;
+    const ry = ((canvas.height / dpr) - cy) / scale + offsetRY;
+    return rotatedToWorld(rx, ry);
 }
 
 function buildPanelBounds() {
@@ -93,8 +101,11 @@ function computeTransform() {
     const w = canvas.width / dpr;
     const h = canvas.height / dpr;
 
-    let allX = [], allY = [];
-    const addPt = (p) => { allX.push(p[0]); allY.push(p[1]); };
+    let allRX = [], allRY = [];
+    const addPt = (p) => {
+        const [rx, ry] = worldToRotated(p[0], p[1]);
+        allRX.push(rx); allRY.push(ry);
+    };
     const addCurve = (c) => c.forEach(addPt);
 
     addPt(frontPanel.pt1);
@@ -108,17 +119,17 @@ function computeTransform() {
     addCurve(frontPanel.inseam);
 
     const pad = 3;
-    const minX = Math.min(...allX) - pad;
-    const maxX = Math.max(...allX) + pad;
-    const minY = Math.min(...allY) - pad;
-    const maxY = Math.max(...allY) + pad;
+    const minRX = Math.min(...allRX) - pad;
+    const maxRX = Math.max(...allRX) + pad;
+    const minRY = Math.min(...allRY) - pad;
+    const maxRY = Math.max(...allRY) + pad;
 
-    const rangeX = maxX - minX;
-    const rangeY = maxY - minY;
+    const rangeX = maxRX - minRX;
+    const rangeY = maxRY - minRY;
 
     scale = Math.min(w / rangeX, h / rangeY);
-    offsetX = minX - (w / scale - rangeX) / 2;
-    offsetY = minY - (h / scale - rangeY) / 2;
+    offsetRX = minRX - (w / scale - rangeX) / 2;
+    offsetRY = minRY - (h / scale - rangeY) / 2;
 }
 
 function drawCurve(points, color, width, dash) {
@@ -167,6 +178,27 @@ function evaluateBezier(p0, p1, p2, p3, steps) {
     return pts;
 }
 
+function offsetCurve(points, dist) {
+    const result = [];
+    for (let i = 0; i < points.length; i++) {
+        let nx, ny;
+        if (i === 0) {
+            nx = -(points[1][1] - points[0][1]);
+            ny = points[1][0] - points[0][0];
+        } else if (i === points.length - 1) {
+            nx = -(points[i][1] - points[i-1][1]);
+            ny = points[i][0] - points[i-1][0];
+        } else {
+            nx = -(points[i+1][1] - points[i-1][1]);
+            ny = points[i+1][0] - points[i-1][0];
+        }
+        const len = Math.sqrt(nx * nx + ny * ny);
+        if (len === 0) { result.push([...points[i]]); continue; }
+        result.push([points[i][0] + (nx / len) * dist, points[i][1] + (ny / len) * dist]);
+    }
+    return result;
+}
+
 function curveLength(points) {
     let len = 0;
     for (let i = 1; i < points.length; i++) {
@@ -181,12 +213,12 @@ function drawFrontPanel() {
     if (!frontPanel) return;
     const fp = frontPanel;
 
-    drawCurve([fp.pt1, fp.pt7], '#bbb', 1.5);
-    drawCurve(fp.hip, '#999', 1.5);
-    drawCurve(fp.rise, '#999', 1.5);
-    drawCurve(fp.crotch, '#999', 1.5);
-    drawCurve(fp.inseam, '#999', 1.5);
-    drawCurve([fp.pt0, fp.pt9], '#bbb', 1.5);
+    drawCurve([fp.pt1, fp.pt7], '#ccc', 1.5);
+    drawCurve(fp.hip, '#aaa', 1.5);
+    drawCurve(fp.rise, '#aaa', 1.5);
+    drawCurve(fp.crotch, '#aaa', 1.5);
+    drawCurve(fp.inseam, '#aaa', 1.5);
+    drawCurve([fp.pt0, fp.pt9], '#ccc', 1.5);
     drawCurve([fp.pt10, fp.pt0], '#ddd', 1, [4, 4]);
 
     ctx.save();
@@ -195,15 +227,35 @@ function drawFrontPanel() {
     const [wx, wy] = toCanvas(fp.pt7[0], fp.pt7[1]);
     ctx.fillText('waist', wx + 4, wy - 4);
     const [hx, hy] = toCanvas(fp.hip[fp.hip.length-1][0], fp.hip[fp.hip.length-1][1]);
-    ctx.fillText('hip', hx + 4, hy);
-    const [rx, ry] = toCanvas(fp.rise[fp.rise.length-1][0], fp.rise[fp.rise.length-1][1]);
-    ctx.fillText('rise', rx + 4, ry - 4);
+    ctx.fillText('hip', hx + 4, hy - 4);
     ctx.restore();
 }
 
 function drawWatchPocket() {
     if (!watchOutline || watchOutline.length < 3) return;
-    drawClosedShape(watchOutline, 'rgba(201,169,110,0.08)', '#c9a96e', 1);
+    drawClosedShape(watchOutline, 'rgba(201,169,110,0.06)', 'rgba(201,169,110,0.5)', 1);
+}
+
+function drawTopstitching(curve) {
+    const INCH = 2.54;
+    const row1 = offsetCurve(curve, 0.15 * INCH);
+    const row2 = offsetCurve(curve, 0.40 * INCH);
+
+    [row1, row2].forEach(row => {
+        ctx.save();
+        ctx.strokeStyle = '#222';
+        ctx.lineWidth = 0.8;
+        ctx.setLineDash([3 * scale / 4, 2.5 * scale / 4]);
+        ctx.beginPath();
+        const [sx, sy] = toCanvas(row[0][0], row[0][1]);
+        ctx.moveTo(sx, sy);
+        for (let i = 1; i < row.length; i++) {
+            const [px, py] = toCanvas(row[i][0], row[i][1]);
+            ctx.lineTo(px, py);
+        }
+        ctx.stroke();
+        ctx.restore();
+    });
 }
 
 function draw() {
@@ -221,7 +273,7 @@ function draw() {
 
     ctx.save();
     ctx.strokeStyle = '#1a1a2e';
-    ctx.lineWidth = 3;
+    ctx.lineWidth = 2.5;
     ctx.beginPath();
     const [sx, sy] = toCanvas(curve[0][0], curve[0][1]);
     ctx.moveTo(sx, sy);
@@ -231,6 +283,8 @@ function draw() {
     }
     ctx.stroke();
     ctx.restore();
+
+    drawTopstitching(curve);
 
     const cp0 = toCanvas(p0[0], p0[1]);
     const cp1 = toCanvas(p1[0], p1[1]);
