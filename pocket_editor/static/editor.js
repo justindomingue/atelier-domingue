@@ -286,16 +286,27 @@ function drawWatchPocket() {
     drawClosedShape(watchOutline, 'rgba(201,169,110,0.06)', 'rgba(201,169,110,0.5)', 1);
 }
 
+function extendToOutline(row) {
+    if (!risePath || !hipPath || row.length < 2) return row;
+
+    const startSnap = snapToPath(row[0][0], row[0][1], risePath);
+    const endSnap = snapToPath(row[row.length - 1][0], row[row.length - 1][1], hipPath);
+
+    const extended = [startSnap, ...row, endSnap];
+    return extended;
+}
+
 function drawTopstitching(curve) {
     const INCH = 2.54;
-    const trim = Math.max(5, Math.floor(curve.length * 0.12));
-    const trimmed = curve.slice(trim, curve.length - trim);
-    if (trimmed.length < 2) return;
+    const row1 = offsetCurve(curve, -0.15 * INCH);
+    const row2 = offsetCurve(curve, -0.40 * INCH);
 
-    const row1 = offsetCurve(trimmed, -0.15 * INCH);
-    const row2 = offsetCurve(trimmed, -0.40 * INCH);
+    [row1, row2].forEach(raw => {
+        const trim = Math.max(3, Math.floor(raw.length * 0.05));
+        const trimmed = raw.slice(trim, raw.length - trim);
+        if (trimmed.length < 2) return;
+        const row = extendToOutline(trimmed);
 
-    [row1, row2].forEach(row => {
         ctx.save();
         ctx.strokeStyle = '#d4a017';
         ctx.lineWidth = 1;
