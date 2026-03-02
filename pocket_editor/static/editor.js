@@ -209,7 +209,9 @@ function evaluateBezier(p0, p1, p2, p3, steps) {
 }
 
 function offsetCurve(points, dist) {
-    const result = [];
+    if (points.length < 2) return points.map(p => [...p]);
+
+    const normals = [];
     for (let i = 0; i < points.length; i++) {
         let nx, ny;
         if (i === 0) {
@@ -223,8 +225,25 @@ function offsetCurve(points, dist) {
             ny = points[i+1][0] - points[i-1][0];
         }
         const len = Math.sqrt(nx * nx + ny * ny);
+        if (len === 0) normals.push([0, 0]);
+        else normals.push([nx / len, ny / len]);
+    }
+
+    const window = 8;
+    const result = [];
+    for (let i = 0; i < points.length; i++) {
+        let snx = 0, sny = 0, count = 0;
+        for (let j = Math.max(0, i - window); j <= Math.min(points.length - 1, i + window); j++) {
+            snx += normals[j][0];
+            sny += normals[j][1];
+            count++;
+        }
+        const len = Math.sqrt(snx * snx + sny * sny);
         if (len === 0) { result.push([...points[i]]); continue; }
-        result.push([points[i][0] + (nx / len) * dist, points[i][1] + (ny / len) * dist]);
+        result.push([
+            points[i][0] + (snx / len) * dist,
+            points[i][1] + (sny / len) * dist
+        ]);
     }
     return result;
 }
@@ -269,8 +288,12 @@ function drawWatchPocket() {
 
 function drawTopstitching(curve) {
     const INCH = 2.54;
-    const row1 = offsetCurve(curve, -0.15 * INCH);
-    const row2 = offsetCurve(curve, -0.40 * INCH);
+    const trim = Math.max(5, Math.floor(curve.length * 0.12));
+    const trimmed = curve.slice(trim, curve.length - trim);
+    if (trimmed.length < 2) return;
+
+    const row1 = offsetCurve(trimmed, -0.15 * INCH);
+    const row2 = offsetCurve(trimmed, -0.40 * INCH);
 
     [row1, row2].forEach(row => {
         ctx.save();
