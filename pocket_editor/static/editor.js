@@ -340,13 +340,15 @@ function draw() {
 
     drawTopstitching(curve);
 
+    drawCurve(frontPanel.hip, 'rgba(20,40,70,0.6)', 1.5);
+
     const cp0 = toCanvas(p0[0], p0[1]);
     const cp1 = toCanvas(p1[0], p1[1]);
     const cp2 = toCanvas(p2[0], p2[1]);
     const cp3 = toCanvas(p3[0], p3[1]);
 
     ctx.save();
-    ctx.strokeStyle = '#c9a96e';
+    ctx.strokeStyle = 'rgba(70,130,220,0.5)';
     ctx.lineWidth = 1;
     ctx.setLineDash([3, 3]);
     ctx.beginPath(); ctx.moveTo(cp0[0], cp0[1]); ctx.lineTo(cp1[0], cp1[1]); ctx.stroke();
@@ -355,7 +357,7 @@ function draw() {
     ctx.restore();
 
     const touch = isTouchDevice();
-    const endSize = touch ? 10 : 6;
+    const endSize = touch ? 7 : 4;
     const handleRadius = touch ? 8 : 5;
 
     controlPoints.forEach((pt, i) => {
@@ -363,15 +365,15 @@ function draw() {
         const isEnd = (i === 0 || i === 3);
         ctx.save();
         if (isEnd) {
-            ctx.fillStyle = '#1a1a2e';
+            ctx.fillStyle = '#2a5090';
             ctx.fillRect(cx - endSize, cy - endSize, endSize * 2, endSize * 2);
             ctx.strokeStyle = '#fff';
-            ctx.lineWidth = 1.5;
+            ctx.lineWidth = 1;
             ctx.strokeRect(cx - endSize, cy - endSize, endSize * 2, endSize * 2);
         } else {
             ctx.beginPath();
             ctx.arc(cx, cy, handleRadius, 0, Math.PI * 2);
-            ctx.fillStyle = '#c9a96e';
+            ctx.fillStyle = '#4682d4';
             ctx.fill();
             ctx.strokeStyle = '#1a1a2e';
             ctx.lineWidth = 1.5;
