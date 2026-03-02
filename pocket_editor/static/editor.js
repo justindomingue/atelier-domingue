@@ -300,19 +300,23 @@ function draw() {
     ctx.setLineDash([]);
     ctx.restore();
 
+    const touch = isTouchDevice();
+    const endSize = touch ? 10 : 6;
+    const handleRadius = touch ? 8 : 5;
+
     controlPoints.forEach((pt, i) => {
         const [cx, cy] = toCanvas(pt[0], pt[1]);
         const isEnd = (i === 0 || i === 3);
         ctx.save();
         if (isEnd) {
             ctx.fillStyle = '#1a1a2e';
-            ctx.fillRect(cx - 6, cy - 6, 12, 12);
+            ctx.fillRect(cx - endSize, cy - endSize, endSize * 2, endSize * 2);
             ctx.strokeStyle = '#fff';
             ctx.lineWidth = 1.5;
-            ctx.strokeRect(cx - 6, cy - 6, 12, 12);
+            ctx.strokeRect(cx - endSize, cy - endSize, endSize * 2, endSize * 2);
         } else {
             ctx.beginPath();
-            ctx.arc(cx, cy, 5, 0, Math.PI * 2);
+            ctx.arc(cx, cy, handleRadius, 0, Math.PI * 2);
             ctx.fillStyle = '#c9a96e';
             ctx.fill();
             ctx.strokeStyle = '#1a1a2e';
@@ -347,8 +351,12 @@ function getMousePos(e) {
     return [e.clientX - rect.left, e.clientY - rect.top];
 }
 
+function isTouchDevice() {
+    return 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+}
+
 function findClosest(mx, my) {
-    let best = -1, bestDist = 25;
+    let best = -1, bestDist = isTouchDevice() ? 40 : 25;
     controlPoints.forEach((pt, i) => {
         const [cx, cy] = toCanvas(pt[0], pt[1]);
         const d = Math.sqrt((mx - cx) ** 2 + (my - cy) ** 2);
