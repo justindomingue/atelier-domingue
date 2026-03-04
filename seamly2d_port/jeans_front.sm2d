@@ -2,65 +2,92 @@
 <pattern>
     <version>0.6.0</version>
     <unit>cm</unit>
-    <description/>
+    <description>1873 Selvedge Jeans — Front Panel (parametric)</description>
     <notes/>
     <measurements>justin_measurements.smis</measurements>
     <increments>
-        <increment name="#waistband_width" formula="3.81"/>
-        <increment name="#hem_width" formula="45.72"/>
-        <increment name="#knee_width" formula="50.8"/>
+        <increment name="#wb" formula="1.5*2.54" description="Waistband width"/>
+        <increment name="#hemW" formula="18*2.54" description="Hem opening full width"/>
+        <increment name="#kneeW" formula="20*2.54" description="Knee opening full width"/>
+        <increment name="#saS" formula="0.75*2.54" description="SA side seam"/>
+        <increment name="#saH" formula="2.375*2.54" description="SA hem"/>
+        <increment name="#saI" formula="0.375*2.54" description="SA inseam"/>
+        <increment name="#saC" formula="0.375*2.54" description="SA crotch"/>
+        <increment name="#saF" formula="0.75*2.54" description="SA fly"/>
+        <increment name="#saW" formula="0.375*2.54" description="SA waist"/>
     </increments>
     <draw name="JeansFront">
         <calculation>
-            <point id="1" type="single" name="A" x="-101.6" y="-0.9525" mx="0.13" my="0.26"/>
-            <point id="2" type="single" name="B" x="-89.7467" y="0.0" mx="0.13" my="0.26"/>
-            <point id="3" type="single" name="C" x="0.0" y="0.0" mx="0.13" my="0.26"/>
-            <point id="4" type="single" name="D" x="0.0" y="-21.9075" mx="0.13" my="0.26"/>
-            <point id="5" type="single" name="E" x="-45.72" y="-24.4475" mx="0.13" my="0.26"/>
-            <point id="6" type="single" name="F" x="-81.28" y="-31.3267" mx="0.13" my="0.26"/>
-            <point id="7" type="single" name="G" x="-89.7467" y="-25.4" mx="0.13" my="0.26"/>
-            <point id="8" type="single" name="H" x="-100.6475" y="-23.8125" mx="0.13" my="0.26"/>
-            <spline id="9" type="simpleInteractive" point1="1" point4="2" angle1="13.5118" length1="4.0767" angle2="180.0" length2="3.9638" color="black" penStyle="hair"/>
-            <spline id="10" type="simpleInteractive" point1="1" point4="8" angle1="-90.0" length1="7.62" angle2="90.0" length2="7.62" color="black" penStyle="hair"/>
-            <spline id="11" type="simpleInteractive" point1="7" point4="6" angle1="-8.2083" length1="5.7315" angle2="89.4813" length2="3.1329" color="black" penStyle="hair"/>
-            <spline id="12" type="simpleInteractive" point1="6" point4="5" angle1="30.9488" length1="9.0548" angle2="-176.8202" length2="9.0548" color="black" penStyle="hair"/>
-            <line id="13" firstPoint="2" secondPoint="3" typeLine="none" lineColor="black"/>
-            <line id="14" firstPoint="4" secondPoint="5" typeLine="none" lineColor="black"/>
-            <line id="15" firstPoint="3" secondPoint="4" typeLine="none" lineColor="black"/>
-            <line id="16" firstPoint="7" secondPoint="8" typeLine="none" lineColor="black"/>
+            <point id="1" type="single" name="A" x="0" y="0" mx="0.13" my="0.26"/>
+            <point id="2" type="endLine" name="B" basePoint="1" angle="270" length="leg_waist_side_to_floor - #wb" typeLine="hair" lineColor="black" mx="0.13" my="0.26"/>
+            <point id="3" type="endLine" name="C" basePoint="1" angle="270" length="leg_waist_side_to_floor - #wb - leg_crotch_to_floor + (hip_circ/2)/6" typeLine="dashLine" lineColor="blue" mx="0.13" my="0.26"/>
+            <point id="4" type="endLine" name="D" basePoint="1" angle="270" length="leg_waist_side_to_floor - #wb - leg_crotch_to_floor" typeLine="hair" lineColor="blue" mx="0.13" my="0.26"/>
+            <point id="5" type="endLine" name="E" basePoint="1" angle="270" length="leg_waist_side_to_floor - #wb - leg_crotch_to_floor/2 + 2*2.54" typeLine="dashLine" lineColor="blue" mx="0.13" my="0.26"/>
+            <point id="6" type="endLine" name="Fp" basePoint="1" angle="0" length="hip_circ/4" typeLine="dashLine" lineColor="blue" mx="0.13" my="0.26"/>
+            <point id="7" type="endLine" name="G" basePoint="3" angle="0" length="hip_circ/4" typeLine="dashLine" lineColor="blue" mx="0.13" my="0.26"/>
+            <point id="8" type="alongLine" name="Fs" firstPoint="6" secondPoint="7" length="0.375*2.54" typeLine="none" lineColor="black" mx="0.13" my="0.26"/>
+            <point id="9" type="endLine" name="F" basePoint="8" angle="90" length="0.625*2.54" typeLine="none" lineColor="black" mx="0.13" my="0.26"/>
+            <point id="10" type="endLine" name="Hb" basePoint="4" angle="0" length="hip_circ/4" typeLine="dashLine" lineColor="blue" mx="0.13" my="0.26"/>
+            <point id="11" type="endLine" name="H" basePoint="10" angle="0" length="(hip_circ/2)/6 - 1*2.54" typeLine="none" lineColor="black" mx="0.13" my="0.26"/>
+            <point id="12" type="endLine" name="I" basePoint="5" angle="0" length="#kneeW/2 - 0.375*2.54" typeLine="none" lineColor="black" mx="0.13" my="0.26"/>
+            <point id="13" type="endLine" name="J" basePoint="2" angle="0" length="#hemW/2 - 0.375*2.54" typeLine="none" lineColor="black" mx="0.13" my="0.26"/>
+            <point id="14" type="alongLine" name="Km" firstPoint="10" secondPoint="11" length="Line_Hb_H/2" typeLine="none" lineColor="black" mx="0.13" my="0.26"/>
+            <point id="15" type="endLine" name="K" basePoint="14" angle="45" length="Line_Hb_H/2" typeLine="none" lineColor="black" mx="0.13" my="0.26"/>
+            <line id="16" firstPoint="1" secondPoint="3" typeLine="none" lineColor="black"/>
+            <line id="17" firstPoint="1" secondPoint="9" typeLine="none" lineColor="black"/>
+            <line id="18" firstPoint="11" secondPoint="12" typeLine="none" lineColor="black"/>
+            <line id="19" firstPoint="12" secondPoint="13" typeLine="none" lineColor="black"/>
+            <line id="20" firstPoint="3" secondPoint="7" typeLine="dashLine" lineColor="blue"/>
+            <line id="21" firstPoint="4" secondPoint="10" typeLine="dashLine" lineColor="blue"/>
+            <line id="22" firstPoint="5" secondPoint="12" typeLine="dashLine" lineColor="blue"/>
+            <line id="23" firstPoint="9" secondPoint="7" typeLine="dashLine" lineColor="darkBlue"/>
+            <point id="24" type="endLine" name="Ha" basePoint="1" angle="270" length="Line_A_C/3" typeLine="none" lineColor="black" mx="0.13" my="0.26"/>
+            <point id="25" type="endLine" name="Hh" basePoint="24" angle="0" length="0.375*2.54" typeLine="none" lineColor="black" mx="0.13" my="0.26"/>
+            <line id="26" firstPoint="1" secondPoint="25" typeLine="none" lineColor="black"/>
+            <point id="27" type="endLine" name="Hc" basePoint="3" angle="90" length="Line_A_C/3" typeLine="none" lineColor="black" mx="0.13" my="0.26"/>
+            <line id="28" firstPoint="3" secondPoint="27" typeLine="none" lineColor="black"/>
+            <spline id="29" type="simpleInteractive" point1="1" point4="3" angle1="AngleLine_A_Hh" length1="Line_A_Hh" angle2="AngleLine_C_Hc" length2="Line_A_C/3" color="black" penStyle="hair"/>
+            <spline id="30" type="simpleInteractive" point1="1" point4="9" angle1="0" length1="Line_A_F/3" angle2="180" length2="Line_A_F/3" color="black" penStyle="hair"/>
+            <line id="31" firstPoint="7" secondPoint="15" typeLine="none" lineColor="black"/>
+            <line id="32" firstPoint="11" secondPoint="15" typeLine="none" lineColor="black"/>
+            <spline id="33" type="simpleInteractive" point1="7" point4="11" angle1="AngleLine_G_K" length1="Line_G_K*2/3" angle2="AngleLine_H_K" length2="Line_H_K*2/3" color="black" penStyle="hair"/>
+            <spline id="34" type="simpleInteractive" point1="11" point4="12" angle1="AngleLine_H_I - 20" length1="Line_H_I/4" angle2="AngleLine_I_J" length2="Line_H_I/4" color="black" penStyle="hair"/>
+            <line id="35" firstPoint="3" secondPoint="2" typeLine="none" lineColor="black"/>
+            <line id="36" firstPoint="2" secondPoint="13" typeLine="none" lineColor="black"/>
+            <line id="37" firstPoint="7" secondPoint="9" typeLine="none" lineColor="black"/>
         </calculation>
         <modeling>
-            <spline id="17" idObject="9" inUse="true" type="modeling"/>
-            <point id="18" idObject="2" inUse="true" type="modeling"/>
-            <point id="19" idObject="3" inUse="true" type="modeling"/>
-            <point id="20" idObject="4" inUse="true" type="modeling"/>
-            <point id="21" idObject="5" inUse="true" type="modeling"/>
-            <spline id="22" idObject="12" inUse="true" type="modeling"/>
-            <point id="23" idObject="6" inUse="true" type="modeling"/>
-            <spline id="24" idObject="11" inUse="true" type="modeling"/>
-            <point id="25" idObject="7" inUse="true" type="modeling"/>
-            <point id="26" idObject="8" inUse="true" type="modeling"/>
-            <spline id="27" idObject="10" inUse="true" type="modeling"/>
-            <point id="28" idObject="1" inUse="true" type="modeling"/>
+            <point id="38" idObject="1" inUse="true" type="modeling"/>
+            <spline id="39" idObject="29" inUse="true" type="modelingSpline"/>
+            <point id="40" idObject="3" inUse="true" type="modeling"/>
+            <point id="41" idObject="2" inUse="true" type="modeling"/>
+            <point id="42" idObject="13" inUse="true" type="modeling"/>
+            <point id="43" idObject="12" inUse="true" type="modeling"/>
+            <spline id="44" idObject="34" inUse="true" type="modelingSpline"/>
+            <point id="45" idObject="11" inUse="true" type="modeling"/>
+            <spline id="46" idObject="33" inUse="true" type="modelingSpline"/>
+            <point id="47" idObject="7" inUse="true" type="modeling"/>
+            <point id="48" idObject="9" inUse="true" type="modeling"/>
+            <spline id="49" idObject="30" inUse="true" type="modelingSpline"/>
         </modeling>
         <details>
-            <detail id="29" name="JeansFront" closed="1" inLayout="true" seamAllowance="true" width="1.0" forbidFlipping="false" mx="0" my="0">
+            <detail id="50" name="Jeans Front" closed="1" inLayout="true" seamAllowance="true" width="1" forbidFlipping="false" mx="0" my="0">
                 <data letter="" visible="false" fontSize="0" mx="0" my="0" width="1" height="1" rotation="0" onFold="false" annotation="" orientation="" rotationWay="" tilt="" foldPosition=""/>
                 <patternInfo visible="false" fontSize="0" mx="0" my="0" width="1" height="1" rotation="0"/>
                 <grainline visible="true" arrows="0" length="15" mx="0" my="0" rotation="90"/>
                 <nodes>
-                    <node idObject="17" type="NodeSpline"/>
-                    <node idObject="18" type="NodePoint" after="1.905"/>
-                    <node idObject="19" type="NodePoint" before="1.905" after="6.0325"/>
-                    <node idObject="20" type="NodePoint" before="6.0325" after="0.9525"/>
-                    <node idObject="21" type="NodePoint" before="0.9525"/>
-                    <node idObject="22" type="NodeSpline" reverse="1"/>
-                    <node idObject="23" type="NodePoint" after="0.9525"/>
-                    <node idObject="24" type="NodeSpline" reverse="1"/>
-                    <node idObject="25" type="NodePoint" before="0.9525" after="1.905"/>
-                    <node idObject="26" type="NodePoint" before="1.905" after="0.9525"/>
-                    <node idObject="27" type="NodeSpline" reverse="1"/>
-                    <node idObject="28" type="NodePoint" before="0.9525" after="1.905"/>
+                    <node idObject="39" type="NodeSpline"/>
+                    <node idObject="40" type="NodePoint" after="#saS"/>
+                    <node idObject="41" type="NodePoint" before="#saS" after="#saH"/>
+                    <node idObject="42" type="NodePoint" before="#saH" after="#saI"/>
+                    <node idObject="43" type="NodePoint" before="#saI"/>
+                    <node idObject="44" type="NodeSpline" reverse="1"/>
+                    <node idObject="45" type="NodePoint" after="#saC"/>
+                    <node idObject="46" type="NodeSpline" reverse="1"/>
+                    <node idObject="47" type="NodePoint" before="#saC" after="#saF"/>
+                    <node idObject="48" type="NodePoint" before="#saF" after="#saW"/>
+                    <node idObject="49" type="NodeSpline" reverse="1"/>
+                    <node idObject="38" type="NodePoint" before="#saW" after="#saS"/>
                 </nodes>
             </detail>
         </details>

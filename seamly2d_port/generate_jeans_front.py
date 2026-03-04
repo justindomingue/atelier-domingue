@@ -1,209 +1,450 @@
-"""Generate a Seamly2D .sm2d pattern for the 1873 Jeans Front panel.
+"""Generate a fully parametric Seamly2D .sm2d pattern for the 1873 Jeans Front.
 
-Uses the existing Atelier Domingue drafting function to compute all geometry,
-then translates the results into Seamly2D XML via the pattern_generator module.
+Approach B: All drafting logic lives in Seamly2D's formula system. Point
+positions, curve tangents, and lengths are Seamly2D formulas referencing
+measurement variables. Feeding in different .smis measurements re-resolves
+everything automatically.
+
+Coordinate system (matching Seamly2D screen):
+    X increases rightward  → we use this for "across the body" (inseam direction)
+    Y increases downward   → we use this for "along the leg" (waist toward hem)
+
+So pt0 (hem) is at the bottom, pt1 (waist) is above, and widths go right.
 """
 
 import sys
-import numpy as np
+import xml.etree.ElementTree as ET
+from xml.dom import minidom
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
-from garment_programs.geometry import INCH
-from garment_programs.measurements import load_measurements
-from garment_programs.SelvedgeJeans1873.jeans_front import draft_jeans_front
-from seamly2d_port.pattern_generator import (
-    Sm2dBuilder, control_points_to_seamly, quadratic_to_cubic,
-)
-from seamly2d_port.measurements import load_yaml_measurements, to_cm, build_increments_xml
+INCH = "2.54"
 
 
-def _rebuild_control_points(m: dict) -> dict:
-    """Recompute the Bézier control points from the drafting logic.
-
-    The draft function returns sampled polylines (100 points each), but
-    Seamly2D needs the original control points. We reconstruct them here
-    by replaying the math from draft_jeans_front.
-    """
-    pt0 = np.array([0.0, 0.0])
-    waistband = m.get('waistband_width', 1.5 * INCH)
-    pt1 = np.array([-(m['side_length'] - waistband), 0.0])
-    pt2 = np.array([-m['inseam'], 0.0])
-    pt3 = np.array([pt2[0] / 2 - 2 * INCH, 0.0])
-    pt4 = np.array([pt2[0] - (m['seat'] / 2) / 6, 0.0])
-
-    hem_drop = m['hem_width'] / 2 - 3 / 8 * INCH
-    pt0_drop = np.array([pt0[0], -hem_drop])
-
-    knee_drop = m['knee_width'] / 2 - 3 / 8 * INCH
-    pt3_drop = np.array([pt3[0], -knee_drop])
-
-    seat_quarter = m['seat'] / 4
-    pt5 = np.array([pt2[0], -seat_quarter])
-
-    crotch_ext = (m['seat'] / 2) / 6 - 1 * INCH
-    pt6 = np.array([pt5[0], pt5[1] - crotch_ext])
-
-    pt7 = np.array([pt1[0], -seat_quarter])
-    pt8 = np.array([pt4[0], -seat_quarter])
-
-    pt1_adj = pt1.copy()
-    pt1_adj[1] -= 3 / 8 * INCH
-
-    dir_7to8 = pt8 - pt7
-    dir_7to8_norm = dir_7to8 / np.linalg.norm(dir_7to8)
-    pt7_shifted = pt7 + dir_7to8_norm * (3 / 8 * INCH)
-    pt7_adj = pt7_shifted.copy()
-    pt7_adj[1] += 5 / 8 * INCH
-
-    dist_5to6 = np.linalg.norm(pt6 - pt5)
-    half_dist = dist_5to6 / 2
-    pt9 = pt5 + half_dist * np.array([-np.cos(np.pi / 4), -np.sin(np.pi / 4)])
-
-    dist_14 = np.linalg.norm(pt4 - pt1_adj)
-    rise_1 = pt4[1] - pt1_adj[1]
-    hip_cp1 = pt1_adj + np.array([dist_14 / 3, rise_1])
-    hip_cp2 = pt4 - np.array([dist_14 / 3, 0])
-
-    y_arm = abs(pt7_adj[1] - pt1_adj[1]) / 3
-    rise_cp1 = pt1_adj + np.array([0.0, -y_arm])
-    rise_cp2 = pt7_adj + np.array([0.0, y_arm])
-
-    crotch_ctrl_quad = 2 * pt9 - 0.5 * (pt8 + pt6)
-    _, crotch_cp1, crotch_cp2, _ = quadratic_to_cubic(pt8, crotch_ctrl_quad, pt6)
-
-    dir_6_to_3 = pt3_drop - pt6
-    dir_6_to_3_norm = dir_6_to_3 / np.linalg.norm(dir_6_to_3)
-    angle = np.radians(20)
-    inseam_tan_at_6 = np.array([
-        dir_6_to_3_norm[0] * np.cos(angle) - dir_6_to_3_norm[1] * np.sin(angle),
-        dir_6_to_3_norm[0] * np.sin(angle) + dir_6_to_3_norm[1] * np.cos(angle)
-    ])
-    inseam_straight_dir = pt0_drop - pt3_drop
-    inseam_straight_dir_norm = inseam_straight_dir / np.linalg.norm(inseam_straight_dir)
-    dist_63 = np.linalg.norm(pt3_drop - pt6)
-    inseam_cp1 = pt6 + inseam_tan_at_6 * (dist_63 / 4)
-    inseam_cp2 = pt3_drop - inseam_straight_dir_norm * (dist_63 / 4)
-
-    return {
-        'points': {
-            '0': pt0, '1_adj': pt1_adj, '4': pt4, '0_drop': pt0_drop,
-            '3_drop': pt3_drop, '5': pt5, '6': pt6, '7_adj': pt7_adj,
-            '8': pt8,
-        },
-        'curves': {
-            'hip': {'P0': pt1_adj, 'CP1': hip_cp1, 'CP2': hip_cp2, 'P3': pt4},
-            'rise': {'P0': pt1_adj, 'CP1': rise_cp1, 'CP2': rise_cp2, 'P3': pt7_adj},
-            'crotch': {'P0': pt8, 'CP1': crotch_cp1, 'CP2': crotch_cp2, 'P3': pt6},
-            'inseam': {'P0': pt6, 'CP1': inseam_cp1, 'CP2': inseam_cp2, 'P3': pt3_drop},
-        },
-    }
+def _indent_xml(root: ET.Element) -> str:
+    rough = ET.tostring(root, encoding="unicode", xml_declaration=True)
+    dom = minidom.parseString(rough)
+    return dom.toprettyxml(indent="    ").replace(
+        '<?xml version="1.0" ?>', '<?xml version="1.0" encoding="UTF-8"?>'
+    )
 
 
-def generate_jeans_front_sm2d(
-    yaml_path: str,
-    output_path: str,
-    measurements_smis: str = "justin_measurements.smis",
-):
-    """Generate a .sm2d pattern file for the 1873 jeans front panel."""
-    m = load_measurements(yaml_path)
-    cp = _rebuild_control_points(m)
+class IdAlloc:
+    def __init__(self):
+        self._n = 1
+    def next(self) -> int:
+        v = self._n; self._n += 1; return v
 
-    raw_m, unit = load_yaml_measurements(yaml_path)
-    custom_increments = build_increments_xml(raw_m, unit)
 
-    builder = Sm2dBuilder(measurements_smis, unit="cm")
-    for name, formula in custom_increments:
-        builder.add_increment(name, formula)
+CUSTOM_DEFAULTS = {
+    "wb": f"1.5*{INCH}",
+    "hemW": f"18*{INCH}",
+    "kneeW": f"20*{INCH}",
+}
 
-    piece = builder.new_piece("JeansFront")
-    piece.set_seam_allowance(1.0)
-    piece.set_grainline(rotation=90, length=15, visible=True)
 
-    pts = cp['points']
-    curves = cp['curves']
+def build_jeans_front(measurements_path: str, custom_measurements: dict | None = None) -> str:
+    ids = IdAlloc()
+    root = ET.Element("pattern")
+    ET.SubElement(root, "version").text = "0.6.0"
+    ET.SubElement(root, "unit").text = "cm"
+    ET.SubElement(root, "description").text = "1873 Selvedge Jeans — Front Panel (parametric)"
+    ET.SubElement(root, "notes")
+    ET.SubElement(root, "measurements").text = measurements_path
 
-    pt_ids = {}
-    for name, coord in [
-        ("A", pts['1_adj']),
-        ("B", pts['4']),
-        ("C", pts['0']),
-        ("D", pts['0_drop']),
-        ("E", pts['3_drop']),
-        ("F", pts['6']),
-        ("G", pts['8']),
-        ("H", pts['7_adj']),
+    cm = custom_measurements or {}
+
+    increments = ET.SubElement(root, "increments")
+    for name, default_formula, desc in [
+        ("wb", CUSTOM_DEFAULTS["wb"], "Waistband width"),
+        ("hemW", CUSTOM_DEFAULTS["hemW"], "Hem opening full width"),
+        ("kneeW", CUSTOM_DEFAULTS["kneeW"], "Knee opening full width"),
+        ("saS", f"0.75*{INCH}", "SA side seam"),
+        ("saH", f"2.375*{INCH}", "SA hem"),
+        ("saI", f"0.375*{INCH}", "SA inseam"),
+        ("saC", f"0.375*{INCH}", "SA crotch"),
+        ("saF", f"0.75*{INCH}", "SA fly"),
+        ("saW", f"0.375*{INCH}", "SA waist"),
     ]:
-        pt_ids[name] = piece.add_single_point(name, coord[0], coord[1])
+        formula = cm.get(name, default_formula)
+        inc = ET.SubElement(increments, "increment")
+        inc.set("name", f"#{name}")
+        inc.set("formula", str(formula))
+        inc.set("description", desc)
 
-    hip_angles = control_points_to_seamly(
-        curves['hip']['P0'], curves['hip']['CP1'],
-        curves['hip']['CP2'], curves['hip']['P3'])
-    hip_id = piece.add_cubic_spline(
-        pt_ids['A'], pt_ids['B'],
-        hip_angles[0], hip_angles[1],
-        hip_angles[2], hip_angles[3])
+    draw = ET.SubElement(root, "draw")
+    draw.set("name", "JeansFront")
+    calc = ET.SubElement(draw, "calculation")
+    modeling = ET.SubElement(draw, "modeling")
+    details = ET.SubElement(draw, "details")
 
-    rise_angles = control_points_to_seamly(
-        curves['rise']['P0'], curves['rise']['CP1'],
-        curves['rise']['CP2'], curves['rise']['P3'])
-    rise_id = piece.add_cubic_spline(
-        pt_ids['A'], pt_ids['H'],
-        rise_angles[0], rise_angles[1],
-        rise_angles[2], rise_angles[3])
+    MX, MY = "0.13", "0.26"
 
-    crotch_angles = control_points_to_seamly(
-        curves['crotch']['P0'], curves['crotch']['CP1'],
-        curves['crotch']['CP2'], curves['crotch']['P3'])
-    crotch_id = piece.add_cubic_spline(
-        pt_ids['G'], pt_ids['F'],
-        crotch_angles[0], crotch_angles[1],
-        crotch_angles[2], crotch_angles[3])
+    def pt_single(name, x, y):
+        pid = ids.next()
+        e = ET.SubElement(calc, "point")
+        for k, v in [("id", str(pid)), ("type", "single"), ("name", name),
+                      ("x", str(x)), ("y", str(y)), ("mx", MX), ("my", MY)]:
+            e.set(k, v)
+        return pid
 
-    inseam_angles = control_points_to_seamly(
-        curves['inseam']['P0'], curves['inseam']['CP1'],
-        curves['inseam']['CP2'], curves['inseam']['P3'])
-    inseam_id = piece.add_cubic_spline(
-        pt_ids['F'], pt_ids['E'],
-        inseam_angles[0], inseam_angles[1],
-        inseam_angles[2], inseam_angles[3])
+    def pt_end(name, base, angle, length, style="none", color="black"):
+        pid = ids.next()
+        e = ET.SubElement(calc, "point")
+        for k, v in [("id", str(pid)), ("type", "endLine"), ("name", name),
+                      ("basePoint", str(base)), ("angle", str(angle)),
+                      ("length", str(length)), ("typeLine", style),
+                      ("lineColor", color), ("mx", MX), ("my", MY)]:
+            e.set(k, v)
+        return pid
 
-    piece.add_line(pt_ids['B'], pt_ids['C'], line_style="none")
-    piece.add_line(pt_ids['D'], pt_ids['E'], line_style="none")
-    piece.add_line(pt_ids['C'], pt_ids['D'], line_style="none")
-    piece.add_line(pt_ids['G'], pt_ids['H'], line_style="none")
+    def pt_along(name, first, second, length, style="none", color="black"):
+        pid = ids.next()
+        e = ET.SubElement(calc, "point")
+        for k, v in [("id", str(pid)), ("type", "alongLine"), ("name", name),
+                      ("firstPoint", str(first)), ("secondPoint", str(second)),
+                      ("length", str(length)), ("typeLine", style),
+                      ("lineColor", color), ("mx", MX), ("my", MY)]:
+            e.set(k, v)
+        return pid
 
-    SA_SIDE = 1.905
-    SA_HEM = 6.0325
-    SA_INSEAM = 0.9525
-    SA_CROTCH = 0.9525
-    SA_FLY = 1.905
-    SA_WAIST = 0.9525
+    def ln(p1, p2, style="none", color="black"):
+        lid = ids.next()
+        e = ET.SubElement(calc, "line")
+        for k, v in [("id", str(lid)), ("firstPoint", str(p1)),
+                      ("secondPoint", str(p2)), ("typeLine", style),
+                      ("lineColor", color)]:
+            e.set(k, v)
+        return lid
 
-    piece.add_spline_to_detail(hip_id)
-    piece.add_point_to_detail(pt_ids['B'], sa_after=SA_SIDE)
-    piece.add_point_to_detail(pt_ids['C'], sa_before=SA_SIDE, sa_after=SA_HEM)
-    piece.add_point_to_detail(pt_ids['D'], sa_before=SA_HEM, sa_after=SA_INSEAM)
-    piece.add_point_to_detail(pt_ids['E'], sa_before=SA_INSEAM)
-    piece.add_spline_to_detail(inseam_id, reverse=True)
-    piece.add_point_to_detail(pt_ids['F'], sa_after=SA_CROTCH)
-    piece.add_spline_to_detail(crotch_id, reverse=True)
-    piece.add_point_to_detail(pt_ids['G'], sa_before=SA_CROTCH, sa_after=SA_FLY)
-    piece.add_point_to_detail(pt_ids['H'], sa_before=SA_FLY, sa_after=SA_WAIST)
-    piece.add_spline_to_detail(rise_id, reverse=True)
-    piece.add_point_to_detail(pt_ids['A'], sa_before=SA_WAIST, sa_after=SA_SIDE)
+    def spl(pt1, pt4, a1, l1, a2, l2, color="black", pen="hair"):
+        sid = ids.next()
+        e = ET.SubElement(calc, "spline")
+        for k, v in [("id", str(sid)), ("type", "simpleInteractive"),
+                      ("point1", str(pt1)), ("point4", str(pt4)),
+                      ("angle1", str(a1)), ("length1", str(l1)),
+                      ("angle2", str(a2)), ("length2", str(l2)),
+                      ("color", color), ("penStyle", pen)]:
+            e.set(k, v)
+        return sid
 
-    xml_str = builder.to_xml()
+    def m_pt(cid):
+        mid = ids.next()
+        e = ET.SubElement(modeling, "point")
+        for k, v in [("id", str(mid)), ("idObject", str(cid)),
+                      ("inUse", "true"), ("type", "modeling")]:
+            e.set(k, v)
+        return mid
+
+    def m_spl(cid):
+        mid = ids.next()
+        e = ET.SubElement(modeling, "spline")
+        for k, v in [("id", str(mid)), ("idObject", str(cid)),
+                      ("inUse", "true"), ("type", "modelingSpline")]:
+            e.set(k, v)
+        return mid
+
+    # =========================================================================
+    # Coordinate system:
+    #   Origin = waist/outseam corner (pt1_adj in original)
+    #   X increases right → across body (widths)
+    #   Y increases down → along leg toward hem
+    # This puts waist at top, hem at bottom, outseam on left, inseam on right.
+    # =========================================================================
+
+    # --- A: Origin (waist/outseam corner, adjusted) ---
+    A = pt_single("A", 0, 0)
+
+    # --- B: Hem end of outseam ---
+    # Distance from waist to hem = side_length - waistband - 3/8" adjustment
+    # Original: pt0 is at [0,0], pt1_adj is at [-(side_length - wb), -3/8"]
+    # So distance from pt1_adj to pt0 along x = side_length - wb
+    # But pt0 is also shifted in y by the 3/8" adjustment.
+    # For simplicity, let's measure: the outseam runs from waist to hem
+    # vertically (in our Y-axis).
+    B = pt_end("B", A, "270", f"leg_waist_side_to_floor - #wb", style="hair")
+
+    # --- C: Seat level on outseam ---
+    # Original pt4 is at x = -(inseam - seat/12) from hem.
+    # Distance from waist (A) to seat = (side_length - wb) - (inseam - seat/12)
+    # = leg_waist_side_to_floor - #wb - leg_crotch_to_floor + hip_circ/12
+    C = pt_end("C", A, "270",
+               f"leg_waist_side_to_floor - #wb - leg_crotch_to_floor + (hip_circ/2)/6",
+               style="dashLine", color="blue")
+
+    # --- D: Crotch level on outseam ---
+    # Distance from waist to crotch = side_length - wb - inseam... wait, this
+    # doesn't account for the 3/8" adjustment. Let me recalculate.
+    # Original: pt2 = [-inseam, 0], pt1_adj = [-(side_length-wb), -3/8"]
+    # Distance from pt1_adj to pt2 along x = inseam - (side_length - wb)
+    # But inseam < side_length - wb, so this is negative → pt2 is ABOVE pt1_adj... no.
+    # Actually: side_length > inseam (41.5 > 32), so pt1 is further left (higher).
+    # pt1_adj.x = -(side_length - wb) ≈ -40
+    # pt2.x = -inseam = -32
+    # So pt2 is to the RIGHT of pt1 (closer to hem). Distance = (side_length-wb) - inseam
+    D = pt_end("D", A, "270",
+               f"leg_waist_side_to_floor - #wb - leg_crotch_to_floor",
+               style="hair", color="blue")
+
+    # --- E: Knee level on outseam ---
+    # Original pt3 is at x = inseam/2 - 2" from hem
+    # Distance from waist to knee = (side_length-wb) - (inseam/2 - 2")
+    E = pt_end("E", A, "270",
+               f"leg_waist_side_to_floor - #wb - leg_crotch_to_floor/2 + 2*{INCH}",
+               style="dashLine", color="blue")
+
+    # === WIDTHS (rightward from outseam) ===
+
+    # --- F: Waist/fly corner (pt7_adj in original) ---
+    # Original: pt7 is at [pt1.x, -seat/4], pt7_adj = shifted 3/8" along 7→8 + 5/8" up
+    # In our coords: from A, go right by seat/4, then adjust.
+    # pt7 (before adjustment) is at seat/4 to the right of A
+    F_pre = pt_end("Fp", A, "0", "hip_circ/4", style="dashLine", color="blue")
+
+    # Seat level end of width line (pt8 in original: same y as seat level, same width)
+    # pt8 is directly right of C by seat/4
+    G = pt_end("G", C, "0", "hip_circ/4", style="dashLine", color="blue")
+
+    # pt7_adj: from F_pre, shift along F_pre→G direction by 3/8", then UP by 5/8"
+    F_s = pt_along("Fs", F_pre, G, f"0.375*{INCH}")
+    F = pt_end("F", F_s, "90", f"0.625*{INCH}")
+
+    # --- H: Crotch fork (pt6 in original) ---
+    # pt5 = crotch level + seat/4 width, pt6 = pt5 + crotch extension downward
+    H_base = pt_end("Hb", D, "0", "hip_circ/4", style="dashLine", color="blue")
+    H = pt_end("H", H_base, "0", f"(hip_circ/2)/6 - 1*{INCH}")
+
+    # --- I: Knee width point (pt3_drop in original) ---
+    I = pt_end("I", E, "0", f"#kneeW/2 - 0.375*{INCH}")
+
+    # --- J: Hem width point (pt0_drop in original) ---
+    J = pt_end("J", B, "0", f"#hemW/2 - 0.375*{INCH}")
+
+    # --- K: Crotch curve midpoint helper (pt9 in original) ---
+    # pt9 = midpoint of pt5→pt6 shifted 45° inward-downward
+    # In our coords: pt5 = H_base, pt6 = H
+    # Midpoint of Hb→H, then shift at 315° (right-down in screen = original 45° inward-down)
+    # Actually, in original: pt9 = pt5 + half_dist * [-cos45, -sin45]
+    # = rightward and downward... In our coord system, original -cos45 in x = leftward,
+    # original -sin45 in y = upward (since original -y = our upward)
+    # Wait: I need to reconsider the coordinate mapping more carefully.
+
+    # In original code:
+    #   x-axis: negative = toward waist (left), positive = toward hem (right)
+    #   y-axis: negative = toward outseam (up), positive = toward inseam (down)
+    # In our Seamly2D layout:
+    #   X-axis: rightward = across body (original y positive direction = inseam)
+    #   Y-axis: downward = along leg toward hem (original x positive direction = hem)
+    # So the mapping is: original_x → our -Y (up), original_y → our X (right)
+    # Actually I set up: A at origin, B below A (toward hem) = Y increases down = original x increases
+    # And widths go rightward = X increases = original y direction (negative = outseam)...
+    # Hmm, let me reconsider. In original:
+    #   pt0 = [0, 0] (hem, outseam baseline)
+    #   pt1 = [-40, 0] (waist on outseam baseline)
+    #   pt5 = [-32, -25.4] (crotch level, seat/4 AWAY from baseline toward inseam)
+    # The y-axis goes NEGATIVE toward inseam. So:
+    #   original y negative → our X positive (rightward) ✓ (widths go right = inseam direction)
+    #   original x negative → our Y negative (upward) ✓ (waist is above hem)
+
+    # For pt9: pt9 = pt5 + half_dist * [-cos(pi/4), -sin(pi/4)]
+    # In original: [-cos45, -sin45] = move in negative-x (toward waist) AND negative-y (toward inseam)
+    # In our coords: negative-x → upward (Y decreases), negative-y → rightward (X increases)
+    # So pt9 is UP and to the RIGHT of midpoint of pt5→pt6
+    # In Seamly2D angles: up-right = between 0° and 90° 
+    # Specifically: angle = 45° (northeast in screen coords... but screen Y is down)
+    # Since Seamly2D uses math angles where 0° = right, 90° = up:
+    # Going right + up = angle 45° (or close to it)
+
+    # midpoint of Hb→H
+    K_mid = pt_along("Km", H_base, H, f"Line_Hb_H/2")
+    # Shift at 45° (right and up in screen = X+, Y-) by half the distance
+    K = pt_end("K", K_mid, "45", f"Line_Hb_H/2")
+
+    # =========================================================================
+    # CONSTRUCTION LINES (for Line_ variables and visual reference)
+    # =========================================================================
+
+    # Lines needed for distance/angle references in spline formulas
+    ln(A, C, style="none")       # Line_A_C for hip curve distance
+    ln(A, F, style="none")       # Line_A_F for rise curve Y-span
+    ln(H, I, style="none")       # Line_H_I for inseam distance
+    ln(I, J, style="none")       # Line_I_J / AngleLine_I_J for inseam tangent
+
+    # Visual reference lines
+    ln(C, G, style="dashLine", color="blue")   # seat line
+    ln(D, H_base, style="dashLine", color="blue")  # hip/crotch line
+    ln(E, I, style="dashLine", color="blue")   # knee line
+    ln(F, G, style="dashLine", color="darkBlue")  # fly line
+
+    # =========================================================================
+    # CURVES
+    # =========================================================================
+
+    # --- 1. Hip curve: A → C ---
+    # Original: cubic Bézier with
+    #   CP1 = pt1_adj + [dist/3, rise_1]  (toward hem and outseam)
+    #   CP2 = pt4 - [dist/3, 0]  (back toward waist along x only)
+    # In our coords:
+    #   CP1 direction from A: right by (rise in original y) and down by (dist/3 in original x)
+    #     → angle pointing right-down ≈ AngleLine_A_C direction shifted
+    #   CP2 direction from C: back up toward A along the Y-axis only
+    #     → angle = 90° (upward)
+    # Actually let me use helper points for the tangent directions.
+    # 
+    # CP1 in original = pt1_adj + [dist/3, rise_1]
+    # rise_1 = pt4.y - pt1_adj.y = 0 - (-3/8") = 3/8" (tiny compared to dist/3)
+    # dist = distance(pt1_adj, pt4)
+    # In our coords:
+    #   From A, the "dist/3" goes toward C direction (downward = 270°)
+    #   The "rise_1" goes leftward (toward outseam = original positive y... wait)
+    # Let me trace rise_1 more carefully:
+    #   rise_1 = pt4[1] - pt1_adj[1] = 0 - (-3/8*INCH) = 3/8*INCH > 0
+    #   In original y, positive = toward inseam
+    #   In our coords, toward inseam = rightward (0°)
+    # So CP1 is below-right of A: down by dist/3 and right by 3/8"
+    # CP2 = pt4 - [dist/3, 0] = above pt4 by dist/3 (in original x, negative = toward waist = up in ours)
+    #   In our coords: upward (90°)
+    
+    # Helper for CP1 direction: go down from A by dist/3, then right by 3/8"
+    hip_h1 = pt_end("Ha", A, "270", f"Line_A_C/3")
+    hip_h2 = pt_end("Hh", hip_h1, "0", f"0.375*{INCH}")
+    # Now angle from A to hip_h2 and distance from A to hip_h2 give us tangent 1
+    ln(A, hip_h2, style="none")  # for Line_A_Hh
+
+    # For CP2: from C, go upward by dist/3
+    hip_h3 = pt_end("Hc", C, "90", f"Line_A_C/3")
+    ln(C, hip_h3, style="none")  # for Line_C_Hc
+
+    hip_curve = spl(A, C,
+                    f"AngleLine_A_Hh", f"Line_A_Hh",
+                    f"AngleLine_C_Hc", f"Line_A_C/3")
+
+    # --- 2. Rise curve: A → F ---
+    # Original: CP1 = pt1_adj + [0, -y_arm] where y_arm = |pt7_adj.y - pt1_adj.y| / 3
+    # In original: [0, -y_arm] = no x change, move toward inseam (negative y)
+    # In our coords: toward inseam = rightward (0°)
+    # CP2 = pt7_adj + [0, +y_arm] = move away from inseam (positive y) = leftward (180°)
+    # y_arm = distance between A and F divided by... actually it's the Y-component only.
+    # In original: |pt7_adj[1] - pt1_adj[1]| = the width difference
+    # In our coords: this is the X-distance between A and F
+    # Since both A and F have Y components too, the X-distance alone:
+    #   A is at (0,0), F is roughly at (seat/4 + adjustments, small adjustment)
+    # For simplicity, use Line_A_F / 3 as the arm length (close enough — the 
+    # original also uses 1/3 of the span)
+    rise_curve = spl(A, F,
+                     "0", f"Line_A_F/3",
+                     "180", f"Line_A_F/3")
+
+    # --- 3. Crotch curve: G → H ---
+    # Using K (pt9 midpoint helper) for tangent directions
+    # Tangent at G toward K, tangent at H toward K
+    # Length = 2/3 of distance to K (from degree-elevation of quadratic)
+    ln(G, K, style="none")
+    ln(H, K, style="none")
+    crotch_curve = spl(G, H,
+                       f"AngleLine_G_K", f"Line_G_K*2/3",
+                       f"AngleLine_H_K", f"Line_H_K*2/3")
+
+    # --- 4. Inseam curve: H → I ---
+    # Tangent at H: direction from H toward I, rotated -20° (CW)
+    # Tangent at I: direction from I toward J (toward hem along inseam)
+    # Lengths: dist(H,I) / 4
+    inseam_curve = spl(H, I,
+                       f"AngleLine_H_I - 20", f"Line_H_I/4",
+                       f"AngleLine_I_J", f"Line_H_I/4")
+
+    # =========================================================================
+    # OUTLINE LINES (straight segments of the pattern piece)
+    # =========================================================================
+    ln(C, B, style="none")    # outseam: seat to hem
+    ln(B, J, style="none")    # hem
+    ln(G, F, style="none")    # fly
+
+    # =========================================================================
+    # DETAIL PIECE
+    # =========================================================================
+    # CW winding: A → hip → C → B → J → I → inseam(rev) → H → crotch(rev) → G → F → rise(rev) → A
+
+    mA   = m_pt(A)
+    mHip = m_spl(hip_curve)
+    mC   = m_pt(C)
+    mB   = m_pt(B)
+    mJ   = m_pt(J)
+    mI   = m_pt(I)
+    mIns = m_spl(inseam_curve)
+    mH   = m_pt(H)
+    mCro = m_spl(crotch_curve)
+    mG   = m_pt(G)
+    mF   = m_pt(F)
+    mRis = m_spl(rise_curve)
+
+    detail = ET.SubElement(details, "detail")
+    did = ids.next()
+    detail.set("id", str(did))
+    detail.set("name", "Jeans Front")
+    detail.set("closed", "1")
+    detail.set("inLayout", "true")
+    detail.set("seamAllowance", "true")
+    detail.set("width", "1")
+    detail.set("forbidFlipping", "false")
+    detail.set("mx", "0")
+    detail.set("my", "0")
+
+    data = ET.SubElement(detail, "data")
+    for k, v in [("letter", ""), ("visible", "false"), ("fontSize", "0"),
+                 ("mx", "0"), ("my", "0"), ("width", "1"), ("height", "1"),
+                 ("rotation", "0"), ("onFold", "false"), ("annotation", ""),
+                 ("orientation", ""), ("rotationWay", ""), ("tilt", ""),
+                 ("foldPosition", "")]:
+        data.set(k, v)
+
+    pi = ET.SubElement(detail, "patternInfo")
+    for k, v in [("visible", "false"), ("fontSize", "0"), ("mx", "0"),
+                 ("my", "0"), ("width", "1"), ("height", "1"), ("rotation", "0")]:
+        pi.set(k, v)
+
+    gl = ET.SubElement(detail, "grainline")
+    for k, v in [("visible", "true"), ("arrows", "0"), ("length", "15"),
+                 ("mx", "0"), ("my", "0"), ("rotation", "90")]:
+        gl.set(k, v)
+
+    nodes = ET.SubElement(detail, "nodes")
+
+    def nd(obj, ntype="NodePoint", rev=False, bef=None, aft=None):
+        n = ET.SubElement(nodes, "node")
+        n.set("idObject", str(obj))
+        n.set("type", ntype)
+        if rev:
+            n.set("reverse", "1")
+        if bef is not None:
+            n.set("before", str(bef))
+        if aft is not None:
+            n.set("after", str(aft))
+
+    nd(mHip, "NodeSpline")
+    nd(mC, aft="#saS")
+    nd(mB, bef="#saS", aft="#saH")
+    nd(mJ, bef="#saH", aft="#saI")
+    nd(mI, bef="#saI")
+    nd(mIns, "NodeSpline", rev=True)
+    nd(mH, aft="#saC")
+    nd(mCro, "NodeSpline", rev=True)
+    nd(mG, bef="#saC", aft="#saF")
+    nd(mF, bef="#saF", aft="#saW")
+    nd(mRis, "NodeSpline", rev=True)
+    nd(mA, bef="#saW", aft="#saS")
+
+    return _indent_xml(root)
+
+
+def generate(yaml_path: str, output_path: str, measurements_smis: str):
+    xml = build_jeans_front(measurements_smis)
     with open(output_path, "w") as f:
-        f.write(xml_str)
-
-    print(f"Generated: {output_path}")
-    return output_path
+        f.write(xml)
+    print(f"Generated parametric pattern: {output_path}")
 
 
 if __name__ == "__main__":
     yaml_path = sys.argv[1] if len(sys.argv) > 1 else "measurements/justin_1873_jeans.yaml"
     output = sys.argv[2] if len(sys.argv) > 2 else "seamly2d_port/jeans_front.sm2d"
     smis = sys.argv[3] if len(sys.argv) > 3 else "justin_measurements.smis"
-    generate_jeans_front_sm2d(yaml_path, output, smis)
+    generate(yaml_path, output, smis)

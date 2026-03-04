@@ -40,11 +40,31 @@ python run.py
 python run.py -m measurements/justin_1873_jeans.yaml -p "1873 Selvedge Denim Jeans" -u cm -f svg
 ```
 
+## Seamly2D Integration (`seamly2d_port/`)
+
+A secondary rendering backend using Seamly2D's headless CLI for tiled PDF, full-size PDF, DXF, and SVG export.
+
+- `measurements.py` — Converts YAML measurements → `.smis` (Seamly2D individual measurements format)
+- `generate_jeans_front.py` — Builds a fully parametric `.sm2d` pattern for the jeans front panel (Approach B: formulas reference measurement variables directly)
+- `run_seamly.py` — End-to-end pipeline: YAML → .smis → .sm2d → Seamly2D CLI → output files
+- `format_notes.md` — Reference for .sm2d/.smis XML schemas, formula syntax, and CLI flags
+- `feasibility_notes.md` — Go/no-go assessment comparing Seamly2D vs Python pipeline capabilities
+
+### Usage
+```bash
+cd seamly2d_port
+python run_seamly.py --format tiled    # Tiled PDF for home printers
+python run_seamly.py --format pdf      # Full-size PDF
+python run_seamly.py --format svg      # SVG
+python run_seamly.py --format dxf      # AutoCAD DXF
+python run_seamly.py --generate-only   # Just create .sm2d/.smis, no export
+```
+
 ## Dependencies
 
 - Python 3.12
 - numpy, matplotlib, scipy, pyyaml, cairosvg, pypdf, flask
-- System: fzf, cairo
+- System: fzf, cairo, seamly2d (via Nix)
 
 ## Workflow
 
