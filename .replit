@@ -4,7 +4,7 @@ expertMode = true
 
 [nix]
 channel = "stable-25_05"
-packages = ["cairo", "ffmpeg-full", "freetype", "fzf", "ghostscript", "gobject-introspection", "gtk3", "libffi", "libxcrypt", "libyaml", "pkg-config", "qhull", "tcl", "tk", "xsimd"]
+packages = ["cairo", "ffmpeg-full", "freetype", "fzf", "ghostscript", "gobject-introspection", "gtk3", "libffi", "libxcrypt", "libyaml", "pkg-config", "qhull", "tcl", "tk", "xsimd", "seamly2d"]
 
 [workflows]
 runButton = "Project"

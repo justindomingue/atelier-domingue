@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<pattern>
+    <version>0.6.0</version>
+    <unit>cm</unit>
+    <description/>
+    <notes/>
+    <measurements>justin_measurements.smis</measurements>
+    <increments>
+        <increment name="#waistband_width" formula="3.81"/>
+        <increment name="#hem_width" formula="45.72"/>
+        <increment name="#knee_width" formula="50.8"/>
+    </increments>
+    <draw name="JeansFront">
+        <calculation>
+            <point id="1" type="single" name="A" x="-101.6" y="-0.9525" mx="0.13" my="0.26"/>
+            <point id="2" type="single" name="B" x="-89.7467" y="0.0" mx="0.13" my="0.26"/>
+            <point id="3" type="single" name="C" x="0.0" y="0.0" mx="0.13" my="0.26"/>
+            <point id="4" type="single" name="D" x="0.0" y="-21.9075" mx="0.13" my="0.26"/>
+            <point id="5" type="single" name="E" x="-45.72" y="-24.4475" mx="0.13" my="0.26"/>
+            <point id="6" type="single" name="F" x="-81.28" y="-31.3267" mx="0.13" my="0.26"/>
+            <point id="7" type="single" name="G" x="-89.7467" y="-25.4" mx="0.13" my="0.26"/>
+            <point id="8" type="single" name="H" x="-100.6475" y="-23.8125" mx="0.13" my="0.26"/>
+            <spline id="9" type="simpleInteractive" point1="1" point4="2" angle1="13.5118" length1="4.0767" angle2="180.0" length2="3.9638" color="black" penStyle="hair"/>
+            <spline id="10" type="simpleInteractive" point1="1" point4="8" angle1="-90.0" length1="7.62" angle2="90.0" length2="7.62" color="black" penStyle="hair"/>
+            <spline id="11" type="simpleInteractive" point1="7" point4="6" angle1="-8.2083" length1="5.7315" angle2="89.4813" length2="3.1329" color="black" penStyle="hair"/>
+            <spline id="12" type="simpleInteractive" point1="6" point4="5" angle1="30.9488" length1="9.0548" angle2="-176.8202" length2="9.0548" color="black" penStyle="hair"/>
+            <line id="13" firstPoint="2" secondPoint="3" typeLine="none" lineColor="black"/>
+            <line id="14" firstPoint="4" secondPoint="5" typeLine="none" lineColor="black"/>
+            <line id="15" firstPoint="3" secondPoint="4" typeLine="none" lineColor="black"/>
+            <line id="16" firstPoint="7" secondPoint="8" typeLine="none" lineColor="black"/>
+        </calculation>
+        <modeling>
+            <spline id="17" idObject="9" inUse="true" type="modeling"/>
+            <point id="18" idObject="2" inUse="true" type="modeling"/>
+            <point id="19" idObject="3" inUse="true" type="modeling"/>
+            <point id="20" idObject="4" inUse="true" type="modeling"/>
+            <point id="21" idObject="5" inUse="true" type="modeling"/>
+            <spline id="22" idObject="12" inUse="true" type="modeling"/>
+            <point id="23" idObject="6" inUse="true" type="modeling"/>
+            <spline id="24" idObject="11" inUse="true" type="modeling"/>
+            <point id="25" idObject="7" inUse="true" type="modeling"/>
+            <point id="26" idObject="8" inUse="true" type="modeling"/>
+            <spline id="27" idObject="10" inUse="true" type="modeling"/>
+            <point id="28" idObject="1" inUse="true" type="modeling"/>
+        </modeling>
+        <details>
+            <detail id="29" name="JeansFront" closed="1" inLayout="true" seamAllowance="true" width="1.0" forbidFlipping="false" mx="0" my="0">
+                <data letter="" visible="false" fontSize="0" mx="0" my="0" width="1" height="1" rotation="0" onFold="false" annotation="" orientation="" rotationWay="" tilt="" foldPosition=""/>
+                <patternInfo visible="false" fontSize="0" mx="0" my="0" width="1" height="1" rotation="0"/>
+                <grainline visible="true" arrows="0" length="15" mx="0" my="0" rotation="90"/>
+                <nodes>
+                    <node idObject="17" type="NodeSpline"/>
+                    <node idObject="18" type="NodePoint" after="1.905"/>
+                    <node idObject="19" type="NodePoint" before="1.905" after="6.0325"/>
+                    <node idObject="20" type="NodePoint" before="6.0325" after="0.9525"/>
+                    <node idObject="21" type="NodePoint" before="0.9525"/>
+                    <node idObject="22" type="NodeSpline" reverse="1"/>
+                    <node idObject="23" type="NodePoint" after="0.9525"/>
+                    <node idObject="24" type="NodeSpline" reverse="1"/>
+                    <node idObject="25" type="NodePoint" before="0.9525" after="1.905"/>
+                    <node idObject="26" type="NodePoint" before="1.905" after="0.9525"/>
+                    <node idObject="27" type="NodeSpline" reverse="1"/>
+                    <node idObject="28" type="NodePoint" before="0.9525" after="1.905"/>
+                </nodes>
+            </detail>
+        </details>
+    </draw>
+</pattern>

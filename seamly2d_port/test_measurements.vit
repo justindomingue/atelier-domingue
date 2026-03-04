@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<vit>
+    <version>0.3.3</version>
+    <read-only>false</read-only>
+    <notes/>
+    <unit>cm</unit>
+    <pm_system>998</pm_system>
+    <personal>
+        <family-name>Test</family-name>
+        <given-name>User</given-name>
+        <birth-date>1990-01-01</birth-date>
+        <gender>male</gender>
+        <email/>
+    </personal>
+    <body-measurements>
+        <m name="waist_circ" value="86.36"/>
+        <m name="hip_circ" value="101.6"/>
+        <m name="leg_crotch_to_floor" value="81.28"/>
+        <m name="leg_waist_side_to_floor" value="105.41"/>
+        <m name="height" value="178"/>
+    </body-measurements>
+</vit>

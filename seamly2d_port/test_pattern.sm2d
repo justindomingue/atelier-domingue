@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<pattern>
+    <version>0.6.0</version>
+    <unit>cm</unit>
+    <description>Minimal test pattern — rectangle</description>
+    <notes/>
+    <measurements>test_measurements.smis</measurements>
+    <increments/>
+    <draw name="TestPiece">
+        <calculation>
+            <point id="1" mx="0.132292" my="0.264583" name="A" type="single" x="1" y="1"/>
+            <point angle="0" basePoint="1" id="2" length="20" lineColor="black" typeLine="hair" mx="0.132292" my="0.264583" name="B" type="endLine"/>
+            <point angle="270" basePoint="2" id="3" length="30" lineColor="black" typeLine="hair" mx="0.132292" my="0.264583" name="C" type="endLine"/>
+            <point angle="180" basePoint="3" id="4" length="20" lineColor="black" typeLine="hair" mx="0.132292" my="0.264583" name="D" type="endLine"/>
+            <line firstPoint="4" id="5" lineColor="black" typeLine="hair" secondPoint="1"/>
+        </calculation>
+        <modeling>
+            <point id="6" idObject="1" inUse="true" type="modeling"/>
+            <point id="7" idObject="2" inUse="true" type="modeling"/>
+            <point id="8" idObject="3" inUse="true" type="modeling"/>
+            <point id="9" idObject="4" inUse="true" type="modeling"/>
+        </modeling>
+        <details>
+            <detail closed="1" forbidFlipping="false" id="10" inLayout="true" mx="0" my="0" name="Test Rectangle" seamAllowance="true" width="1">
+                <data letter="" annotation="" orientation="" rotationWay="" tilt="" foldPosition="" visible="false" onFold="false" fontSize="0" mx="0" my="0" width="1" height="1" rotation="0"/>
+                <patternInfo fontSize="0" height="1" mx="0" my="0" rotation="0" visible="false" width="1"/>
+                <grainline arrows="0" length="1" mx="0" my="0" rotation="90" visible="false"/>
+                <nodes>
+                    <node idObject="6" type="NodePoint"/>
+                    <node idObject="7" type="NodePoint"/>
+                    <node idObject="8" type="NodePoint"/>
+                    <node idObject="9" type="NodePoint"/>
+                </nodes>
+            </detail>
+        </details>
+    </draw>
+</pattern>
