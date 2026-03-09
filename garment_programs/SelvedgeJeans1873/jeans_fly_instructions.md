@@ -57,12 +57,3 @@ for any type of jean after approximately 1877.
 
 In practice, the rectangle can be drafted directly on the cloth without
 separate construction lines.
-
----
-
-## 1873 vs Modern variant
-
-- **1873:** Uses the two-piece fly (cut 2). Historical construction with a
-  fold line and optional selvedge placement.
-- **Modern:** Uses the one-piece fly (cut 1). Simpler, stronger construction
-  suitable for any post-1877 jean.

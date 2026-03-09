@@ -11,7 +11,6 @@ Implements the checks from the "Double Checking Your Work" lesson:
 
 import numpy as np
 
-from garment_programs.core.runtime import cache_draft, resolve_measurements
 from .jeans_front import INCH, load_measurements, draft_jeans_front, _curve_length
 from .jeans_back import draft_jeans_back
 
@@ -39,7 +38,7 @@ def _row(label, value_in, target_in=None, note="", tol_in=0.5):
         return f"  {label:<34} {val_str:>8}   {note}"
 
 
-def verify_draft(measurements_path, context=None):
+def verify_draft(measurements_path):
     """
     Run all draft double-checks and print a report.
 
@@ -52,9 +51,9 @@ def verify_draft(measurements_path, context=None):
     -------
     str  — the formatted report (also printed to stdout).
     """
-    m = resolve_measurements(context, measurements_path, load_measurements)
-    front = cache_draft(context, 'selvedge.front', lambda: draft_jeans_front(m))
-    back = cache_draft(context, 'selvedge.back:0.0000', lambda: draft_jeans_back(m, front))
+    m = load_measurements(measurements_path)
+    front = draft_jeans_front(m)
+    back  = draft_jeans_back(m, front)
 
     fpts   = front['points']
     fcurves = front['curves']
@@ -158,8 +157,7 @@ def verify_draft(measurements_path, context=None):
     side_arc   = _curve_length(fcurves['hip'])
     side_str   = _seg(fpts['4'], fpts['0'])
     side_total = side_arc + side_str
-    waistband = m.get('waistband_width', 1.5 * INCH)
-    side_target = m['side_length'] - waistband
+    side_target = m['side_length']
 
     front_inseam_arc = _curve_length(fcurves['inseam'])
     front_inseam_str = _seg(fpts["3'"], fpts["0'"])
@@ -223,16 +221,16 @@ def verify_draft(measurements_path, context=None):
 
 # -- Entry point for the generic runner -------------------------------------
 
-def run(measurements_path, output_path=None, debug=False, units='inch', context=None,
-        **kwargs):
+def run(measurements_path, output_path=None, debug=False, units='inch'):
     """Uniform interface: runs verification and writes report to output_path.
 
     The runner may pass a .svg path; we replace the extension with .txt.
     """
-    report = verify_draft(measurements_path, context=context)
+    report = verify_draft(measurements_path)
     if output_path:
         from pathlib import Path
         txt_path = Path(output_path).with_suffix('.txt')
         txt_path.parent.mkdir(parents=True, exist_ok=True)
         txt_path.write_text(report)
         print(f"Report written to {txt_path}")
+    return None

@@ -39,59 +39,17 @@ separate sheets.
 
 ### C. Pocket Facing
 
-The facing is the visible band of fabric that shows when the pocket is open.
-It is drafted on the front piece, then traced off as a separate cut piece.
+12. Draw a line ~**1/2"** from the pocket opening and bag edge.
+13. Make it the desired depth — an inch or two below the opening.
+14. Draw toward the side seam, meeting just above the top of the curved bag.
 
-12. Draw a line ~**1/2"** inside both the pocket opening and the pocket bag
-    edge — this is the inner edge of the facing.
-13. Extend the facing **1"–2"** below the pocket opening along the bag inner
-    edge.
-14. Draw the lower edge toward the side seam, meeting just above the top of
-    the curved bag line (~**1 1/2"** below the pocket opening along the side
-    seam).
-15. The facing forms a closed shape: opening (offset) → side seam →
-    lower curve → inner edge → back to opening top.
-
-### D. 1873 Watch Pocket
-
-A small standalone pocket positioned at the front waist, overlapping the
-pocket opening area. This is a separate cut piece, not traced from the front.
-
-**Shape:** pentagon / shield — straight top, straight sides, V-bottom.
-
-16. Mark **point 0** at top center.
-17. Top width: **1 3/4"** each side of center (**3 1/2"** total).
-18. Straight sides for **4"** downward.
-19. At 4", bottom width narrows to **1 1/2"** each side (**3"** total).
-20. Below 4", sides taper inward to meet at a center point at **4 1/2"**
-    total height — forming the V-bottom.
-
-**Position on front:** Top falls at the waist line (center of waistband area);
-bottom sits just below the front pocket opening.
-
-### E. Seam Allowances
+### D. Seam Allowances
 
 - Pocket bag: **3/8"** on bottom and curved edges; top and side get SA from
   the traced pattern. Remaining long edge is **cut on the fold**.
 - Facing: **3/8"** on inside and lower edges.
-- Watch pocket: **7/8"** on top (double fold for waistband), **3/8"** on
-  sides and bottom.
 
-### F. Standalone Cut Pieces
-
-The watch pocket and facing are extracted as their own printable pattern pieces
-(separate from the front pocket overlay):
-
-- **Watch pocket** (`jeans_watch_pocket.py`): the pentagon/shield is rotated
-  upright and re-origined to (0, 0) with SA applied (7/8" top, 3/8" sides and
-  bottom). Grain line runs vertically through center.
-- **Front pocket facing** (`jeans_front_facing.py`): the cutoff piece from
-  the front panel between the waist (rise curve from pt1 to pocket_upper),
-  the pocket opening curve, and the side seam (hip curve from pocket_lower
-  back to pt1). Rotated 90° for layout. SA: 3/8" on waist and opening
-  edges; 3/4" on side seam. Grain line vertical.
-
-### G. Cut the Opening
+### E. Cut the Opening
 
 When 100% satisfied, cut the pocket opening from the front leg along the seam
 allowance line. Save the cutoff piece.
@@ -129,13 +87,3 @@ allowance line. Save the cutoff piece.
   crossgrain.
 - **Option 2:** grainline along the side, better fabric match but opening
   prone to stretching.
-
----
-
-## 1873 vs Modern variant
-
-- **Back pocket:** 1873 jeans have **1** back pocket (right side only); modern
-  jeans have **2** (one on each side).
-- **Watch pocket:** Included in both variants with the same dimensions.
-  Historically the 1873 version is ~1" longer (top falls at the waistband
-  center, bottom just below the pocket opening).

@@ -21,17 +21,12 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 
-from garment_programs.core.runtime import cache_draft, resolve_measurements
-from garment_programs.plot_utils import (
-    SEAMLINE, draw_seam_allowance, display_scale, setup_figure, finalize_figure,
-)
 from .jeans_front import (
     INCH, load_measurements, draft_jeans_front,
     _bezier_cubic, _annotate_segment, _annotate_curve,
     _point_at_arclength, _curve_up_to_arclength,
 )
 from .jeans_back import draft_jeans_back
-from .seam_allowances import SEAM_ALLOWANCES, SEAM_LABELS, YOKE_SEAT_DEPTH
 
 
 # -- Helpers -----------------------------------------------------------------
@@ -82,7 +77,7 @@ def draft_jeans_yoke_modern(m, front, back):
     dir_1_to_4 = fpts['4'] - fpts['1']
     dir_1_to_4_norm = dir_1_to_4 / np.linalg.norm(dir_1_to_4)
     yoke_side = fpts['1'] + dir_1_to_4_norm * (1.5 * INCH)
-    yoke_seat = _point_at_arclength(back['curves']['seat_upper'], YOKE_SEAT_DEPTH)
+    yoke_seat = _point_at_arclength(back['curves']['seat_upper'], 2.75 * INCH)
 
     pt1 = fpts['1']
     back_waist = bpts['back_waist']
@@ -180,14 +175,6 @@ def draft_jeans_yoke_modern(m, front, back):
     waist_curve = _bezier_through_4(
         pt1_rot, dart1_waist, dart2_waist, back_waist_rot)
 
-    # Grain line — parallel to the outseam (side-seam edge), through the
-    # midpoint of the yoke.  The outseam runs from yoke_side_rot to pt1_rot.
-    grain_dir = pt1_rot - yoke_side_rot
-    grain_dir = grain_dir / np.linalg.norm(grain_dir)
-    yoke_center = (pt1_rot + back_waist_rot + yoke_side_rot + yoke_seat_rot) / 4
-    grain_top = yoke_center + grain_dir * 1.2 * INCH
-    grain_bottom = yoke_center - grain_dir * 1.2 * INCH
-
     return {
         'points': {
             'yoke_side':       yoke_side,
@@ -200,8 +187,6 @@ def draft_jeans_yoke_modern(m, front, back):
             'dart2_waist':     dart2_waist,
             'dart1_yoke':      dart1_yoke,
             'dart2_yoke':      dart2_yoke,
-            'grain_top':       grain_top,
-            'grain_bottom':    grain_bottom,
         },
         'curves': {
             'yoke_line':  yoke_curve,
@@ -217,23 +202,37 @@ def draft_jeans_yoke_modern(m, front, back):
             'd2_left_y':  d2_left_y,  'd2_right_y': d2_right_y,
         },
         'metadata': {
-            'title': 'Yoke',
-            'cut_count': 2,
+            'title': 'Historical Jeans Yoke \u2013 Modern (Curved)',
         },
     }
+
+
+# -- Outline -----------------------------------------------------------------
+
+def get_outline_yoke_modern(yoke):
+    """Return closed (N,2) polygon outline in cm."""
+    pts = yoke['points']
+    curves = yoke['curves']
+    return np.vstack([
+        curves['waist_line'],                 # pt1_rot → back_waist_rot
+        [pts['yoke_seat_rot']],               # → yoke_seat_rot (seat side)
+        curves['yoke_line'][::-1][1:],        # → yoke_side_rot (skip dup)
+        [pts['pt1_rot']],                     # close → pt1_rot
+    ])
 
 
 # -- Visualization -----------------------------------------------------------
 
 def plot_jeans_yoke_modern(front, back, yoke,
                            output_path='Logs/jeans_yoke_modern.svg',
-                           debug=False, units='cm', pdf_pages=None, ax=None):
+                           debug=False, units='cm'):
     """Render the modern curved yoke overlaid on the back panel.
 
     Always draws the final smooth yoke outline.
     With debug=True, adds the flat dart construction, point labels, and grid.
     """
-    s, unit_label = display_scale(units)
+    s = 1 / INCH if units == 'inch' else 1.0
+    unit_label = 'in' if units == 'inch' else 'cm'
 
     fpts    = {k: v * s for k, v in front['points'].items()}
     bpts    = {k: v * s for k, v in back['points'].items()}
@@ -243,10 +242,10 @@ def plot_jeans_yoke_modern(front, back, yoke,
     ycon    = {k: v * s for k, v in yoke['construction'].items()}
 
     # Seat-seam curve segment for yoke right side
-    seat_seg = _curve_up_to_arclength(back['curves']['seat_upper'], YOKE_SEAT_DEPTH) * s
+    seat_seg = _curve_up_to_arclength(back['curves']['seat_upper'], 2.75 * INCH) * s
 
-    fig, ax, standalone = setup_figure(ax, figsize=(16, 10))
-    OUTLINE  = SEAMLINE
+    fig, ax = plt.subplots(1, 1, figsize=(16, 10))
+    OUTLINE  = dict(color='black', linewidth=1.5)
     CONTEXT  = dict(color='lightgray', linewidth=1, alpha=0.5)
     FLAT_DART = dict(color='orange', linewidth=0.8, linestyle='--', alpha=0.6)
 
@@ -277,28 +276,6 @@ def plot_jeans_yoke_modern(front, back, yoke,
     # Left side: outseam segment (yoke_side_rot → pt1_rot)
     ax.plot([ypts['yoke_side_rot'][0], ypts['pt1_rot'][0]],
             [ypts['yoke_side_rot'][1], ypts['pt1_rot'][1]], **OUTLINE)
-
-    # -- Seam allowances (from centralized SEAM_ALLOWANCES) --
-    _sa = SEAM_ALLOWANCES['yoke']
-    _sl = SEAM_LABELS['yoke']
-
-    # Edges CW (matching 1873 yoke convention):
-    #   outseam(1→yoke_side) → yoke_line(yoke_side→yoke_seat) →
-    #   seat(yoke_seat→back_waist) → waist reversed(back_waist→1)
-    sa_edges = [
-        (np.array([ypts['pt1_rot'], ypts['yoke_side_rot']]),              _sa['side'], _sl['side']),
-        (ycurves['yoke_line'],                                             _sa['waist'], _sl['waist']),
-        (np.array([ypts['yoke_seat_rot'], ypts['back_waist_rot']]),       _sa['seat'], _sl['seat']),
-        (ycurves['waist_line'][::-1],                                      _sa['waist'], _sl['waist']),
-    ]
-    draw_seam_allowance(ax, sa_edges, scale=s, label_sas=not debug, units=units)
-
-    # -- Grain line --
-    ax.annotate('', xy=ypts['grain_top'], xytext=ypts['grain_bottom'],
-                arrowprops=dict(arrowstyle='->', color='gray', lw=0.8))
-    ax.annotate('grain', (ypts['grain_top'][0], ypts['grain_top'][1]),
-                textcoords="offset points", xytext=(8, 0),
-                fontsize=7, color='gray')
 
     # -- Debug overlays --
     if debug:
@@ -353,40 +330,24 @@ def plot_jeans_yoke_modern(front, back, yoke,
                         xytext=(6, 4), ha='left', fontsize=6,
                         color='gray', alpha=0.4)
 
-    # --- Grainline and piece label (pattern mode only) ---
     if not debug:
-        from garment_programs.plot_utils import draw_grainline, draw_piece_label
-        # Grainline parallel to center back (along x-axis, perpendicular to waist)
-        grain_center = (ypts['pt1_rot'] + ypts['back_waist_rot'] +
-                        ypts['yoke_side_rot'] + ypts['yoke_seat_rot']) / 4
-        yoke_height = abs(ypts['pt1_rot'][0] - ypts['yoke_side_rot'][0])
-        grain_half = yoke_height * 0.3
-        grain_top = np.array([grain_center[0] + grain_half, grain_center[1]])
-        grain_bot = np.array([grain_center[0] - grain_half, grain_center[1]])
-        draw_grainline(ax, grain_top, grain_bot)
+        ax.axis('off')
+    else:
+        ax.set_xlabel(unit_label)
+        ax.set_ylabel(unit_label)
+        ax.grid(True, alpha=0.2)
 
-        # Piece label
-        draw_piece_label(ax, (grain_center[0], grain_center[1]),
-                         yoke['metadata']['title'],
-                         yoke['metadata'].get('cut_count'),
-                         metadata=yoke.get('metadata'))
-
-    finalize_figure(ax, fig, standalone, output_path, units=units, debug=debug,
-                    pdf_pages=pdf_pages)
+    from garment_programs.plot_utils import save_pattern
+    save_pattern(fig, ax, output_path, units=units, calibration=not debug)
 
 
 # -- Entry point for generic runner ------------------------------------------
 
-def run(measurements_path, output_path, debug=False, units='cm', pdf_pages=None,
-        context=None):
+def run(measurements_path, output_path, debug=False, units='cm'):
     """Uniform interface called by the generic runner."""
-    m = resolve_measurements(context, measurements_path, load_measurements)
-    front = cache_draft(context, 'selvedge.front', lambda: draft_jeans_front(m))
-    back = cache_draft(context, 'selvedge.back:0.0000', lambda: draft_jeans_back(m, front))
-    yoke = cache_draft(
-        context,
-        'selvedge.yoke_modern',
-        lambda: draft_jeans_yoke_modern(m, front, back),
-    )
-    plot_jeans_yoke_modern(front, back, yoke, output_path, debug=debug, units=units,
-                           pdf_pages=pdf_pages)
+    m = load_measurements(measurements_path)
+    front = draft_jeans_front(m)
+    back = draft_jeans_back(m, front)
+    yoke = draft_jeans_yoke_modern(m, front, back)
+    plot_jeans_yoke_modern(front, back, yoke, output_path, debug=debug, units=units)
+    return {'front': front, 'back': back, 'yoke_modern': yoke}
