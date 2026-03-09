@@ -1,18 +1,22 @@
 """
-Back Pocket
+Back Pocket — drafted on the back panel
 Based on: Historical Tailoring Masterclasses - Drafting the Pockets and Accessories
 
-Standalone pattern piece (not drafted on the back panel).
+Positioned relative to the yoke seam on the back panel so the pocket
+inherits the panel's coordinate system (grain along x, parallel to CB).
 
-Dimensions:
-  Height: 8" total (7" to first reference mark)
-  Width:  ~6" (estimated — exact widths are in a diagram not available in text)
+Placement (from source):
+  Right (outseam) edge:  2" below yoke seam, 2 1/2" from selvedge
+  Left  (inseam) edge:  1 1/2" below yoke   (0.5" higher → slight upward tilt)
+
+Pentagon dimensions:
+  Mouth:   6 3/4" (top edge)
+  Narrows: 5 1/4" at 6" depth
+  Point:   center at 7" depth
 
 Seam allowances:
   Sides and bottom: 3/8"
-  Top:              7/8" (accounts for double fold + denim thickness)
-
-Grain line: centerline (pocket mouth on crossgrain).
+  Top:              7/8" (double fold + denim thickness)
 
 Notes on 1873 jeans: only one pocket on the right side.
 Modern jeans: one pocket on each side.
@@ -21,164 +25,197 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 
-from .jeans_front import INCH, load_measurements, _annotate_segment
+from garment_programs.core.runtime import cache_draft, resolve_measurements
+from .jeans_front import INCH, load_measurements, draft_jeans_front, _annotate_segment
+from .jeans_back import draft_jeans_back
+from .jeans_yoke_1873 import draft_jeans_yoke
+from garment_programs.plot_utils import (
+    SEAMLINE, CUTLINE, draw_seam_allowance, display_scale, setup_figure, finalize_figure,
+)
 
 
 # -- Drafting ----------------------------------------------------------------
 
-def draft_jeans_back_pocket(m):
-    """Draft the back pocket as a standalone piece.
+def draft_jeans_back_pocket(m, front, back, yoke):
+    """Draft the back pocket positioned on the back panel.
 
     Parameters
     ----------
     m : dict
-        Measurements in cm (not used — fixed dimensions).
+        Measurements in cm.
+    front : dict
+        Result of draft_jeans_front(m).
+    back : dict
+        Result of draft_jeans_back(m, front).
+    yoke : dict
+        Result of draft_jeans_yoke(m, front, back).
 
     Returns
     -------
     dict with keys: points, curves, construction, metadata
     """
-    # All dimensions measured from point 0 (top center)
-    top_half = 3.375 * INCH     # 3 3/8" each side at top
-    mid_half = 2.625 * INCH     # 2 5/8" each side at 6" mark
-    mid_depth = 6.0 * INCH      # vertical to the 6" mark
-    total_depth = 7.0 * INCH    # vertical to the bottom point
+    fpts = front['points']
 
-    width = 2 * top_half        # 6 3/4" total at mouth
+    # -- Direction vectors (outseam-based, orthogonal) --
+    yoke_side = yoke['points']['yoke_side']
+    yoke_seat = yoke['points']['yoke_seat']
+
+    outseam_vec = fpts['4'] - fpts['1']
+    outseam_dir = outseam_vec / np.linalg.norm(outseam_vec)
+    # Perpendicular to outseam, pointing inward from selvedge
+    outseam_perp = np.array([-outseam_dir[1], outseam_dir[0]])
+    if np.dot(outseam_perp, yoke_seat - yoke_side) < 0:
+        outseam_perp = -outseam_perp
+
+    # -- Pocket dimensions --
+    mouth_width = 6.75 * INCH      # 6 3/4" total mouth
+    top_half    = mouth_width / 2   # 3 3/8" each side from center
+    mid_half    = 2.625 * INCH      # 2 5/8" each side at 6" mark
+    mid_depth   = 6.0 * INCH       # depth to narrowing
+    total_depth = 7.0 * INCH       # depth to bottom point
 
     # Seam allowances
-    sa_side = 3 / 8 * INCH
-    sa_top = 7 / 8 * INCH
+    from .seam_allowances import SEAM_ALLOWANCES
+    _sa = SEAM_ALLOWANCES['back_pocket']
+    sa_side = _sa['side']
+    sa_top  = _sa['top']
 
-    # Finished shape — origin at point 0 (top center), Y goes down
-    # Using Y-up for matplotlib: top = total_depth, bottom = 0
-    f_tl = np.array([top_half - top_half, total_depth])           # (0, 7)
-    f_tr = np.array([top_half + top_half, total_depth])           # (6.75, 7)
-    cx = top_half                                                  # center x
-    f_tl = np.array([cx - top_half, total_depth])
-    f_tr = np.array([cx + top_half, total_depth])
-    f_ref_l = np.array([cx - mid_half, total_depth - mid_depth])  # 6" mark, left
-    f_ref_r = np.array([cx + mid_half, total_depth - mid_depth])  # 6" mark, right
-    f_bottom = np.array([cx, 0.0])                                # center point
+    # -- Position the pocket mouth on the back panel --
+    # Right (outseam) corner: 2" below yoke along side seam, 2 1/2" inward from selvedge
+    pocket_tr = yoke_side + outseam_dir * (2.0 * INCH) + outseam_perp * (2.5 * INCH)
+    # Mouth tilted: left (CB) side is 1 1/2" below yoke, right is 2" → 0.5" higher
+    mouth_raw = outseam_perp * mouth_width + outseam_dir * (-0.5 * INCH)
+    mouth_dir = mouth_raw / np.linalg.norm(mouth_raw)
+    # Left (inseam) corner: exactly mouth_width along the tilted mouth line
+    pocket_tl = pocket_tr + mouth_dir * mouth_width
+    mouth_center = (pocket_tl + pocket_tr) / 2
 
-    # SA outline
-    sa_tl = np.array([cx - top_half - sa_side, total_depth + sa_top])
-    sa_tr = np.array([cx + top_half + sa_side, total_depth + sa_top])
-    sa_ref_l = np.array([cx - mid_half - sa_side, total_depth - mid_depth])
-    sa_ref_r = np.array([cx + mid_half + sa_side, total_depth - mid_depth])
-    sa_bottom = np.array([cx, -sa_side])
+    # -- Pocket local axes --
+    # depth_dir: perpendicular to mouth, pointing "downward" (toward hem)
+    depth_dir = np.array([mouth_dir[1], -mouth_dir[0]])
+    if np.dot(depth_dir, outseam_dir) < 0:
+        depth_dir = -depth_dir
 
-    # Grain line (center, vertical)
-    grain_top = np.array([cx, total_depth * 0.85])
-    grain_bottom = np.array([cx, total_depth * 0.20])
+    # -- Finished-shape pentagon --
+    f_tl    = pocket_tl
+    f_tr    = pocket_tr
+    f_ref_l = mouth_center + mouth_dir * mid_half + depth_dir * mid_depth
+    f_ref_r = mouth_center - mouth_dir * mid_half + depth_dir * mid_depth
+    f_bottom = mouth_center + depth_dir * total_depth
+
+    # -- Grainline (along depth direction — parallel to CB) --
+    grain_top    = mouth_center + depth_dir * (total_depth * 0.20)
+    grain_bottom = mouth_center + depth_dir * (total_depth * 0.85)
 
     return {
         'points': {
             'f_tl': f_tl, 'f_tr': f_tr,
             'f_ref_l': f_ref_l, 'f_ref_r': f_ref_r,
             'f_bottom': f_bottom,
-            'sa_tl': sa_tl, 'sa_tr': sa_tr,
-            'sa_ref_l': sa_ref_l, 'sa_ref_r': sa_ref_r,
-            'sa_bottom': sa_bottom,
             'grain_top': grain_top, 'grain_bottom': grain_bottom,
         },
         'curves': {},
         'construction': {
-            'ref_mark_y': np.float64(total_depth - mid_depth),
+            'ref_mark_depth': np.float64(mid_depth),
+            'mouth_center': mouth_center,
+            'depth_dir': depth_dir,
+            'mouth_dir': mouth_dir,
         },
         'metadata': {
             'title': 'Back Pocket',
-            'width': width,
+            'cut_count': 1,
+            'width': mouth_width,
             'height': total_depth,
         },
     }
 
 
-# -- Outline -----------------------------------------------------------------
-
-def get_outline_back_pocket(pocket):
-    """Return closed (N,2) polygon outline in cm."""
-    pts = pocket['points']
-    return np.array([pts['f_tl'], pts['f_tr'], pts['f_ref_r'],
-                     pts['f_bottom'], pts['f_ref_l'], pts['f_tl']])
-
-
-def get_sa_outline_back_pocket(pocket):
-    """Return closed SA polygon (cut line) for the back pocket in cm."""
-    pts = pocket['points']
-    return np.array([pts['sa_tl'], pts['sa_tr'], pts['sa_ref_r'],
-                     pts['sa_bottom'], pts['sa_ref_l'], pts['sa_tl']])
-
-
 # -- Visualization -----------------------------------------------------------
 
+def _to_local(pts_dict, mouth_dir, depth_dir, origin):
+    """Rotate panel-coordinate points into pocket-local frame.
+
+    Local frame: x = across (mouth_dir), y = up (opposite depth_dir).
+    Origin is placed at the mouth center so the pocket is centered horizontally
+    with mouth at top.
+    """
+    # Build rotation matrix: rows are the new basis vectors
+    R = np.array([mouth_dir, -depth_dir])  # x=across, y=up (flip depth)
+    return {k: R @ (v - origin) for k, v in pts_dict.items()}
+
+
 def plot_jeans_back_pocket(pocket, output_path='Logs/jeans_back_pocket.svg',
-                           debug=False, units='cm'):
-    s = 1 / INCH if units == 'inch' else 1.0
-    unit_label = 'in' if units == 'inch' else 'cm'
+                           debug=False, units='cm', pdf_pages=None, ax=None):
+    s, unit_label = display_scale(units)
 
-    pts = {k: v * s for k, v in pocket['points'].items()}
-    con = {k: v * s for k, v in pocket['construction'].items()}
-    width_s = pocket['metadata']['width'] * s
-    height_s = pocket['metadata']['height'] * s
+    # Rotate points into pocket-local frame (mouth horizontal, depth downward)
+    mouth_dir = pocket['construction']['mouth_dir']
+    depth_dir = pocket['construction']['depth_dir']
+    origin = pocket['construction']['mouth_center']
+    raw_pts = {k: v for k, v in pocket['points'].items()}
+    local_pts = _to_local(raw_pts, mouth_dir, depth_dir, origin)
+    pts = {k: v * s for k, v in local_pts.items()}
 
-    fig, ax = plt.subplots(1, 1, figsize=(8, 10))
-    OUTLINE = dict(color='black', linewidth=1.5)
-    SA_STYLE = dict(color='gray', linewidth=1, linestyle='--', alpha=0.6)
+    fig, ax, standalone = setup_figure(ax, figsize=(8, 10))
+    from .seam_allowances import SEAM_ALLOWANCES, SEAM_LABELS
+    SA = SEAM_ALLOWANCES['back_pocket']
+    SL = SEAM_LABELS['back_pocket']
 
-    # Finished shape (pentagon: top → right side → point → left side → top)
-    f_order = ['f_tl', 'f_tr', 'f_ref_r', 'f_bottom', 'f_ref_l', 'f_tl']
+    # Finished shape (pentagon: tl → tr → ref_r → bottom → ref_l → tl)
+    f_order = ['f_tl', 'f_ref_l', 'f_bottom', 'f_ref_r', 'f_tr', 'f_tl']
     fx = [pts[k][0] for k in f_order]
     fy = [pts[k][1] for k in f_order]
-    ax.plot(fx, fy, **OUTLINE)
+    ax.plot(fx, fy, **SEAMLINE)
 
-    # SA outline
-    sa_order = ['sa_tl', 'sa_tr', 'sa_ref_r', 'sa_bottom', 'sa_ref_l', 'sa_tl']
-    sx = [pts[k][0] for k in sa_order]
-    sy = [pts[k][1] for k in sa_order]
-    ax.plot(sx, sy, **SA_STYLE)
+    # SA outline via draw_seam_allowance (CW in local coords)
+    sa_edges = [
+        (np.array([pts['f_tl'], pts['f_ref_l']]),      SA['side'], SL['side']),
+        (np.array([pts['f_ref_l'], pts['f_bottom']]),  SA['side'], SL['side']),
+        (np.array([pts['f_bottom'], pts['f_ref_r']]),  SA['side'], SL['side']),
+        (np.array([pts['f_ref_r'], pts['f_tr']]),      SA['side'], SL['side']),
+        (np.array([pts['f_tr'], pts['f_tl']]),         SA['top'], SL['top']),
+    ]
+    draw_seam_allowance(ax, sa_edges, scale=s, label_sas=not debug, units=units)
 
-    # Grain line arrow
-    ax.annotate('', xy=pts['grain_top'], xytext=pts['grain_bottom'],
-                arrowprops=dict(arrowstyle='->', color='gray', lw=0.8))
-    ax.annotate('grain', (pts['grain_top'][0], pts['grain_top'][1]),
-                textcoords="offset points", xytext=(8, 0),
-                fontsize=7, color='gray')
+    # Grain line arrow (double-headed, now vertical in local frame)
+    from garment_programs.plot_utils import draw_grainline, draw_piece_label
+    draw_grainline(ax, pts['grain_top'], pts['grain_bottom'])
+
+    # Piece label (pattern mode only)
+    if not debug:
+        centroid = (pts['f_tl'] + pts['f_tr'] + pts['f_ref_l'] + pts['f_ref_r'] + pts['f_bottom']) / 5
+        draw_piece_label(ax, (centroid[0], centroid[1]),
+                         pocket['metadata']['title'],
+                         pocket['metadata'].get('cut_count'),
+                         metadata=pocket.get('metadata'))
 
     if debug:
-        # 7" reference mark
-        ax.plot([0, width_s], [con['ref_mark_y'], con['ref_mark_y']],
-                color='blue', linewidth=0.5, linestyle=':', alpha=0.5)
-        ax.annotate('7" ref', (width_s, con['ref_mark_y']),
-                    textcoords="offset points", xytext=(4, 0),
-                    fontsize=6, color='blue')
+        for name in ['f_tl', 'f_tr', 'f_ref_l', 'f_ref_r', 'f_bottom']:
+            pt = pts[name]
+            ax.plot(pt[0], pt[1], 'o', color='black', markersize=4, zorder=5)
+            ax.annotate(name, pt, textcoords="offset points",
+                        xytext=(6, 4), fontsize=6, ha='left')
 
         _annotate_segment(ax, pts['f_tl'], pts['f_tr'], offset=(0, 8))
         _annotate_segment(ax, pts['f_tr'], pts['f_ref_r'], offset=(10, 0))
         _annotate_segment(ax, pts['f_ref_r'], pts['f_bottom'], offset=(10, 0))
 
-        # SA labels
-        ax.annotate('3/8" SA', (width_s / 2, pts['sa_bottom'][1]),
-                    textcoords="offset points", xytext=(0, -6),
-                    fontsize=6, ha='center', color='gray')
-        ax.annotate('7/8" SA (top)', (width_s / 2, pts['sa_tr'][1]),
-                    textcoords="offset points", xytext=(0, 6),
-                    fontsize=6, ha='center', color='gray')
-
-        ax.set_xlabel(unit_label)
-        ax.set_ylabel(unit_label)
-        ax.grid(True, alpha=0.2)
-    else:
-        ax.axis('off')
-
-    from garment_programs.plot_utils import save_pattern
-    save_pattern(fig, ax, output_path, units=units, calibration=not debug)
+    finalize_figure(ax, fig, standalone, output_path, units=units, debug=debug,
+                    pdf_pages=pdf_pages)
 
 
 # -- Entry point for generic runner ------------------------------------------
 
-def run(measurements_path, output_path, debug=False, units='cm'):
-    m = load_measurements(measurements_path)
-    pocket = draft_jeans_back_pocket(m)
-    plot_jeans_back_pocket(pocket, output_path, debug=debug, units=units)
-    return {'back_pocket': pocket}
+def run(measurements_path, output_path, debug=False, units='cm', pdf_pages=None,
+        context=None):
+    m = resolve_measurements(context, measurements_path, load_measurements)
+    front = cache_draft(context, 'selvedge.front', lambda: draft_jeans_front(m))
+    back = cache_draft(context, 'selvedge.back:0.0000', lambda: draft_jeans_back(m, front))
+    yoke = cache_draft(context, 'selvedge.yoke_1873:0.0000', lambda: draft_jeans_yoke(m, front, back))
+    pocket = cache_draft(
+        context,
+        'selvedge.back_pocket:0.0000',
+        lambda: draft_jeans_back_pocket(m, front, back, yoke),
+    )
+    plot_jeans_back_pocket(pocket, output_path, debug=debug, units=units,
+                           pdf_pages=pdf_pages)
