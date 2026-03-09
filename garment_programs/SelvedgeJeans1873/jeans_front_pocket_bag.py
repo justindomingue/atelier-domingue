@@ -442,6 +442,71 @@ def plot_jeans_front_pocket(piece, output_path='Logs/jeans_front_pocket.svg',
     finalize_figure(ax, fig, standalone, output_path, units=units, debug=debug,
                     pdf_pages=pdf_pages)
 
+# -- Nesting Extractors -----------------------------------------------------
+
+def get_outline_front_pocket(draft):
+    """Return the finished seamline for the front pocket bag.
+    The butterfly piece is cut on fold, so the outline is mirrored.
+    """
+    c = draft['curves']
+
+    def _dedup(pts, tol=1e-10):
+        keep = [0]
+        for i in range(1, len(pts)):
+            if np.linalg.norm(pts[i] - pts[keep[-1]]) > tol:
+                keep.append(i)
+        return pts[np.array(keep)]
+
+    rise_to_bag = _dedup(c['rise_to_bag'])
+    hip_to_bag = _dedup(c['hip_to_bag'])
+    bag_bottom = c['bag_bottom']
+    mirror_rise = _dedup(c['mirror_rise_to_bag'])
+    mirror_hip = _dedup(c['mirror_hip_to_bag'])
+    mirror_bottom = c['mirror_bag_bottom']
+
+    outline = np.vstack([
+        rise_to_bag,              # pt1 → bag_inner_top
+        mirror_rise[::-1],        # bag_inner_top → mirror_pt1
+        mirror_hip,               # mirror_pt1 → mirror_bag_sideseam
+        mirror_bottom[::-1],      # mirror_bag_sideseam → bag_inner_bottom
+        bag_bottom,               # bag_inner_bottom → bag_sideseam
+        hip_to_bag[::-1],         # bag_sideseam → pt1
+    ])
+    return outline
+
+def get_sa_outline_front_pocket(draft):
+    """Return the full cut boundary for the pocket bag."""
+    c = draft['curves']
+
+    def _dedup(pts, tol=1e-10):
+        keep = [0]
+        for i in range(1, len(pts)):
+            if np.linalg.norm(pts[i] - pts[keep[-1]]) > tol:
+                keep.append(i)
+        return pts[np.array(keep)]
+
+    rise_to_bag = _dedup(c['rise_to_bag'])
+    hip_to_bag = _dedup(c['hip_to_bag'])
+    bag_bottom = c['bag_bottom']
+    mirror_rise = _dedup(c['mirror_rise_to_bag'])
+    mirror_hip = _dedup(c['mirror_hip_to_bag'])
+    mirror_bottom = c['mirror_bag_bottom']
+
+    from garment_programs.plot_utils import offset_polyline
+    from .seam_allowances import SEAM_ALLOWANCES
+    SA = SEAM_ALLOWANCES['front_pocket_bag']
+
+    # CCW edge order for the full butterfly piece
+    outline = np.vstack([
+        offset_polyline(hip_to_bag, SA['sideseam']),
+        offset_polyline(bag_bottom[::-1], SA['bottom']),
+        offset_polyline(mirror_bottom, SA['bottom']),
+        offset_polyline(mirror_hip[::-1], SA['sideseam']),
+        offset_polyline(mirror_rise, SA['waist']),
+        offset_polyline(rise_to_bag[::-1], SA['waist']),
+    ])
+    outline = np.vstack([outline, outline[0:1]])
+    return outline
 
 # -- Entry point for generic runner ------------------------------------------
 
@@ -456,3 +521,4 @@ def run(measurements_path, output_path, debug=False, units='cm', pdf_pages=None,
     )
     plot_jeans_front_pocket(pocket, output_path, debug=debug, units=units,
                             pdf_pages=pdf_pages)
+    return {'front_pocket': pocket}

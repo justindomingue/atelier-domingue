@@ -531,6 +531,80 @@ def plot_jeans_back(front, back, output_path='Logs/jeans_back.svg', debug=False,
                     pdf_pages=pdf_pages)
 
 
+# -- Nesting Extractors -----------------------------------------------------
+
+def get_outline_back(front_draft, back_draft):
+    """Return the finished seamline for the back panel below the yoke."""
+    fpts = front_draft['points']
+    bpts = back_draft['points']
+    c = back_draft['curves']
+
+    # Perimeter below the yoke
+    outline = np.vstack([
+        np.array([bpts['yoke_side'], fpts['4']]),
+        np.array([fpts['4'], fpts['0']]),
+        np.array([fpts['0'], bpts['back_hem']]),
+        np.array([bpts['back_hem'], bpts['12']]),
+        c['back_inseam'][::-1],
+        c['seat_lower'][::-1],
+    ])
+
+    gathering = back_draft.get('gathering')
+    if gathering is not None:
+        outline = np.vstack([
+            outline,
+            gathering['taper'][::-1],
+            np.array([gathering['ext_pt'], bpts['yoke_side']]),
+        ])
+    else:
+        outline = np.vstack([
+            outline,
+            c['seat_upper_below_yoke'][::-1],
+            np.array([bpts['yoke_seat'], bpts['yoke_side']]),
+        ])
+    return outline
+
+
+def get_sa_outline_back(front_draft, back_draft):
+    """Return the full cut line boundary for the back panel below the yoke.
+    This outline is used for polygon packing and bounding boxes.
+    """
+    fpts = front_draft['points']
+    bpts = back_draft['points']
+    c = back_draft['curves']
+    gathering = back_draft.get('gathering')
+
+    from garment_programs.plot_utils import offset_polyline
+    from .seam_allowances import SEAM_ALLOWANCES
+    SA = SEAM_ALLOWANCES['back']
+
+    # CCW outline construction
+    outline = np.vstack([
+        offset_polyline(c['seat_lower'], SA['seat']),
+        offset_polyline(c['back_inseam'], SA['inseam']),
+        offset_polyline(np.array([bpts['12'], bpts['back_hem']]), SA['inseam']),
+        offset_polyline(np.array([bpts['back_hem'], fpts['0']]), SA['hem']),
+        offset_polyline(np.array([fpts['0'], fpts['4']]), SA['side']),
+        offset_polyline(np.array([fpts['4'], bpts['yoke_side']]), SA['side']),
+    ])
+
+    if gathering is not None:
+        outline = np.vstack([
+            outline,
+            offset_polyline(np.array([bpts['yoke_side'], gathering['ext_pt']]), SA['yoke']),
+            offset_polyline(gathering['taper'], SA['seat']),
+        ])
+    else:
+        outline = np.vstack([
+            outline,
+            offset_polyline(np.array([bpts['yoke_side'], bpts['yoke_seat']]), SA['yoke']),
+            offset_polyline(c['seat_upper_below_yoke'], SA['seat']),
+        ])
+
+    outline = np.vstack([outline, outline[0:1]])
+    return outline
+
+
 # -- Entry point for generic runner ------------------------------------------
 
 def run(measurements_path, output_path, debug=False, units='cm', pdf_pages=None,
@@ -559,3 +633,4 @@ def run(measurements_path, output_path, debug=False, units='cm', pdf_pages=None,
     )
     plot_jeans_back(front, back, output_path, debug=debug, units=units,
                     pdf_pages=pdf_pages, pocket=pocket)
+    return {'front': front, 'back': back, 'yoke_1873': yoke, 'back_pocket': pocket}

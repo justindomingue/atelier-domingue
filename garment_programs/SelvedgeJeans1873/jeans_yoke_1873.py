@@ -254,6 +254,52 @@ def plot_jeans_yoke(front, back, yoke, output_path='Logs/jeans_yoke.svg',
                     pdf_pages=pdf_pages)
 
 
+# -- Nesting Extractors -----------------------------------------------------
+
+def get_outline_yoke_1873(front_draft, back_draft, yoke_draft):
+    """Return the finished seamline for the yoke."""
+    fpts = front_draft['points']
+    bpts = back_draft['points']
+    ypts = yoke_draft['points']
+
+    yoke_seat_dist = yoke_draft['metadata']['yoke_seat_dist']
+    seat_seg = _curve_up_to_arclength(back_draft['curves']['seat_upper'], yoke_seat_dist)
+
+    # CW outline starting from pt1
+    outline = np.vstack([
+        np.array([fpts['1'], ypts['yoke_side']]),
+        np.array([ypts['yoke_side'], ypts['yoke_seat']]),
+        seat_seg[::-1],
+        np.array([bpts['back_waist'], fpts['1']]),
+    ])
+    return outline
+
+
+def get_sa_outline_yoke_1873(front_draft, back_draft, yoke_draft):
+    """Return the full cut line boundary for the yoke.
+    This outline is used for polygon packing and bounding boxes.
+    """
+    fpts = front_draft['points']
+    bpts = back_draft['points']
+    ypts = yoke_draft['points']
+
+    yoke_seat_dist = yoke_draft['metadata']['yoke_seat_dist']
+    seat_seg = _curve_up_to_arclength(back_draft['curves']['seat_upper'], yoke_seat_dist)
+
+    from garment_programs.plot_utils import offset_polyline
+    from .seam_allowances import SEAM_ALLOWANCES
+    SA = SEAM_ALLOWANCES['yoke']
+
+    # CCW outline construction (reversed from drafting order)
+    outline = np.vstack([
+        offset_polyline(np.array([ypts['yoke_seat'], ypts['yoke_side']]), SA['waist']),
+        offset_polyline(np.array([ypts['yoke_side'], fpts['1']]), SA['side']),
+        offset_polyline(np.array([fpts['1'], bpts['back_waist']]), SA['waist']),
+        offset_polyline(seat_seg, SA['seat']),
+    ])
+    outline = np.vstack([outline, outline[0:1]])
+    return outline
+
 # -- Entry point for generic runner ------------------------------------------
 
 def run(measurements_path, output_path, debug=False, units='cm', pdf_pages=None,
@@ -265,3 +311,4 @@ def run(measurements_path, output_path, debug=False, units='cm', pdf_pages=None,
     yoke = cache_draft(context, 'selvedge.yoke_1873:0.0000', lambda: draft_jeans_yoke(m, front, back))
     plot_jeans_yoke(front, back, yoke, output_path, debug=debug, units=units,
                     pdf_pages=pdf_pages)
+    return {'front': front, 'back': back, 'yoke_1873': yoke}

@@ -237,6 +237,35 @@ def plot_jeans_front_facing(piece, output_path='Logs/jeans_front_facing.svg',
     finalize_figure(ax, fig, standalone, output_path, units=units, debug=debug,
                     pdf_pages=pdf_pages)
 
+# -- Nesting Extractors -----------------------------------------------------
+
+def get_outline_front_facing(draft):
+    """Return the finished seamline for the front facing piece."""
+    c = draft['curves']
+    outline = np.vstack([
+        c['rise'],
+        c['opening'],
+        c['hip'][::-1]
+    ])
+    return outline
+
+def get_sa_outline_front_facing(draft):
+    """Return the full cut line boundary for the front facing piece."""
+    c = draft['curves']
+
+    from garment_programs.plot_utils import offset_polyline
+    from .seam_allowances import SEAM_ALLOWANCES
+    SA = SEAM_ALLOWANCES['front_facing']
+
+    # CCW outline construction
+    outline = np.vstack([
+        offset_polyline(c['hip'][::-1], SA['sideseam']),
+        offset_polyline(c['opening'][::-1], SA['opening']),
+        offset_polyline(c['rise'][::-1], SA['waist']),
+    ])
+    outline = np.vstack([outline, outline[0:1]])
+    return outline
+
 
 # -- Entry point for generic runner ------------------------------------------
 
@@ -250,3 +279,4 @@ def run(measurements_path, output_path, debug=False, units='cm', pdf_pages=None,
     )
     plot_jeans_front_facing(piece, output_path, debug=debug, units=units,
                             pdf_pages=pdf_pages)
+    return {'front_facing': piece}

@@ -535,13 +535,13 @@ def _mirror_x(outline):
 def _uniform_sa_offset(outline, sa_cm):
     """Offset a closed CW outline outward by a uniform seam allowance.
 
-    Uses the miter-join offset from jeans_front._offset_polyline.
+    Uses the miter-join offset from plot_utils.offset_polyline.
     """
-    from garment_programs.SelvedgeJeans1873.jeans_front import _offset_polyline
+    from garment_programs.plot_utils import offset_polyline
     # For a closed polygon, offset the open path (drop closing duplicate)
     # then re-close.
     open_path = outline[:-1] if np.allclose(outline[0], outline[-1]) else outline
-    offset = _offset_polyline(open_path, sa_cm)
+    offset = offset_polyline(open_path, sa_cm)
     return np.vstack([offset, offset[:1]])
 
 

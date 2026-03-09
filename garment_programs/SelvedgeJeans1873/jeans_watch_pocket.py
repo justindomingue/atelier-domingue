@@ -212,3 +212,4 @@ def run(measurements_path, output_path, debug=False, units='cm', pdf_pages=None,
     )
     plot_jeans_watch_pocket(piece, output_path, debug=debug, units=units,
                             pdf_pages=pdf_pages)
+    return {'watch_pocket': piece}
