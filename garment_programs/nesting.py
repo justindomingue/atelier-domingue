@@ -45,7 +45,8 @@ _GRAIN_ROTATE_90 = {
     'jeans_yoke_1873',
     'jeans_yoke_modern',
     'jeans_waistband',
-    'jeans_front_pocket',
+    'jeans_front_pocket_bag',
+    'jeans_front_facing',
     'jeans_back_cinch',
 }
 
@@ -66,7 +67,8 @@ _OUTLINE_DISPATCH = {
     'jeans_waistband':   lambda mod, d: mod.get_outline_waistband(d['waistband']),
     'jeans_fly_1873':    lambda mod, d: mod.get_outline_fly_1873(d['fly_1873']),
     'jeans_fly_one_piece': lambda mod, d: mod.get_outline_fly_one_piece(d['fly_one_piece']),
-    'jeans_front_pocket': lambda mod, d: mod.get_outline_front_pocket(d['front_pocket']),
+    'jeans_front_pocket_bag': lambda mod, d: mod.get_outline_front_pocket(d['front_pocket']),
+    'jeans_front_facing': lambda mod, d: mod.get_outline_front_facing(d['front_facing']),
     'jeans_back_pocket': lambda mod, d: mod.get_outline_back_pocket(d['back_pocket']),
     'jeans_back_cinch':  lambda mod, d: mod.get_outline_back_cinch(d['back_cinch']),
 }
@@ -77,6 +79,8 @@ _SA_OUTLINE_DISPATCH = {
     'jeans_back':        lambda mod, d: mod.get_sa_outline_back(d['front'], d['back']),
     'jeans_yoke_1873':   lambda mod, d: mod.get_sa_outline_yoke_1873(
                              d['front'], d['back'], d['yoke_1873']),
+    'jeans_front_pocket_bag': lambda mod, d: mod.get_sa_outline_front_pocket(d['front_pocket']),
+    'jeans_front_facing': lambda mod, d: mod.get_sa_outline_front_facing(d['front_facing']),
     'jeans_back_pocket': lambda mod, d: mod.get_sa_outline_back_pocket(d['back_pocket']),
     'jeans_back_cinch':  lambda mod, d: mod.get_sa_outline_back_cinch(d['back_cinch']),
     # Waistband rectangle already includes SA — same outline
