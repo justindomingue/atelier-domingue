@@ -22,6 +22,21 @@ Output is written to `Logs/`.
 python -m pytest tests/
 ```
 
+### Regression tests
+
+Geometry-snapshot tests lock the coordinates returned by each `draft_*`
+function so refactors can't silently shift a seam:
+
+```bash
+python -m pytest tests/test_regression_snapshots.py
+```
+
+After an intentional geometry change, regenerate the baselines:
+
+```bash
+python -m tests.regression.generate_snapshots
+```
+
 ## More
 
 See [architecture.md](architecture.md) for directory layout, how the runner discovers garments, how to add a new garment program, and design decisions.
