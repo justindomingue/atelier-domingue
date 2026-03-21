@@ -134,7 +134,9 @@ def _run(config: RunConfig) -> str | None:
     questionary.print("\n── Running ──", style="bold")
     questionary.print(" ".join(cmd), style="fg:gray")
     print()
-    rc, lines = run_with_live_output(cmd, on_line=print)
+    rc, lines = run_with_live_output(
+        cmd, on_line=lambda s: print(s, flush=True)
+    )
     print()
     if rc != 0:
         questionary.print(f"run.py exited with code {rc}", style="bold fg:red")

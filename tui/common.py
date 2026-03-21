@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from pathlib import Path
+import os
 import re
 import subprocess
 import sys
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Callable
 
 
@@ -62,7 +63,10 @@ def run_with_live_output(
     cmd: list[str],
     on_line: Callable[[str], None] | None = None,
 ) -> tuple[int, list[str]]:
-    """Run command and stream stdout/stderr lines."""
+    """Run command and stream stdout/stderr lines as they arrive."""
+    # Force the child's Python stdout to be unbuffered — without this it
+    # block-buffers when piped and we only see output at process exit.
+    env = {**os.environ, "PYTHONUNBUFFERED": "1"}
     process = subprocess.Popen(
         cmd,
         cwd=str(ROOT),
@@ -70,10 +74,11 @@ def run_with_live_output(
         stderr=subprocess.STDOUT,
         text=True,
         bufsize=1,
+        env=env,
     )
     output: list[str] = []
     assert process.stdout is not None
-    for raw in process.stdout:
+    for raw in iter(process.stdout.readline, ""):
         line = raw.rstrip("\n")
         output.append(line)
         if on_line is not None:
