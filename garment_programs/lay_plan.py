@@ -14,10 +14,8 @@ pieces are forced against the top/bottom edges of the layout so the
 outseam sits on the selvedge.
 """
 
-import math
 import json
 import re
-import warnings
 import xml.etree.ElementTree as ET
 from pathlib import Path
 import numpy as np
@@ -31,6 +29,7 @@ INKSCAPE_NS = 'http://www.inkscape.org/namespaces/inkscape'
 ET.register_namespace('inkscape', INKSCAPE_NS)
 
 from garment_programs.geometry import INCH as CM_PER_INCH
+from garment_programs.plot_utils import SEAMLINE, CUTLINE
 
 PTS_PER_INCH = 72.0
 
@@ -1266,14 +1265,6 @@ def _layout_fabric(svg_paths, fabric_width, gap=0.25,
 # Rendering helper — draw fabric strip contents into a parent SVG element
 # ---------------------------------------------------------------------------
 
-# Background colors per fabric type
-_BG_COLORS = {
-    'main':        '#faf8f5',
-    'pocketing':   '#f5f8fa',
-    'interfacing': '#faf5f8',
-}
-
-
 def _parse_translate(transform):
     """Parse the first SVG translate(tx[, ty]) from a transform string."""
     if not transform:
@@ -1354,8 +1345,7 @@ def _counter_reflect_text_groups(piece_root, transform):
         parent.insert(idx, wrapper)
 
 
-def _embed_piece_svg(container, svg_path, x_pt, y_pt, gl_pt, cw_pt,
-                     transform, viewBox_override=None):
+def _embed_piece_svg(container, svg_path, x_pt, y_pt, gl_pt, cw_pt, transform):
     """Parse a piece SVG and embed it into *container* with the given transform.
 
     Factored out of _render_strip to keep the per-transform logic in one
@@ -1448,8 +1438,7 @@ def _embed_piece_svg(container, svg_path, x_pt, y_pt, gl_pt, cw_pt,
             nested.append(child)
 
 def _render_strip(container, pieces, positions, total_length,
-                  fabric_width, units='inch', gap=0.25,
-                  selvedge=True, bg_color='#faf8f5'):
+                  fabric_width, units='inch', gap=0.25, selvedge=True):
     """Render a fabric strip (background, markers, rulers, pieces, yardage)
     into a parent SVG element.
 
@@ -1466,8 +1455,6 @@ def _render_strip(container, pieces, positions, total_length,
     selvedge : bool
         True for selvedge fabric (red dashed edge lines), False for
         plain-edge fabric (gray solid edge lines).
-    bg_color : str
-        Background fill color.
     """
     svg_w_pt = total_length * PTS_PER_INCH
     svg_h_pt = fabric_width * PTS_PER_INCH
@@ -1619,10 +1606,9 @@ def _write_svg(layouts, output_path, units, gap):
             'style': f'display:{display}',
         })
 
-        bg_color = _BG_COLORS.get(group['name'], '#f8f8f8')
         _render_strip(layer, pieces, positions, total_length,
                       group['fabric_width'], units=units, gap=gap,
-                      selvedge=group['selvedge'], bg_color=bg_color)
+                      selvedge=group['selvedge'])
 
     tree = ET.ElementTree(root)
     ET.indent(tree, space='  ')
@@ -1661,10 +1647,9 @@ def _write_pdf(layouts, output_path, units, gap):
             'viewBox': f'0 0 {svg_w_pt:.2f} {svg_h_pt:.2f}',
         })
 
-        bg_color = _BG_COLORS.get(group['name'], '#f8f8f8')
         _render_strip(svg_root, pieces, positions, total_length,
                       group['fabric_width'], units=units, gap=gap,
-                      selvedge=group['selvedge'], bg_color=bg_color)
+                      selvedge=group['selvedge'])
 
         # Serialize to SVG bytes
         svg_tree = ET.ElementTree(svg_root)
@@ -1683,6 +1668,35 @@ def _write_pdf(layouts, output_path, units, gap):
 
     with open(output_path, 'wb') as f:
         writer.write(f)
+
+
+# Named-color → hex equivalents for the specific colors plot_utils uses.
+# Matplotlib's SVG backend may emit either the name, the long hex, or the
+# short hex depending on version/rcParams, so we normalize all forms.
+_COLOR_ALIASES = {
+    'blue':  ('blue', '#0000ff', '#00f'),
+    'black': ('black', '#000000', '#000'),
+}
+
+
+def _style_has_stroke_color(style_str, color_name):
+    """Return True if *style_str* has a ``stroke:`` property matching *color_name*.
+
+    Whitespace-tolerant and accepts named/hex/short-hex equivalents.
+    """
+    if not style_str:
+        return False
+    norm = re.sub(r'\s+', '', style_str).lower()
+    aliases = _COLOR_ALIASES.get(color_name.lower(), (color_name.lower(),))
+    return any(f'stroke:{a}' in norm for a in aliases)
+
+
+def _style_matches_seamline(style_str):
+    return _style_has_stroke_color(style_str, SEAMLINE['color'])
+
+
+def _style_matches_cutline(style_str):
+    return _style_has_stroke_color(style_str, CUTLINE['color'])
 
 
 def _write_dxf(layouts, output_path, units, gap):
@@ -1770,15 +1784,14 @@ def _write_dxf(layouts, output_path, units, gap):
                         dxf_y = (fabric_w_pt - fy_pt) * scale_factor
                         dxf_verts.append((dxf_x, dxf_y))
 
-                    # Map plot_utils SEAMLINE (blue) and CUTLINE (black) to layers
-                    # SEAMLINE = dict(color='blue', linewidth=1.0) -> #0000ff
-                    # CUTLINE = dict(color='black', linewidth=1.5) -> #000000
+                    # Route polylines to _SEAM / _CUT sublayers based on the
+                    # stroke color that plot_utils.SEAMLINE / CUTLINE emit.
                     target_layer = layer_name
-                    if 'stroke:#0000ff' in style or 'stroke:blue' in style:
+                    if _style_matches_seamline(style):
                         target_layer = layer_name + '_SEAM'
                         if target_layer not in doc.layers:
                             doc.layers.add(target_layer, color=color)
-                    elif 'stroke:#000000' in style or 'stroke:black' in style:
+                    elif _style_matches_cutline(style):
                         target_layer = layer_name + '_CUT'
                         if target_layer not in doc.layers:
                             doc.layers.add(target_layer, color=color)
