@@ -174,7 +174,7 @@ def plot_shirt_front(draft, output_path='Logs/shirt_front.svg', debug=False, uni
 
     finalize_figure(ax, fig, standalone, output_path, units=units, debug=debug)
 
-def run(measurements_path, output_path, debug=False, units='cm'):
+def run(measurements_path, output_path, debug=False, units='cm', context=None, **kwargs):
     m = load_measurements(measurements_path)
     draft = draft_shirt_front(m, fit='slim', step=4)
     plot_shirt_front(draft, output_path, debug=debug, units=units, step=4)

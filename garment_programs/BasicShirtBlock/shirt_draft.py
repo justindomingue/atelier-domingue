@@ -8,7 +8,7 @@ EASE_CONFIGS = {
     'loose':   {'Sd': 3.0, 'Bwl': 2.0, 'Bw': 3.0,  'Sw': 5.5, 'Cw': 2.0},
 }
 
-def draft_shirt_block(m: dict[str, float], fit='slim', step=1) -> dict:
+def draft_shirt_block(m: dict[str, float], fit='slim', **_) -> dict:
     """
     Compute shared geometry for the basic shirt block.
     """
@@ -53,17 +53,15 @@ def draft_shirt_block(m: dict[str, float], fit='slim', step=1) -> dict:
         Cw_calc = (Cg * 0.5) - Bw_calc - Sw_calc
     Cw = Cw_calc + config['Cw']
 
-    # Total width check
+    # Total width (Bw + Sw + Cw) should equal ½ Cg + total ease.
     total_width = Bw + Sw + Cw
-    # Should equal 1/2 Cg + total ease
-    expected_ease = config['Bw'] + config['Sw'] + config['Cw']
-    expected_total = (Cg / 2) + expected_ease
+    expected_total = (Cg / 2) + config['Bw'] + config['Sw'] + config['Cw']
+    assert abs(total_width - expected_total) < 1e-6, (
+        f"total_width={total_width:.2f} != expected={expected_total:.2f}"
+    )
 
-        # Coordinate system: Origin A at Top-Right (Neck point N)
-    # Left is negative X, Down is negative Y
-    # Looking at the diagram:
-    # N is top right on vertical baseline (CB line)
-    # CB line goes down.
+    # Coordinate system: Origin at Neck point N (top-right on CB line).
+    # Left is negative X, down is negative Y.
 
     N = np.array([0.0, 0.0]) # Neck point
 

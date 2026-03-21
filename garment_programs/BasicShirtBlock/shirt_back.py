@@ -6,172 +6,129 @@ from garment_programs.measurements import load_measurements
 from garment_programs.plot_utils import setup_figure, finalize_figure
 from .shirt_draft import draft_shirt_block
 
-def draft_shirt_back(m: dict[str, float], fit='slim', step=3) -> dict:
-    draft = draft_shirt_block(m, fit=fit, step=step)
-    
+def draft_shirt_back(m: dict[str, float], fit='slim') -> dict:
+    draft = draft_shirt_block(m, fit=fit)
+
     pts = draft['points']
     lvl = draft['levels']
     ver = draft['verticals']
     mm = draft['measurements']
 
+    from garment_programs.geometry import _bezier_cubic, _bezier_quad
+
     # ==========================================================
-    # Step 2: Back neckline, Shoulder, Back Armhole
+    # Step 2: Back neckline, shoulder, back armhole
     # ==========================================================
-    # Draw the back neckline perpendicular to the centre back. 
-    # Mark the yoke at the centre back 7 cm wide and square out to the left.
+    # Yoke at CB is 7 cm wide; square out to the left.
     yoke_cb_y = -7.0
     pts['yoke_cb'] = np.array([0.0, yoke_cb_y])
 
-    # Determine the shoulder slope with 2 cm.
-    # From the chest line, measure 1/4 of the scye depth (Sd) upwards along the back width line.
-    # Step 3 says "Measure 2 cm from the 1/4-scye-depth point to the left."
+    # Back pitch point: ¼ Sd up from the chest line on the back-width vertical,
+    # shifted 2 cm to the left per the drafting text.
     sd_quarter = mm['Sd'] / 4
     pts['back_pitch'] = np.array([ver['back_width_x'] - 2.0, lvl['chest_y'] + sd_quarter])
 
-    # Shoulder line: draw a guideline to the neckline (from neck_w_pt).
-    # "Determine the shoulder slope with 2 cm" -> down 2cm on the back width line from N's level (y=0)
+    # Shoulder slope guide: 2 cm down from N's level on the back-width line.
     shoulder_slope_pt = np.array([ver['back_width_x'], -2.0])
     pts['shoulder_slope_guide'] = shoulder_slope_pt
 
-    # Extend this line 2 cm to 2.5 cm from the back width to the left.
+    # Shoulder line runs from neck_w_pt through the slope guide, extended 2 cm
+    # past the back-width line.
     shoulder_extension_x = 2.0
     dx = shoulder_slope_pt[0] - pts['neck_w_pt'][0]
     dy = shoulder_slope_pt[1] - pts['neck_w_pt'][1]
     slope = dy / dx if dx != 0 else 0
-    
+
     back_shoulder_x = ver['back_width_x'] - shoulder_extension_x
     back_shoulder_y = shoulder_slope_pt[1] + slope * (-shoulder_extension_x)
     pts['back_shoulder_pt'] = np.array([back_shoulder_x, back_shoulder_y])
 
-    # Connect neck point (Nw) and shoulder point
-    # Wait, "neckline perpendicular... determine shoulder slope with 2cm"
-    # Actually the neck point is `neck_w_pt` (-Nw, 2.0). 
-    # N is (0,0). Nw is to the left, 2cm up.
-    # Shoulder point is on the back width vertical line, dropped 2cm from 0? 
-    # Yes, see image 2: the shoulder line drops 2cm from the top horizontal (0.0).
-    # And extends 2cm past the back width line.
-    
-    # Back neckline curve goes from (0,0) to (-Nw, 2.0)
-    # The image shows N at right, Nw+1 is up 2cm. Let's use neck_w_pt.
-    # Actually, the image says: "Start at neck point (N)... Measure neck width (Nw) to the left and square up 2 cm."
-    # So neck_w_pt is the highest point of the collar.
-    # Curve from N (0,0) to neck_w_pt (-Nw, 2.0).
-
     # ==========================================================
-    # Step 3: Shift shoulder seam
+    # Step 3: Shift shoulder seam forward
     # ==========================================================
-    # Measure 2 cm from the 1/4-scye-depth point to the left (already done for back_shoulder_pt? No.)
-    # The 2nd step extended the shoulder 2-2.5cm.
-    # Shift the shoulder seam to the front. Draw a parallel line 2 cm above the back shoulder line.
-    
-    # The original back shoulder line was from neck_w_pt to back_shoulder_pt.
+    # The back shoulder seam moves 2 cm toward the front: draw a parallel line
+    # 2 cm above (perpendicular to) the original neck_w_pt → back_shoulder_pt line.
     shoulder_dir = pts['back_shoulder_pt'] - pts['neck_w_pt']
     shoulder_unit = shoulder_dir / np.linalg.norm(shoulder_dir)
-    shoulder_perp = np.array([-shoulder_unit[1], shoulder_unit[0]]) # Up and right
+    shoulder_perp = np.array([-shoulder_unit[1], shoulder_unit[0]])  # up/right
 
-    # Shift 2 cm UP/Forward for the back piece (since back shoulder moves to front)
     pts['shifted_neck_w_pt'] = pts['neck_w_pt'] + shoulder_perp * 2.0
     pts['shifted_back_shoulder_pt'] = pts['back_shoulder_pt'] + shoulder_perp * 2.0
 
-    # Extend back neckline to the new shoulder seam.
-    # Draw armhole curve from shifted shoulder seam to the 1/4 scye depth point (back_pitch)
-    # further to the sideseam (which we must define).
-    
-    # Let's locate sideseam. "Measure the distance between centre front and centre back and mark halfway point."
-    # "Square down from halfway point to hemline for sideseam."
+    # Sideseam sits at the CB↔CF halfway point, squared down to the hem.
     halfway_x = ver['cf_x'] / 2.0
     ver['sideseam_x'] = halfway_x
     pts['sideseam_chest'] = np.array([halfway_x, lvl['chest_y']])
     pts['sideseam_waist'] = np.array([halfway_x, lvl['waist_y']])
     pts['sideseam_hem'] = np.array([halfway_x, lvl['hem_y']])
 
-    # Back hem scoop:
-    # "Measure 5 cm from hemline upward on sideseam."
-    # "Measure 2 cm toward center back."
+    # Back hem scoop: 5 cm up from hem on the sideseam, 2 cm toward CB.
     pts['sideseam_hem_scoop'] = np.array([halfway_x, lvl['hem_y'] + 5.0])
     pts['back_hem_scoop_start'] = np.array([halfway_x - 2.0, lvl['hem_y'] + 5.0])
 
-    # ==========================================================
-    # Step 4: Finalizing Back Shapes & Curves
-    # ==========================================================
-    # "Draw the front and back hemline as shown... taper the sideseam at the waist... Plot the back armhole... mark 1.5 cm intake at armhole for contouring and draw the back yoke line."
-
-    # Back neckline curve goes from (0,0) to (-Nw, 2.0)
-    # 2.0 is up from the shoulder line
-    from garment_programs.geometry import _bezier_cubic, _bezier_quad
-    
-    # Back neck curve: from N (0,0) to neck_w_pt (actually shifted_neck_w_pt, which is the final)
-    pts['back_neck_curve'] = _bezier_quad(
-        pts['N'],
-        pts['N'] + np.array([pts['shifted_neck_w_pt'][0] * 0.1, pts['shifted_neck_w_pt'][1] * 0.5]),
-        pts['shifted_neck_w_pt']
-    )
-
-    # Armhole intake 1.5cm on the back width line at the yoke line
+    # 1.5 cm armhole intake on the back-width line at the yoke level.
     yoke_armhole_base = np.array([ver['back_width_x'], pts['yoke_cb'][1]])
     pts['yoke_armhole_intake'] = yoke_armhole_base + np.array([1.5, 0.0])
-
-    # Yoke bottom line
     pts['yoke_line'] = np.array([pts['yoke_cb'], pts['yoke_armhole_intake']])
 
-    # Back armhole curve: shifted_back_shoulder_pt -> yoke_armhole_intake -> back_pitch -> sideseam
-    # Since yoke is separate, let's create two segments: shoulder to yoke, yoke to sideseam.
-    pts['back_armhole_yoke'] = _bezier_quad(
-        pts['shifted_back_shoulder_pt'],
-        pts['shifted_back_shoulder_pt'] + np.array([1.0, (pts['yoke_armhole_intake'][1] - pts['shifted_back_shoulder_pt'][1]) * 0.5]),
-        pts['yoke_armhole_intake']
-    )
-
-    pts['back_armhole_main'] = _bezier_cubic(
-        pts['yoke_armhole_intake'],
-        pts['yoke_armhole_intake'] + np.array([0.0, -2.0]),
-        pts['back_pitch'] + np.array([0.0, 2.0]),
-        pts['back_pitch']
-    )
-    
-    pts['back_armhole_bottom'] = _bezier_cubic(
-        pts['back_pitch'],
-        pts['back_pitch'] + np.array([-0.5, -1.5]),
-        pts['sideseam_chest'] + np.array([1.0, 1.0]),
-        pts['sideseam_chest']
-    )
-
-    # Taper sideseam at the waist
-    # Usually 1.5 - 2 cm for slim fit? Standard is 1-3. Let's use 1.5.
+    # 1.5 cm waist taper toward CB (positive x).
     waist_taper = 1.5
     pts['sideseam_waist_taper'] = pts['sideseam_waist'] + np.array([waist_taper, 0.0])
 
-    # Sideseam curve
-    pts['back_sideseam_upper'] = _bezier_quad(
+    # ==========================================================
+    # Step 4: Curves
+    # ==========================================================
+    curves = {}
+
+    # Back neck: N (0,0) → shifted_neck_w_pt (collar high point).
+    curves['back_neck'] = _bezier_quad(
+        pts['N'],
+        pts['N'] + np.array([pts['shifted_neck_w_pt'][0] * 0.1,
+                             pts['shifted_neck_w_pt'][1] * 0.5]),
+        pts['shifted_neck_w_pt'],
+    )
+
+    # Back armhole in three segments: shoulder → yoke intake → back pitch → sideseam.
+    curves['back_armhole_yoke'] = _bezier_quad(
+        pts['shifted_back_shoulder_pt'],
+        pts['shifted_back_shoulder_pt'] + np.array(
+            [1.0, (pts['yoke_armhole_intake'][1] - pts['shifted_back_shoulder_pt'][1]) * 0.5]
+        ),
+        pts['yoke_armhole_intake'],
+    )
+    curves['back_armhole_main'] = _bezier_cubic(
+        pts['yoke_armhole_intake'],
+        pts['yoke_armhole_intake'] + np.array([0.0, -2.0]),
+        pts['back_pitch'] + np.array([0.0, 2.0]),
+        pts['back_pitch'],
+    )
+    curves['back_armhole_bottom'] = _bezier_cubic(
+        pts['back_pitch'],
+        pts['back_pitch'] + np.array([-0.5, -1.5]),
+        pts['sideseam_chest'] + np.array([1.0, 1.0]),
+        pts['sideseam_chest'],
+    )
+
+    # Sideseam: chest → waist taper → hem scoop.
+    curves['sideseam_upper'] = _bezier_quad(
         pts['sideseam_chest'],
         pts['sideseam_chest'] + np.array([0.0, -3.0]),
-        pts['sideseam_waist_taper']
+        pts['sideseam_waist_taper'],
     )
-    pts['back_sideseam_lower'] = _bezier_quad(
+    curves['sideseam_lower'] = _bezier_quad(
         pts['sideseam_waist_taper'],
         pts['sideseam_waist_taper'] + np.array([0.0, -5.0]),
-        pts['sideseam_hem_scoop']
+        pts['sideseam_hem_scoop'],
     )
 
-    # Back hemline curve
-    pts['back_hemline_curve'] = _bezier_quad(
+    # Hem scoop curve; the remainder of the hem is a straight line to cb_hem.
+    curves['hem_scoop'] = _bezier_quad(
         pts['sideseam_hem_scoop'],
         np.array([pts['back_hem_scoop_start'][0], pts['sideseam_hem_scoop'][1]]),
-        pts['back_hem_scoop_start']
+        pts['back_hem_scoop_start'],
     )
 
-    # Note: the full hem consists of the back_hemline_curve, and then a straight line to cb_hem
-    
-    draft['curves'] = {
-        'back_neck': pts['back_neck_curve'],
-        'back_armhole_yoke': pts['back_armhole_yoke'],
-        'back_armhole_main': pts['back_armhole_main'],
-        'back_armhole_bottom': pts['back_armhole_bottom'],
-        'sideseam_upper': pts['back_sideseam_upper'],
-        'sideseam_lower': pts['back_sideseam_lower'],
-        'hem_scoop': pts['back_hemline_curve'],
-    }
-
+    draft['curves'] = curves
     return draft
 
 def plot_shirt_back(draft, output_path='Logs/shirt_back.svg', debug=False, units='cm', step=1):
@@ -183,7 +140,6 @@ def plot_shirt_back(draft, output_path='Logs/shirt_back.svg', debug=False, units
     fig, ax, standalone = setup_figure(figsize=(12, 12))
     plt.rcParams['lines.solid_capstyle'] = 'butt'
     REF = dict(color='gray', linewidth=0.8, linestyle='--', alpha=0.4)
-    CON = dict(color='cornflowerblue', linewidth=0.6, linestyle=':', alpha=0.5)
 
     if debug:
         # Step 1 geometry
@@ -321,7 +277,7 @@ def plot_shirt_back(draft, output_path='Logs/shirt_back.svg', debug=False, units
     finalize_figure(ax, fig, standalone, output_path, units=units, debug=debug)
 
 
-def run(measurements_path, output_path, debug=False, units='cm'):
+def run(measurements_path, output_path, debug=False, units='cm', context=None, **kwargs):
     m = load_measurements(measurements_path)
-    draft = draft_shirt_back(m, fit='slim', step=4)
+    draft = draft_shirt_back(m, fit='slim')
     plot_shirt_back(draft, output_path, debug=debug, units=units, step=4)
