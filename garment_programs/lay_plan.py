@@ -14,10 +14,14 @@ pieces are forced against the top/bottom edges of the layout so the
 outseam sits on the selvedge.
 """
 
+from __future__ import annotations
+
 import json
 import re
 import xml.etree.ElementTree as ET
 from pathlib import Path
+from typing import NamedTuple, Sequence
+
 import numpy as np
 
 # SVG namespace
@@ -34,12 +38,89 @@ from garment_programs.plot_utils import SEAMLINE, CUTLINE
 PTS_PER_INCH = 72.0
 
 
-def _tag(name):
+# ---------------------------------------------------------------------------
+# Type aliases + named records
+# ---------------------------------------------------------------------------
+
+#: A 2D point in inches.
+Point = tuple[float, float]
+
+#: A closed polygon as a list of vertices (inches, origin-normalized).
+Polygon = list[Point]
+
+#: Piece placement positions: {piece_name: (x, y)} in inches, y-down.
+Positions = dict[str, Point]
+
+
+class SkylineSegment(NamedTuple):
+    """One segment of the skyline profile.
+
+    The skyline tracks how far pieces extend rightward (x) at each
+    y-span across the fabric width.
+    """
+    y_start: float  # top of this span (inches, y-down)
+    y_end: float    # bottom of this span
+    x_right: float  # rightmost x occupied in this span
+
+
+class Piece(NamedTuple):
+    """A pattern piece with its outline polygon for polygon-aware nesting.
+
+    This is the 7-field record passed through polygon_nest, _void_fill,
+    and _offset_nest_selvedge.  The polygon lets nesting use the actual
+    cut shape (not just the bounding box) for tighter packing.
+    """
+    name: str
+    grain_len: float        # extent along fabric length (layout x)
+    cross_w: float          # extent across fabric width (layout y)
+    edge: str | None        # 'top' | 'bottom' | None — selvedge pinning
+    poly: Polygon           # outline polygon vertices (inches, origin-normalized)
+    pad_x: float            # x-offset from SVG origin to polygon min-x
+    pad_y: float            # y-offset from SVG origin to polygon min-y
+
+
+class LayoutPiece(NamedTuple):
+    """A pattern piece ready for rendering: source SVG + placement transform.
+
+    Built by _layout_fabric and consumed by _render_strip / _write_dxf.
+    """
+    name: str
+    grain_len: float
+    cross_w: float
+    svg_path: str
+    transform: str          # 'none' | 'ccw' | 'cw' | 'flip_v' | 'flip_h'
+                            # | 'ccw_flip_h' | 'ccw_flip_v'
+    edge: str | None        # 'top' | 'bottom' | None
+
+
+class Layout(NamedTuple):
+    """A packed layout for one fabric group, ready to render."""
+    group: dict             # fabric group config (name, label, width, selvedge)
+    pieces: list[LayoutPiece]
+    positions: Positions
+    total_length: float     # fabric length needed (inches)
+
+
+class LayoutCandidate(NamedTuple):
+    """One candidate packing strategy result, for best-of comparison."""
+    total_length: float
+    tiebreak: int           # secondary sort key when lengths tie
+    positions: Positions
+    use_polygons: bool
+    label: str              # human-readable strategy name
+
+
+# skyline_pack accepts 3- or 4-field input tuples; 4th field is the
+# optional selvedge edge constraint.
+PackInput = tuple[str, float, float] | tuple[str, float, float, str | None]
+
+
+def _tag(name: str) -> str:
     """Namespaced SVG element tag."""
     return f'{{{SVG_NS}}}{name}'
 
 
-def parse_svg_dimensions(svg_path):
+def parse_svg_dimensions(svg_path: str | Path) -> tuple[float, float]:
     """Read SVG width/height attributes and return (w_inches, h_inches).
 
     Handles values in points (default for matplotlib) and plain numbers.
@@ -63,8 +144,13 @@ def parse_svg_dimensions(svg_path):
     return _to_inches(w_str), _to_inches(h_str)
 
 
-def skyline_pack(pieces, fabric_width, gap=0.25, initial_skyline=None,
-                 return_skyline=False):
+def skyline_pack(
+    pieces: Sequence[PackInput],
+    fabric_width: float,
+    gap: float = 0.25,
+    initial_skyline: list[SkylineSegment] | None = None,
+    return_skyline: bool = False,
+) -> tuple[Positions, float] | tuple[Positions, float, list[SkylineSegment]]:
     """Skyline packing — horizontal layout within a fixed fabric width.
 
     Pieces grow along x (fabric length) and are constrained to
@@ -81,7 +167,7 @@ def skyline_pack(pieces, fabric_width, gap=0.25, initial_skyline=None,
         Available width in inches (y-axis constraint).
     gap : float
         Spacing between pieces in inches.
-    initial_skyline : list of (y_start, y_end, x_right), optional
+    initial_skyline : list[SkylineSegment], optional
         Pre-existing skyline state (e.g. from a previous selvedge pack).
         Allows continuing packing into existing gaps.
     return_skyline : bool
@@ -89,20 +175,20 @@ def skyline_pack(pieces, fabric_width, gap=0.25, initial_skyline=None,
 
     Returns
     -------
-    positions : dict
+    positions : Positions
         {name: (x, y)} placement positions (top-left corner, y-down).
     total_length : float
         Total fabric length needed (inches, x-extent).
-    skyline : list, optional
+    skyline : list[SkylineSegment], optional
         Final skyline state (only if ``return_skyline=True``).
     """
     if not pieces:
         if return_skyline:
-            return {}, 0.0, initial_skyline or [(0.0, fabric_width, 0.0)]
+            return {}, 0.0, initial_skyline or [SkylineSegment(0.0, fabric_width, 0.0)]
         return {}, 0.0
 
-    # Normalize to 4-tuples
-    normalized = []
+    # Normalize to (name, grain_len, cross_w, edge) 4-tuples
+    normalized: list[tuple[str, float, float, str | None]] = []
     for p in pieces:
         if len(p) == 3:
             normalized.append((*p, None))
@@ -120,7 +206,7 @@ def skyline_pack(pieces, fabric_width, gap=0.25, initial_skyline=None,
 
     # Greedily pair each top piece with a compatible bottom piece
     constrained = []
-    used_bottoms = set()
+    used_bottoms: set[int] = set()
     for t in tops:
         best_idx = None
         best_waste = float('inf')
@@ -142,10 +228,11 @@ def skyline_pack(pieces, fabric_width, gap=0.25, initial_skyline=None,
             constrained.append(b)
     ordered = constrained + free
 
-    # Skyline: list of (y_start, y_end, x_right) segments.
-    # Tracks how far right (x) pieces extend at each y position.
-    skyline = initial_skyline or [(0.0, fabric_width, 0.0)]
-    positions = {}
+    # Skyline tracks how far right (x) pieces extend at each y position.
+    skyline: list[SkylineSegment] = (
+        initial_skyline or [SkylineSegment(0.0, fabric_width, 0.0)]
+    )
+    positions: Positions = {}
 
     for name, grain_len, cross_w, edge in ordered:
         if cross_w > fabric_width + 0.001:
@@ -158,7 +245,7 @@ def skyline_pack(pieces, fabric_width, gap=0.25, initial_skyline=None,
         elif edge == 'bottom':
             candidates = [max(0.0, fabric_width - cross_w)]
         else:
-            candidates = [seg[0] for seg in skyline]
+            candidates = [seg.y_start for seg in skyline]
 
         best_x = float('inf')
         best_y = None
@@ -172,9 +259,9 @@ def skyline_pack(pieces, fabric_width, gap=0.25, initial_skyline=None,
 
             # Max x_right across spanned skyline segments
             max_x = 0.0
-            for seg_y0, seg_y1, seg_x in skyline:
-                if seg_y0 < y_end - 0.001 and seg_y1 > y_start + 0.001:
-                    max_x = max(max_x, seg_x)
+            for seg in skyline:
+                if seg.y_start < y_end - 0.001 and seg.y_end > y_start + 0.001:
+                    max_x = max(max_x, seg.x_right)
 
             if max_x < best_x:
                 best_x = max_x
@@ -182,7 +269,7 @@ def skyline_pack(pieces, fabric_width, gap=0.25, initial_skyline=None,
 
         if best_y is None:
             best_y = 0.0
-            best_x = max(s[2] for s in skyline)
+            best_x = max(s.x_right for s in skyline)
 
         # Place piece — no extra gap against selvedge edges
         px = best_x + gap / 2
@@ -197,20 +284,20 @@ def skyline_pack(pieces, fabric_width, gap=0.25, initial_skyline=None,
         piece_top = best_y
         piece_bottom = best_y + cross_w + (gap / 2 if edge else gap)
 
-        new_skyline = []
-        for seg_y0, seg_y1, seg_x in skyline:
-            if seg_y1 <= piece_top or seg_y0 >= piece_bottom:
-                new_skyline.append((seg_y0, seg_y1, seg_x))
+        new_skyline: list[SkylineSegment] = []
+        for seg in skyline:
+            if seg.y_end <= piece_top or seg.y_start >= piece_bottom:
+                new_skyline.append(seg)
             else:
-                if seg_y0 < piece_top:
-                    new_skyline.append((seg_y0, piece_top, seg_x))
-                if seg_y1 > piece_bottom:
-                    new_skyline.append((piece_bottom, seg_y1, seg_x))
+                if seg.y_start < piece_top:
+                    new_skyline.append(SkylineSegment(seg.y_start, piece_top, seg.x_right))
+                if seg.y_end > piece_bottom:
+                    new_skyline.append(SkylineSegment(piece_bottom, seg.y_end, seg.x_right))
 
-        new_skyline.append((piece_top, piece_bottom, new_right))
-        skyline = sorted(new_skyline, key=lambda s: s[0])
+        new_skyline.append(SkylineSegment(piece_top, piece_bottom, new_right))
+        skyline = sorted(new_skyline, key=lambda s: s.y_start)
 
-    total_length = max(s[2] for s in skyline)
+    total_length = max(s.x_right for s in skyline)
     if return_skyline:
         return positions, total_length, skyline
     return positions, total_length
@@ -387,7 +474,7 @@ def _parse_svg_path_data(d_string, curve_steps=10):
     return vertices, closed
 
 
-def _shoelace_area(pts):
+def _shoelace_area(pts: Sequence[Point]) -> float:
     """Signed area of a polygon via the shoelace formula."""
     n = len(pts)
     if n < 3:
@@ -400,7 +487,7 @@ def _shoelace_area(pts):
     return area / 2.0
 
 
-def _extract_outline_polygon(svg_path):
+def _extract_outline_polygon(svg_path: str | Path) -> tuple[Polygon, float, float]:
     """Extract the cut-boundary polygon from a piece SVG.
 
     Finds all ``<path>`` elements inside the drawing area (``g#axes_1``),
@@ -409,7 +496,7 @@ def _extract_outline_polygon(svg_path):
 
     Returns
     -------
-    polygon : list of (float, float)
+    polygon : Polygon
         Vertices in inches, normalized to origin.  If no suitable closed
         path is found, falls back to a bounding-box rectangle.
     pad_x : float
@@ -486,14 +573,16 @@ def _extract_outline_polygon(svg_path):
     return poly_inches, pad_x, pad_y
 
 
-def _transform_polygon(polygon, transform, w_inches, h_inches):
+def _transform_polygon(
+    polygon: Polygon, transform: str, w_inches: float, h_inches: float
+) -> Polygon:
     """Apply a layout transform to polygon vertices.
 
     Mirrors the SVG embedding transforms used in generate_lay_plan().
 
     Parameters
     ----------
-    polygon : list of (float, float)
+    polygon : Polygon
         Vertices in the piece's local coordinate space (inches).
     transform : str
         'none', 'ccw' (90° counter-clockwise), or 'flip_v' (vertical mirror).
@@ -553,7 +642,7 @@ def _transform_polygon(polygon, transform, w_inches, h_inches):
 # Void filling — place free pieces in curved voids within selvedge zone
 # ---------------------------------------------------------------------------
 
-def _polygon_y_range_at_x(polygon, x):
+def _polygon_y_range_at_x(polygon: Sequence[Point], x: float) -> tuple[float, float] | None:
     """Find the y-extent of a closed polygon at a given x coordinate.
 
     Returns (y_min, y_max) or None if x is outside the polygon's x-range.
@@ -578,7 +667,9 @@ def _polygon_y_range_at_x(polygon, x):
     return None
 
 
-def _intersect_ranges(ranges_a, ranges_b):
+def _intersect_ranges(
+    ranges_a: list[tuple[float, float]], ranges_b: list[tuple[float, float]]
+) -> list[tuple[float, float]]:
     """Compute intersection of two sorted lists of (lo, hi) ranges."""
     result = []
     i = j = 0
@@ -594,8 +685,14 @@ def _intersect_ranges(ranges_a, ranges_b):
     return result
 
 
-def _void_fill(selvedge_pieces, sel_positions, free_pieces, fabric_width,
-               gap=0.25, step=0.5):
+def _void_fill(
+    selvedge_pieces: list[Piece],
+    sel_positions: Positions,
+    free_pieces: list[Piece],
+    fabric_width: float,
+    gap: float = 0.25,
+    step: float = 0.5,
+) -> tuple[Positions, list[Piece]]:
     """Place free pieces into curved voids within the selvedge zone.
 
     Scans the selvedge region with a polygon-aware profile: at each
@@ -606,9 +703,9 @@ def _void_fill(selvedge_pieces, sel_positions, free_pieces, fabric_width,
 
     Parameters
     ----------
-    selvedge_pieces : list of (name, grain_len, cross_w, edge, poly, pad_x, pad_y)
-    sel_positions : dict  {name: (svg_x, svg_y)}
-    free_pieces : list of (name, grain_len, cross_w, edge, poly, pad_x, pad_y)
+    selvedge_pieces : list[Piece]
+    sel_positions : Positions  {name: (svg_x, svg_y)}
+    free_pieces : list[Piece]
     fabric_width : float
     gap : float
     step : float
@@ -616,16 +713,17 @@ def _void_fill(selvedge_pieces, sel_positions, free_pieces, fabric_width,
 
     Returns
     -------
-    placed : dict  {name: (svg_x, svg_y)}
-    remaining : list of unplaced free piece tuples
+    placed : Positions  {name: (svg_x, svg_y)}
+    remaining : list[Piece]  unplaced free pieces
     """
     # Build absolute polygons for selvedge pieces
-    abs_polys = []
-    for name, gl, cw, edge, poly, px, py in selvedge_pieces:
-        if name not in sel_positions:
+    abs_polys: list[Polygon] = []
+    for sel in selvedge_pieces:
+        if sel.name not in sel_positions:
             continue
-        sx, sy = sel_positions[name]
-        abs_polys.append([(vx + sx + px, vy + sy + py) for vx, vy in poly])
+        sx, sy = sel_positions[sel.name]
+        abs_polys.append([(vx + sx + sel.pad_x, vy + sy + sel.pad_y)
+                          for vx, vy in sel.poly])
 
     if not abs_polys:
         return {}, list(free_pieces)
@@ -667,22 +765,22 @@ def _void_fill(selvedge_pieces, sel_positions, free_pieces, fabric_width,
         void_profile[xc] = voids
 
     # Sort free pieces by area (largest first) for greedy placement
-    remaining = sorted(free_pieces, key=lambda p: p[1] * p[2], reverse=True)
-    placed = {}
+    remaining = sorted(free_pieces,
+                       key=lambda p: p.grain_len * p.cross_w, reverse=True)
+    placed: Positions = {}
 
     for piece in remaining[:]:
-        name, gl, cw, edge, poly, px, py = piece
         best_pos = None
 
         for si in range(len(x_cols)):
             sx = x_cols[si]
-            if sx + gl > sel_x_max + 0.01:
+            if sx + piece.grain_len > sel_x_max + 0.01:
                 break
 
-            # Find common void across all x-columns spanned by [sx, sx+gl]
+            # Find common void across all x-columns spanned by [sx, sx+grain_len]
             common = list(void_profile.get(x_cols[si], []))
             for ci in range(si + 1, len(x_cols)):
-                if x_cols[ci] > sx + gl:
+                if x_cols[ci] > sx + piece.grain_len:
                     break
                 common = _intersect_ranges(common,
                                            void_profile.get(x_cols[ci], []))
@@ -691,7 +789,7 @@ def _void_fill(selvedge_pieces, sel_positions, free_pieces, fabric_width,
 
             # Check if any common void fits the SVG bounding box
             for vy0, vy1 in common:
-                if vy1 - vy0 >= cw + gap:
+                if vy1 - vy0 >= piece.cross_w + gap:
                     svg_x = sx + gap / 2
                     svg_y = vy0 + gap / 2
                     if svg_x >= -0.01 and svg_y >= -0.01:
@@ -701,15 +799,15 @@ def _void_fill(selvedge_pieces, sel_positions, free_pieces, fabric_width,
                 break
 
         if best_pos:
-            placed[name] = best_pos
+            placed[piece.name] = best_pos
 
             # Block this SVG bounding box in the void profile
             bx, by = best_pos
             for ci, xc in enumerate(x_cols):
-                if xc < bx - gap - 0.01 or xc > bx + gl + 0.01:
+                if xc < bx - gap - 0.01 or xc > bx + piece.grain_len + 0.01:
                     continue
                 blocked = (max(0, by - gap / 2),
-                           min(fabric_width, by + cw + gap / 2))
+                           min(fabric_width, by + piece.cross_w + gap / 2))
                 new_voids = []
                 for v0, v1 in void_profile[xc]:
                     if blocked[1] <= v0 + 0.01 or blocked[0] >= v1 - 0.01:
@@ -726,8 +824,13 @@ def _void_fill(selvedge_pieces, sel_positions, free_pieces, fabric_width,
     return placed, remaining
 
 
-def _offset_nest_selvedge(top_pieces, bot_pieces, fabric_width, gap=0.25,
-                          step=0.5):
+def _offset_nest_selvedge(
+    top_pieces: list[Piece],
+    bot_pieces: list[Piece],
+    fabric_width: float,
+    gap: float = 0.25,
+    step: float = 0.5,
+) -> tuple[Positions, list[Piece], list[Piece]]:
     """Try to offset-nest top/bottom selvedge piece pairs.
 
     For each (top, bottom) pair whose bounding-box cross widths exceed
@@ -740,8 +843,8 @@ def _offset_nest_selvedge(top_pieces, bot_pieces, fabric_width, gap=0.25,
 
     Parameters
     ----------
-    top_pieces : list of (name, grain_len, cross_w, edge, poly, pad_x, pad_y)
-    bot_pieces : list of (name, grain_len, cross_w, edge, poly, pad_x, pad_y)
+    top_pieces : list[Piece]
+    bot_pieces : list[Piece]
     fabric_width : float
     gap : float
         Minimum clearance between pieces in inches.
@@ -750,15 +853,15 @@ def _offset_nest_selvedge(top_pieces, bot_pieces, fabric_width, gap=0.25,
 
     Returns
     -------
-    nested_positions : dict  {name: (svg_x, svg_y)}
-    remaining_tops : list of unpaired top piece tuples
-    remaining_bots : list of unpaired bottom piece tuples
+    nested_positions : Positions  {name: (svg_x, svg_y)}
+    remaining_tops : list[Piece]  unpaired top pieces
+    remaining_bots : list[Piece]  unpaired bottom pieces
     """
     # Build candidate pairs, prioritising cross-type main-panel pairings
     # (front+back) over same-type (back+back) or accessory pairs.
     # This ensures the lay plan always pairs front and back side-by-side
     # on the fabric width, using offset nesting when they don't fit.
-    def _stem(name):
+    def _stem(name: str) -> str:
         for sfx in ('_L', '_R', '_1', '_2', '_3', '_4'):
             if name.endswith(sfx):
                 return name[:-len(sfx)]
@@ -766,24 +869,24 @@ def _offset_nest_selvedge(top_pieces, bot_pieces, fabric_width, gap=0.25,
 
     main_threshold = fabric_width * 0.3   # e.g. 9.3" for 31" fabric
 
-    candidates = []
+    candidates: list[tuple[int, float, int, int]] = []
     for ti, top in enumerate(top_pieces):
         for bi, bot in enumerate(bot_pieces):
-            excess = top[2] + bot[2] - fabric_width
+            excess = top.cross_w + bot.cross_w - fabric_width
             # Priority: 0 = cross-pair of two main panels,
             #           1 = same-family or involves accessory piece
             is_cross_main = (
-                _stem(top[0]) != _stem(bot[0])
-                and top[2] > main_threshold
-                and bot[2] > main_threshold
+                _stem(top.name) != _stem(bot.name)
+                and top.cross_w > main_threshold
+                and bot.cross_w > main_threshold
             )
             priority = 0 if is_cross_main else 1
             candidates.append((priority, excess, ti, bi))
     candidates.sort()  # (priority ASC, excess ASC)
 
-    nested_positions = {}
-    used_tops = set()
-    used_bots = set()
+    nested_positions: Positions = {}
+    used_tops: set[int] = set()
+    used_bots: set[int] = set()
     # Track cumulative x-offset so successive pairs don't overlap
     pair_x_cursor = 0.0
 
@@ -793,20 +896,18 @@ def _offset_nest_selvedge(top_pieces, bot_pieces, fabric_width, gap=0.25,
         top = top_pieces[ti]
         bot = bot_pieces[bi]
         # Only offset-nest main panels, not accessories (waistband, cinch)
-        if top[2] < main_threshold or bot[2] < main_threshold:
+        if top.cross_w < main_threshold or bot.cross_w < main_threshold:
             continue
-        t_name, t_gl, t_cw, _, t_poly, t_px, t_py = top
-        b_name, b_gl, b_cw, _, b_poly, b_px, b_py = bot
 
         # "Unflip" the bottom polygon to original orientation
         # (outseam at y=0) so y_max gives the cross-grain extent
         # from the selvedge.
-        b_poly_h = max(p[1] for p in b_poly) if b_poly else 0
-        b_poly_orig = [(x, b_poly_h - y) for x, y in b_poly]
+        b_poly_h = max(p[1] for p in bot.poly) if bot.poly else 0
+        b_poly_orig = [(x, b_poly_h - y) for x, y in bot.poly]
 
-        t_poly_xmax = max(p[0] for p in t_poly) if t_poly else t_gl
+        t_poly_xmax = max(p[0] for p in top.poly) if top.poly else top.grain_len
         b_poly_xmax = (max(p[0] for p in b_poly_orig)
-                       if b_poly_orig else b_gl)
+                       if b_poly_orig else bot.grain_len)
 
         # Scan offsets from 0 upward
         max_offset = max(t_poly_xmax, b_poly_xmax)
@@ -828,7 +929,7 @@ def _offset_nest_selvedge(top_pieces, bot_pieces, fabric_width, gap=0.25,
             fits = True
             xc = overlap_start
             while xc <= overlap_end + 0.001:
-                t_yr = _polygon_y_range_at_x(t_poly, xc)
+                t_yr = _polygon_y_range_at_x(top.poly, xc)
                 b_yr = _polygon_y_range_at_x(b_poly_orig, xc - offset)
 
                 t_extent = t_yr[1] if t_yr else 0.0
@@ -846,19 +947,19 @@ def _offset_nest_selvedge(top_pieces, bot_pieces, fabric_width, gap=0.25,
 
         if best_offset is not None:
             # Only nest if it actually saves fabric vs sequential
-            sequential_len = t_gl + b_gl + gap
-            nested_len = max(t_gl, best_offset + b_gl) + gap
+            sequential_len = top.grain_len + bot.grain_len + gap
+            nested_len = max(top.grain_len, best_offset + bot.grain_len) + gap
             savings = sequential_len - nested_len
 
             if savings > step:
-                nested_positions[t_name] = (pair_x_cursor + gap / 2, 0.0)
-                nested_positions[b_name] = (pair_x_cursor + best_offset
-                                            + gap / 2,
-                                            fabric_width - b_cw)
+                nested_positions[top.name] = (pair_x_cursor + gap / 2, 0.0)
+                nested_positions[bot.name] = (pair_x_cursor + best_offset
+                                              + gap / 2,
+                                              fabric_width - bot.cross_w)
                 used_tops.add(ti)
                 used_bots.add(bi)
                 pair_x_cursor += nested_len
-                print(f"    Offset nest: {t_name} + {b_name} "
+                print(f"    Offset nest: {top.name} + {bot.name} "
                       f"offset={best_offset:.1f}\" "
                       f"(saves {savings:.1f}\" lengthwise)")
 
@@ -870,16 +971,23 @@ def _offset_nest_selvedge(top_pieces, bot_pieces, fabric_width, gap=0.25,
     return nested_positions, remaining_tops, remaining_bots
 
 
-def _select_layout_candidate(candidates, preferred_label=None):
+def _select_layout_candidate(
+    candidates: list[LayoutCandidate], preferred_label: str | None = None
+) -> LayoutCandidate:
     """Choose a layout candidate by label preference or shortest length."""
     if preferred_label:
         for candidate in candidates:
-            if candidate[4] == preferred_label:
+            if candidate.label == preferred_label:
                 return candidate
-    return min(candidates, key=lambda c: (c[0], c[1]))
+    return min(candidates, key=lambda c: (c.total_length, c.tiebreak))
 
 
-def polygon_nest(pieces, fabric_width, gap=0.25, prefer_offset_nest=True):
+def polygon_nest(
+    pieces: list[Piece],
+    fabric_width: float,
+    gap: float = 0.25,
+    prefer_offset_nest: bool = True,
+) -> tuple[Positions, float, bool]:
     """Polygon-aware nesting with void filling and skyline fallback.
 
     Strategy:
@@ -897,7 +1005,7 @@ def polygon_nest(pieces, fabric_width, gap=0.25, prefer_offset_nest=True):
 
     Parameters
     ----------
-    pieces : list of tuples
+    pieces : list[Piece]
         (name, grain_len, cross_w, edge, polygon, pad_x, pad_y)
     fabric_width : float
     gap : float
@@ -907,7 +1015,7 @@ def polygon_nest(pieces, fabric_width, gap=0.25, prefer_offset_nest=True):
 
     Returns
     -------
-    positions : dict  {name: (x, y)}
+    positions : Positions  {name: (x, y)}
     total_length : float
     use_polygons : bool
         True if polygon nesting was used (caller should strip backgrounds).
@@ -916,19 +1024,17 @@ def polygon_nest(pieces, fabric_width, gap=0.25, prefer_offset_nest=True):
         return {}, 0.0, False
 
     # --- Baseline: skyline_pack for ALL pieces (interleaved) ---
-    all_input = [(name, gl, cw, edge)
-                 for name, gl, cw, edge, _, _, _ in pieces]
+    all_input = [(p.name, p.grain_len, p.cross_w, p.edge) for p in pieces]
     sky_positions, sky_length = skyline_pack(all_input, fabric_width, gap=gap)
 
-    selvedge = [p for p in pieces if p[3] in ('top', 'bottom')]
-    free = [p for p in pieces if p[3] not in ('top', 'bottom')]
+    selvedge = [p for p in pieces if p.edge in ('top', 'bottom')]
+    free = [p for p in pieces if p.edge not in ('top', 'bottom')]
 
     if not free:
         return sky_positions, sky_length, False
 
     # --- Selvedge skyline with state export ---
-    sel_input = [(name, gl, cw, edge)
-                 for name, gl, cw, edge, _, _, _ in selvedge]
+    sel_input = [(p.name, p.grain_len, p.cross_w, p.edge) for p in selvedge]
     sel_positions, sel_length, sel_skyline = skyline_pack(
         sel_input, fabric_width, gap=gap, return_skyline=True)
 
@@ -944,25 +1050,23 @@ def polygon_nest(pieces, fabric_width, gap=0.25, prefer_offset_nest=True):
     # remaining pieces don't overlap them.
     vf_skyline = list(sel_skyline)
     for vname, (vx, vy) in void_placed.items():
-        vpiece = next(p for p in free if p[0] == vname)
-        vgl, vcw = vpiece[1], vpiece[2]
-        new_right = vx + vgl + gap
+        vpiece = next(p for p in free if p.name == vname)
+        new_right = vx + vpiece.grain_len + gap
         ptop = vy
-        pbot = vy + vcw + gap
-        new_sky = []
-        for sy0, sy1, sx in vf_skyline:
-            if sy1 <= ptop or sy0 >= pbot:
-                new_sky.append((sy0, sy1, sx))
+        pbot = vy + vpiece.cross_w + gap
+        new_sky: list[SkylineSegment] = []
+        for seg in vf_skyline:
+            if seg.y_end <= ptop or seg.y_start >= pbot:
+                new_sky.append(seg)
             else:
-                if sy0 < ptop:
-                    new_sky.append((sy0, ptop, sx))
-                if sy1 > pbot:
-                    new_sky.append((pbot, sy1, sx))
-        new_sky.append((ptop, pbot, new_right))
-        vf_skyline = sorted(new_sky, key=lambda s: s[0])
+                if seg.y_start < ptop:
+                    new_sky.append(SkylineSegment(seg.y_start, ptop, seg.x_right))
+                if seg.y_end > pbot:
+                    new_sky.append(SkylineSegment(pbot, seg.y_end, seg.x_right))
+        new_sky.append(SkylineSegment(ptop, pbot, new_right))
+        vf_skyline = sorted(new_sky, key=lambda s: s.y_start)
 
-    remaining_input = [(name, gl, cw, None)
-                       for name, gl, cw, _, _, _, _ in remaining]
+    remaining_input = [(p.name, p.grain_len, p.cross_w, None) for p in remaining]
     if remaining_input:
         remaining_sky_pos, vf_total = skyline_pack(
             remaining_input, fabric_width, gap=gap,
@@ -970,68 +1074,67 @@ def polygon_nest(pieces, fabric_width, gap=0.25, prefer_offset_nest=True):
     else:
         # All free pieces void-filled — total length is the skyline extent
         remaining_sky_pos = {}
-        vf_total = max(s[2] for s in vf_skyline)
+        vf_total = max(s.x_right for s in vf_skyline)
 
-    vf_positions = {}
+    vf_positions: Positions = {}
     vf_positions.update(sel_positions)
     vf_positions.update(void_placed)
     vf_positions.update(remaining_sky_pos)
 
     # --- Strategy B: Pure skyline continuation (no void fill) ---
-    all_free_input = [(name, gl, cw, None)
-                      for name, gl, cw, _, _, _, _ in free]
+    all_free_input = [(p.name, p.grain_len, p.cross_w, None) for p in free]
     all_free_sky_pos, sky_cont_total = skyline_pack(
         all_free_input, fabric_width, gap=gap,
         initial_skyline=sel_skyline)
 
-    sky_cont_positions = {}
+    sky_cont_positions: Positions = {}
     sky_cont_positions.update(sel_positions)
     sky_cont_positions.update(all_free_sky_pos)
 
     # --- Strategy C: Offset nesting for too-wide selvedge pairs ---
     # For selvedge pairs whose bounding-box widths exceed fabric_width,
     # try offset nesting using actual polygon shapes.
-    sel_tops = [p for p in selvedge if p[3] == 'top']
-    sel_bots = [p for p in selvedge if p[3] == 'bottom']
+    sel_tops = [p for p in selvedge if p.edge == 'top']
+    sel_bots = [p for p in selvedge if p.edge == 'bottom']
 
     has_wide_pair = any(
-        t[2] + b[2] > fabric_width
+        t.cross_w + b.cross_w > fabric_width
         for t in sel_tops for b in sel_bots
     )
 
-    c_result = None
+    c_result: tuple[float, Positions] | None = None
     if has_wide_pair:
         offset_pos, rem_tops, rem_bots = _offset_nest_selvedge(
             sel_tops, sel_bots, fabric_width, gap=gap)
 
         if offset_pos:
             # Build skyline from offset-nested pieces
-            c_skyline = [(0.0, fabric_width, 0.0)]
+            c_skyline: list[SkylineSegment] = [SkylineSegment(0.0, fabric_width, 0.0)]
             for oname in offset_pos:
                 ox, oy = offset_pos[oname]
-                opiece = next(p for p in selvedge if p[0] == oname)
-                ogl, ocw, oedge = opiece[1], opiece[2], opiece[3]
+                opiece = next(p for p in selvedge if p.name == oname)
                 best_x = ox - gap / 2
-                new_right = best_x + ogl + gap
+                new_right = best_x + opiece.grain_len + gap
                 ptop = oy
-                pbot = oy + ocw + (gap / 2
-                                    if oedge in ('top', 'bottom') else gap)
-                new_sky = []
-                for sy0, sy1, sx in c_skyline:
-                    if sy1 <= ptop or sy0 >= pbot:
-                        new_sky.append((sy0, sy1, sx))
+                pbot = oy + opiece.cross_w + (gap / 2
+                                              if opiece.edge in ('top', 'bottom')
+                                              else gap)
+                new_sky: list[SkylineSegment] = []
+                for seg in c_skyline:
+                    if seg.y_end <= ptop or seg.y_start >= pbot:
+                        new_sky.append(seg)
                     else:
-                        if sy0 < ptop:
-                            new_sky.append((sy0, ptop, sx))
-                        if sy1 > pbot:
-                            new_sky.append((pbot, sy1, sx))
-                new_sky.append((ptop, pbot, new_right))
-                c_skyline = sorted(new_sky, key=lambda s: s[0])
+                        if seg.y_start < ptop:
+                            new_sky.append(SkylineSegment(seg.y_start, ptop, seg.x_right))
+                        if seg.y_end > pbot:
+                            new_sky.append(SkylineSegment(pbot, seg.y_end, seg.x_right))
+                new_sky.append(SkylineSegment(ptop, pbot, new_right))
+                c_skyline = sorted(new_sky, key=lambda s: s.y_start)
 
             # Remaining selvedge pieces via skyline
             rem_sel = rem_tops + rem_bots
-            rem_sel_input = [(n, gl, cw, edge)
-                             for n, gl, cw, edge, _, _, _ in rem_sel]
+            rem_sel_input = [(p.name, p.grain_len, p.cross_w, p.edge)
+                             for p in rem_sel]
             if rem_sel_input:
                 rem_sel_pos, _, c_skyline = skyline_pack(
                     rem_sel_input, fabric_width, gap=gap,
@@ -1040,7 +1143,7 @@ def polygon_nest(pieces, fabric_width, gap=0.25, prefer_offset_nest=True):
                 rem_sel_pos = {}
 
             # Combine all selvedge positions for void filling
-            all_sel_pos_c = {}
+            all_sel_pos_c: Positions = {}
             all_sel_pos_c.update(offset_pos)
             all_sel_pos_c.update(rem_sel_pos)
 
@@ -1057,33 +1160,33 @@ def polygon_nest(pieces, fabric_width, gap=0.25, prefer_offset_nest=True):
             # Update skyline for void-filled pieces
             cv_skyline = list(c_skyline)
             for vn, (vx, vy) in c_void_placed.items():
-                vp = next(p for p in free if p[0] == vn)
-                v_right = vx + vp[1] + gap
-                vtop, vbot = vy, vy + vp[2] + gap
+                vp = next(p for p in free if p.name == vn)
+                v_right = vx + vp.grain_len + gap
+                vtop, vbot = vy, vy + vp.cross_w + gap
                 new_sky = []
-                for sy0, sy1, sx in cv_skyline:
-                    if sy1 <= vtop or sy0 >= vbot:
-                        new_sky.append((sy0, sy1, sx))
+                for seg in cv_skyline:
+                    if seg.y_end <= vtop or seg.y_start >= vbot:
+                        new_sky.append(seg)
                     else:
-                        if sy0 < vtop:
-                            new_sky.append((sy0, vtop, sx))
-                        if sy1 > vbot:
-                            new_sky.append((vbot, sy1, sx))
-                new_sky.append((vtop, vbot, v_right))
-                cv_skyline = sorted(new_sky, key=lambda s: s[0])
+                        if seg.y_start < vtop:
+                            new_sky.append(SkylineSegment(seg.y_start, vtop, seg.x_right))
+                        if seg.y_end > vbot:
+                            new_sky.append(SkylineSegment(vbot, seg.y_end, seg.x_right))
+                new_sky.append(SkylineSegment(vtop, vbot, v_right))
+                cv_skyline = sorted(new_sky, key=lambda s: s.y_start)
 
             # Skyline-pack remaining free pieces
-            c_rem_input = [(n, gl, cw, None)
-                           for n, gl, cw, _, _, _, _ in c_remaining]
+            c_rem_input = [(p.name, p.grain_len, p.cross_w, None)
+                           for p in c_remaining]
             if c_rem_input:
                 free_pos_c, c_total = skyline_pack(
                     c_rem_input, fabric_width, gap=gap,
                     initial_skyline=cv_skyline)
             else:
                 free_pos_c = {}
-                c_total = max(s[2] for s in cv_skyline)
+                c_total = max(s.x_right for s in cv_skyline)
 
-            c_positions = {}
+            c_positions: Positions = {}
             c_positions.update(offset_pos)
             c_positions.update(rem_sel_pos)
             c_positions.update(c_void_placed)
@@ -1094,39 +1197,46 @@ def polygon_nest(pieces, fabric_width, gap=0.25, prefer_offset_nest=True):
     # Offset nesting yields a cutter-friendly pairing of front/back panels;
     # keep it as the default preference, but allow shortest-length selection.
     candidates = [
-        (vf_total, 0, vf_positions, True, "void fill + skyline"),
-        (sky_length, 1, sky_positions, False, "baseline skyline"),
-        (sky_cont_total, 2, sky_cont_positions, False, "skyline continuation"),
+        LayoutCandidate(vf_total, 0, vf_positions, True, "void fill + skyline"),
+        LayoutCandidate(sky_length, 1, sky_positions, False, "baseline skyline"),
+        LayoutCandidate(sky_cont_total, 2, sky_cont_positions, False,
+                        "skyline continuation"),
     ]
     if c_result is not None:
         candidates.append(
-            (c_result[0], 3, c_result[1], False, "offset nest + skyline")
+            LayoutCandidate(c_result[0], 3, c_result[1], False,
+                            "offset nest + skyline")
         )
 
     preferred = "offset nest + skyline" if c_result is not None and prefer_offset_nest else None
-    best_total, _, best_pos, best_poly, best_label = _select_layout_candidate(
-        candidates, preferred_label=preferred
-    )
+    best = _select_layout_candidate(candidates, preferred_label=preferred)
 
     # Report
-    others = [(t, l) for t, _, _, _, l in candidates if l != best_label]
+    others = [(c.total_length, c.label) for c in candidates
+              if c.label != best.label]
     other_str = ", ".join(f"{l}={t:.1f}\"" for t, l in others)
-    print(f"  Best: {best_label} = {best_total:.1f}\" ({other_str})")
+    print(f"  Best: {best.label} = {best.total_length:.1f}\" ({other_str})")
 
-    return best_pos, best_total, best_poly
+    return best.positions, best.total_length, best.use_polygons
 
 
 # ---------------------------------------------------------------------------
 # Layout helper — expand piece SVGs and run nesting for a single fabric
 # ---------------------------------------------------------------------------
 
-def _layout_fabric(svg_paths, fabric_width, gap=0.25,
-                   prefer_panel_pairing=True):
+def _layout_fabric(
+    svg_paths: Sequence[tuple],
+    fabric_width: float,
+    gap: float = 0.25,
+    prefer_panel_pairing: bool = True,
+) -> tuple[list[LayoutPiece], Positions, float]:
     """Expand piece SVGs and pack them onto a fabric width.
 
     Parameters
     ----------
     svg_paths : list of (svg_file_path, cut_count, selvedge_edge, grain_axis)
+        Trailing fields are optional: selvedge_edge defaults to None,
+        grain_axis defaults to 'x'.
     fabric_width : float
     gap : float
     prefer_panel_pairing : bool
@@ -1135,20 +1245,17 @@ def _layout_fabric(svg_paths, fabric_width, gap=0.25,
 
     Returns
     -------
-    pieces : list of (name, grain_len, cross_w, svg_path, transform, edge)
+    pieces : list[LayoutPiece]
         Expanded piece list with transforms applied.
-    positions : dict  {name: (x, y)}
+    positions : Positions  {name: (x, y)}
     total_length : float
     """
     # --- Parse dimensions and build piece list ---
-    # Each entry: (unique_name, grain_len, cross_w, svg_path, transform, edge)
-    #   grain_len : extent along fabric length (layout x-axis)
-    #   cross_w   : extent across fabric (layout y-axis)
+    # Each LayoutPiece: (name, grain_len, cross_w, svg_path, transform, edge)
     #   transform : 'none' | 'cw' | 'flip_v'
     #               'cw'     = 90° CW rotation (for grain_axis='y' pieces)
     #               'flip_v' = vertical mirror (for second selvedge copy)
-    #   edge      : 'top' | 'bottom' | None
-    pieces = []
+    pieces: list[LayoutPiece] = []
     for entry in svg_paths:
         svg_path = entry[0]
         cut_count = entry[1]
@@ -1181,67 +1288,70 @@ def _layout_fabric(svg_paths, fabric_width, gap=0.25,
             # First copy: placed at the configured edge, no flip.
             # Second copy: flipped vertically for the opposite edge.
             if cut_count >= 2:
-                pieces.append((f'{name}_L', grain_len, cross_w,
-                               svg_path, base_transform, 'top'))
-                pieces.append((f'{name}_R', grain_len, cross_w,
-                               svg_path, 'flip_v', 'bottom'))
+                pieces.append(LayoutPiece(f'{name}_L', grain_len, cross_w,
+                                          svg_path, base_transform, 'top'))
+                pieces.append(LayoutPiece(f'{name}_R', grain_len, cross_w,
+                                          svg_path, 'flip_v', 'bottom'))
                 for i in range(2, cut_count):
-                    pieces.append((f'{name}_{i+1}', grain_len, cross_w,
-                                   svg_path, base_transform, None))
+                    pieces.append(LayoutPiece(f'{name}_{i+1}', grain_len,
+                                              cross_w, svg_path,
+                                              base_transform, None))
             else:
-                pieces.append((name, grain_len, cross_w,
-                               svg_path, base_transform, selvedge_edge))
+                pieces.append(LayoutPiece(name, grain_len, cross_w,
+                                          svg_path, base_transform,
+                                          selvedge_edge))
         else:
             if cut_count <= 1:
-                pieces.append((name, grain_len, cross_w,
-                               svg_path, base_transform, None))
+                pieces.append(LayoutPiece(name, grain_len, cross_w,
+                                          svg_path, base_transform, None))
             else:
                 # Mirror transform for the second copy (vertical flip):
                 #   grain_axis='x' (none) → flip_v
                 #   grain_axis='y' (ccw)  → ccw_flip_v (rotate then flip)
                 mirror_transform = 'flip_v' if base_transform == 'none' else 'ccw_flip_v'
-                pieces.append((f'{name}_1', grain_len, cross_w,
-                               svg_path, base_transform, None))
-                pieces.append((f'{name}_2', grain_len, cross_w,
-                               svg_path, mirror_transform, None))
+                pieces.append(LayoutPiece(f'{name}_1', grain_len, cross_w,
+                                          svg_path, base_transform, None))
+                pieces.append(LayoutPiece(f'{name}_2', grain_len, cross_w,
+                                          svg_path, mirror_transform, None))
                 for i in range(2, cut_count):
-                    pieces.append((f'{name}_{i+1}', grain_len, cross_w,
-                                   svg_path, base_transform, None))
+                    pieces.append(LayoutPiece(f'{name}_{i+1}', grain_len,
+                                              cross_w, svg_path,
+                                              base_transform, None))
 
     if not pieces:
         return [], {}, 0.0
 
     # --- Extract polygons and pack ---
-    pieces_with_polys = []
-    for name, grain_len, cross_w, svg_path, transform, edge in pieces:
-        poly, pad_x, pad_y = _extract_outline_polygon(svg_path)
-        svg_w, svg_h = parse_svg_dimensions(svg_path)
+    pieces_with_polys: list[Piece] = []
+    for lp in pieces:
+        poly, pad_x, pad_y = _extract_outline_polygon(lp.svg_path)
+        svg_w, svg_h = parse_svg_dimensions(lp.svg_path)
 
         # Transform padding to layout space (matching the polygon transform).
         # pad_x/pad_y are the polygon's offset from SVG origin in SVG coords.
         # After rotation, the offset within the layout box changes.
-        if transform == 'ccw':
+        if lp.transform == 'ccw':
             poly_w_orig = max(p[0] for p in poly) if poly else 0
             layout_pad_x = pad_y
             layout_pad_y = svg_w - pad_x - poly_w_orig
-        elif transform == 'cw':
+        elif lp.transform == 'cw':
             poly_h_orig = max(p[1] for p in poly) if poly else 0
             layout_pad_x = svg_h - pad_y - poly_h_orig
             layout_pad_y = pad_x
-        elif transform == 'flip_h':
+        elif lp.transform == 'flip_h':
             poly_w_orig = max(p[0] for p in poly) if poly else 0
             layout_pad_x = svg_w - pad_x - poly_w_orig
             layout_pad_y = pad_y
-        elif transform == 'ccw_flip_h':
+        elif lp.transform == 'ccw_flip_h':
             poly_w_orig = max(p[0] for p in poly) if poly else 0
             poly_h_orig = max(p[1] for p in poly) if poly else 0
             layout_pad_x = svg_h - pad_y - poly_h_orig
             layout_pad_y = svg_w - pad_x - poly_w_orig
-        elif transform == 'ccw_flip_v':
+        elif lp.transform == 'ccw_flip_v':
             # (x,y) → (y, x): pad maps as (pad_y, pad_x) → layout (pad_x, pad_y)
             layout_pad_x = pad_y
             layout_pad_y = pad_x
-        elif transform == 'flip_v':
+        elif lp.transform == 'flip_v':
             poly_h_orig = max(p[1] for p in poly) if poly else 0
             layout_pad_x = pad_x
             layout_pad_y = svg_h - pad_y - poly_h_orig
@@ -1249,22 +1359,23 @@ def _layout_fabric(svg_paths, fabric_width, gap=0.25,
             layout_pad_x = pad_x
             layout_pad_y = pad_y
 
-        poly = _transform_polygon(poly, transform, svg_w, svg_h)
+        poly = _transform_polygon(poly, lp.transform, svg_w, svg_h)
 
         # Debug: compare polygon extent vs SVG bounding box
         if poly:
             poly_w = max(p[0] for p in poly) - min(p[0] for p in poly)
             poly_h = max(p[1] for p in poly) - min(p[1] for p in poly)
-            waste_x = grain_len - poly_w
-            waste_y = cross_w - poly_h
+            waste_x = lp.grain_len - poly_w
+            waste_y = lp.cross_w - poly_h
             if waste_x > 0.5 or waste_y > 0.5:
-                print(f"    {name:20s}  SVG: {grain_len:5.1f}×{cross_w:5.1f}  "
+                print(f"    {lp.name:20s}  SVG: "
+                      f"{lp.grain_len:5.1f}×{lp.cross_w:5.1f}  "
                       f"poly: {poly_w:5.1f}×{poly_h:5.1f}  "
                       f"waste: {waste_x:+.1f}×{waste_y:+.1f}")
 
         pieces_with_polys.append(
-            (name, grain_len, cross_w, edge, poly,
-             layout_pad_x, layout_pad_y))
+            Piece(lp.name, lp.grain_len, lp.cross_w, lp.edge, poly,
+                  layout_pad_x, layout_pad_y))
 
     positions, total_length, _use_polygons = polygon_nest(
         pieces_with_polys, fabric_width, gap=gap,
@@ -1449,8 +1560,16 @@ def _embed_piece_svg(container, svg_path, x_pt, y_pt, gl_pt, cw_pt, transform):
         for child in piece_root:
             nested.append(child)
 
-def _render_strip(container, pieces, positions, total_length,
-                  fabric_width, units='inch', gap=0.25, selvedge=True):
+def _render_strip(
+    container: ET.Element,
+    pieces: list[LayoutPiece],
+    positions: Positions,
+    total_length: float,
+    fabric_width: float,
+    units: str = 'inch',
+    gap: float = 0.25,
+    selvedge: bool = True,
+) -> None:
     """Render a fabric strip (background, markers, rulers, pieces, yardage)
     into a parent SVG element.
 
@@ -1458,8 +1577,8 @@ def _render_strip(container, pieces, positions, total_length,
     ----------
     container : Element
         SVG element to append children to (``<g>`` layer or ``<svg>`` root).
-    pieces : list of (name, grain_len, cross_w, svg_path, transform, edge)
-    positions : dict  {name: (x, y)}
+    pieces : list[LayoutPiece]
+    positions : Positions  {name: (x, y)}
     total_length : float
     fabric_width : float
     units : str
@@ -1578,23 +1697,25 @@ def _render_strip(container, pieces, positions, total_length,
     cal_label.text = '5\u2009cm'
 
     # --- Embed each piece SVG ---
-    for name, grain_len, cross_w, svg_path, transform, edge in pieces:
-        x, y = positions[name]
-        _embed_piece_svg(container, svg_path,
+    for lp in pieces:
+        x, y = positions[lp.name]
+        _embed_piece_svg(container, lp.svg_path,
                          x * PTS_PER_INCH, y * PTS_PER_INCH,
-                         grain_len * PTS_PER_INCH, cross_w * PTS_PER_INCH,
-                         transform)
+                         lp.grain_len * PTS_PER_INCH, lp.cross_w * PTS_PER_INCH,
+                         lp.transform)
 
 
 # ---------------------------------------------------------------------------
 # Output writers — SVG (Inkscape layers) and PDF (multi-page)
 # ---------------------------------------------------------------------------
 
-def _write_svg(layouts, output_path, units, gap):
+def _write_svg(
+    layouts: list[Layout], output_path: str | Path, units: str, gap: float
+) -> None:
     """Write a single SVG with Inkscape layers (one per fabric)."""
     # Canvas = max dimensions across all fabrics
-    max_length = max(tl for _, _, _, tl in layouts)
-    max_width = max(g['fabric_width'] for g, _, _, _ in layouts)
+    max_length = max(lo.total_length for lo in layouts)
+    max_width = max(lo.group['fabric_width'] for lo in layouts)
     svg_w_pt = max_length * PTS_PER_INCH
     svg_h_pt = max_width * PTS_PER_INCH
 
@@ -1604,7 +1725,8 @@ def _write_svg(layouts, output_path, units, gap):
         'viewBox': f'0 0 {svg_w_pt:.2f} {svg_h_pt:.2f}',
     })
 
-    for i, (group, pieces, positions, total_length) in enumerate(layouts):
+    for i, lo in enumerate(layouts):
+        group = lo.group
         label = f"{group['label']} ({group['fabric_width']}\""
         if group['selvedge']:
             label += ' selvedge'
@@ -1618,7 +1740,7 @@ def _write_svg(layouts, output_path, units, gap):
             'style': f'display:{display}',
         })
 
-        _render_strip(layer, pieces, positions, total_length,
+        _render_strip(layer, lo.pieces, lo.positions, lo.total_length,
                       group['fabric_width'], units=units, gap=gap,
                       selvedge=group['selvedge'])
 
@@ -1627,7 +1749,9 @@ def _write_svg(layouts, output_path, units, gap):
     tree.write(str(output_path), xml_declaration=True, encoding='utf-8')
 
 
-def _write_pdf(layouts, output_path, units, gap):
+def _write_pdf(
+    layouts: list[Layout], output_path: Path, units: str, gap: float
+) -> None:
     """Write a multi-page PDF (one page per fabric) at 1:1 scale."""
     import io
 
@@ -1649,8 +1773,9 @@ def _write_pdf(layouts, output_path, units, gap):
 
     writer = PdfWriter()
 
-    for group, pieces, positions, total_length in layouts:
-        svg_w_pt = total_length * PTS_PER_INCH
+    for lo in layouts:
+        group = lo.group
+        svg_w_pt = lo.total_length * PTS_PER_INCH
         svg_h_pt = group['fabric_width'] * PTS_PER_INCH
 
         svg_root = ET.Element(_tag('svg'), {
@@ -1659,7 +1784,7 @@ def _write_pdf(layouts, output_path, units, gap):
             'viewBox': f'0 0 {svg_w_pt:.2f} {svg_h_pt:.2f}',
         })
 
-        _render_strip(svg_root, pieces, positions, total_length,
+        _render_strip(svg_root, lo.pieces, lo.positions, lo.total_length,
                       group['fabric_width'], units=units, gap=gap,
                       selvedge=group['selvedge'])
 
@@ -1711,7 +1836,9 @@ def _style_matches_cutline(style_str):
     return _style_has_stroke_color(style_str, CUTLINE['color'])
 
 
-def _write_dxf(layouts, output_path, units, gap):
+def _write_dxf(
+    layouts: list[Layout], output_path: Path, units: str, gap: float
+) -> None:
     """Write a multi-layer DXF (one layer per fabric) at 1:1 scale."""
     try:
         import ezdxf
@@ -1733,7 +1860,8 @@ def _write_dxf(layouts, output_path, units, gap):
     msp = doc.modelspace()
     colors = [1, 5, 2, 3, 4, 6]  # Red, Blue, Yellow, Green, Cyan, Magenta
 
-    for i, (group, pieces, positions, total_length) in enumerate(layouts):
+    for i, lo in enumerate(layouts):
+        group = lo.group
         layer_name = group['name'].upper()
         color = colors[i % len(colors)]
         if layer_name not in doc.layers:
@@ -1741,12 +1869,12 @@ def _write_dxf(layouts, output_path, units, gap):
 
         fabric_w_pt = group['fabric_width'] * PTS_PER_INCH
 
-        for name, grain_len, cross_w, svg_path, transform, edge in pieces:
-            x_in, y_in = positions[name]
+        for lp in lo.pieces:
+            x_in, y_in = lo.positions[lp.name]
             x_pt = x_in * PTS_PER_INCH
             y_pt = y_in * PTS_PER_INCH
 
-            tree = ET.parse(svg_path)
+            tree = ET.parse(lp.svg_path)
             root = tree.getroot()
 
             viewBox = root.get('viewBox')
@@ -1774,17 +1902,17 @@ def _write_dxf(layouts, output_path, units, gap):
 
                     dxf_verts = []
                     for px, py in verts:
-                        if transform == 'cw':
+                        if lp.transform == 'cw':
                             tx, ty = vh - py, px
-                        elif transform == 'ccw':
+                        elif lp.transform == 'ccw':
                             tx, ty = py, vw - px
-                        elif transform == 'flip_h':
+                        elif lp.transform == 'flip_h':
                             tx, ty = vw - px, py
-                        elif transform == 'ccw_flip_h':
+                        elif lp.transform == 'ccw_flip_h':
                             tx, ty = vh - py, vw - px
-                        elif transform == 'ccw_flip_v':
+                        elif lp.transform == 'ccw_flip_v':
                             tx, ty = py, px
-                        elif transform == 'flip_v':
+                        elif lp.transform == 'flip_v':
                             tx, ty = px, vh - py
                         else:
                             tx, ty = px, py
@@ -1817,23 +1945,29 @@ def _write_dxf(layouts, output_path, units, gap):
 # Public entry point
 # ---------------------------------------------------------------------------
 
-def generate_lay_plan(fabric_groups, output_path, units='inch', gap=0.25,
-                      fmt='svg', prefer_panel_pairing=True):
+def generate_lay_plan(
+    fabric_groups: list[dict],
+    output_path: str | Path,
+    units: str = 'inch',
+    gap: float = 0.25,
+    fmt: str = 'svg',
+    prefer_panel_pairing: bool = True,
+) -> None:
     """Generate a multi-fabric lay plan as SVG (with Inkscape layers) or PDF.
 
     Parameters
     ----------
-    fabric_groups : list of dict
+    fabric_groups : list[dict]
         Each dict has keys:
           name         — fabric identifier ('main', 'pocketing', …)
           label        — human-readable name ('Main Fabric', …)
           fabric_width — width in inches
           selvedge     — bool (True for selvedge markers)
           pieces       — list of (svg_path, cut_count, selvedge_edge, grain_axis)
-    output_path : str or Path
+    output_path : str | Path
     units : str  ('inch' or 'cm')
     gap : float  (spacing between pieces in inches)
-    fmt : str    ('svg' or 'pdf')
+    fmt : str    ('svg', 'pdf', or 'dxf')
     prefer_panel_pairing : bool
         If True (default), prefer matched front/back panel pairing when
         offset nesting is available.
@@ -1842,7 +1976,7 @@ def generate_lay_plan(fabric_groups, output_path, units='inch', gap=0.25,
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     # --- Layout phase: pack each fabric group ---
-    layouts = []  # (group, pieces, positions, total_length)
+    layouts: list[Layout] = []
     for group in fabric_groups:
         print(f"\n  Laying out {group['label']} ({group['fabric_width']}\" wide)...")
         pieces, positions, total_length = _layout_fabric(
@@ -1851,19 +1985,19 @@ def generate_lay_plan(fabric_groups, output_path, units='inch', gap=0.25,
         if not pieces:
             print(f"    (no pieces)")
             continue
-        layouts.append((group, pieces, positions, total_length))
+        layouts.append(Layout(group, pieces, positions, total_length))
 
     if not layouts:
         print("No pieces to lay out.")
         return
 
     # --- Summary per fabric ---
-    for group, pieces, positions, total_length in layouts:
-        yards = total_length / 36.0
-        metres = total_length * CM_PER_INCH / 100.0
-        print(f"  {group['label']}: {group['fabric_width']}\" wide × "
-              f"{total_length:.1f}\" long = {yards:.2f} yd ({metres:.2f} m), "
-              f"{len(pieces)} pieces")
+    for lo in layouts:
+        yards = lo.total_length / 36.0
+        metres = lo.total_length * CM_PER_INCH / 100.0
+        print(f"  {lo.group['label']}: {lo.group['fabric_width']}\" wide × "
+              f"{lo.total_length:.1f}\" long = {yards:.2f} yd ({metres:.2f} m), "
+              f"{len(lo.pieces)} pieces")
 
     # --- Write output ---
     if fmt == 'pdf':

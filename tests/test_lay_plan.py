@@ -5,6 +5,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 from garment_programs.lay_plan import (
+    LayoutCandidate,
     _counter_reflect_text_groups,
     _extract_outline_polygon,
     _parse_translate,
@@ -36,14 +37,14 @@ class LayPlanParserTests(unittest.TestCase):
 
     def test_select_layout_candidate_prefers_label(self):
         candidates = [
-            (100.0, 0, {}, False, "a"),
-            (80.0, 1, {}, False, "b"),
+            LayoutCandidate(100.0, 0, {}, False, "a"),
+            LayoutCandidate(80.0, 1, {}, False, "b"),
         ]
         chosen = _select_layout_candidate(candidates, preferred_label="a")
-        self.assertEqual(chosen[4], "a")
+        self.assertEqual(chosen.label, "a")
 
         chosen_shortest = _select_layout_candidate(candidates, preferred_label=None)
-        self.assertEqual(chosen_shortest[4], "b")
+        self.assertEqual(chosen_shortest.label, "b")
 
     def test_extract_outline_uses_sidecar_when_present(self):
         with tempfile.TemporaryDirectory() as tmpdir:

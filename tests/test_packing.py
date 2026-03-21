@@ -12,6 +12,7 @@ import numpy as np
 from numpy.testing import assert_allclose
 
 from garment_programs.lay_plan import (
+    Piece,
     _intersect_ranges,
     _polygon_y_range_at_x,
     _shoelace_area,
@@ -256,13 +257,13 @@ class TestPolygonNest:
         assert use_polygons is False
 
     def test_simple_rectangles_produce_valid_layout(self):
-        # 7-field tuples: (name, grain_len, cross_w, edge, polygon, pad_x, pad_y)
+        # Piece: (name, grain_len, cross_w, edge, polygon, pad_x, pad_y)
         pieces = [
-            ("a", 5.0, 4.0, None, _rect(5.0, 4.0), 0.0, 0.0),
-            ("b", 3.0, 6.0, None, _rect(3.0, 6.0), 0.0, 0.0),
-            ("c", 4.0, 5.0, None, _rect(4.0, 5.0), 0.0, 0.0),
+            Piece("a", 5.0, 4.0, None, _rect(5.0, 4.0), 0.0, 0.0),
+            Piece("b", 3.0, 6.0, None, _rect(3.0, 6.0), 0.0, 0.0),
+            Piece("c", 4.0, 5.0, None, _rect(4.0, 5.0), 0.0, 0.0),
         ]
-        sizes = {p[0]: (p[1], p[2]) for p in pieces}
+        sizes = {p.name: (p.grain_len, p.cross_w) for p in pieces}
         fabric_width = 30.0
         gap = 0.25
 
@@ -286,7 +287,7 @@ class TestPolygonNest:
             assert y + cw <= fabric_width + 1e-6
             assert x >= -1e-6
 
-        grain_lengths = [gl for _, gl, *_ in pieces]
+        grain_lengths = [p.grain_len for p in pieces]
         assert total >= max(grain_lengths)
         assert total <= sum(grain_lengths) + len(pieces) * gap + 1.0
 
@@ -294,8 +295,8 @@ class TestPolygonNest:
         # No free pieces → polygon_nest should early-return with the
         # baseline skyline result (use_polygons=False).
         pieces = [
-            ("front", 10.0, 8.0, "top", _rect(10.0, 8.0), 0.0, 0.0),
-            ("back", 10.0, 8.0, "bottom", _rect(10.0, 8.0), 0.0, 0.0),
+            Piece("front", 10.0, 8.0, "top", _rect(10.0, 8.0), 0.0, 0.0),
+            Piece("back", 10.0, 8.0, "bottom", _rect(10.0, 8.0), 0.0, 0.0),
         ]
         buf = io.StringIO()
         with redirect_stdout(buf):
