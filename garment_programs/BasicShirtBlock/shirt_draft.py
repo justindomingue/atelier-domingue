@@ -8,6 +8,33 @@ EASE_CONFIGS = {
     'loose':   {'Sd': 3.0, 'Bwl': 2.0, 'Bw': 3.0,  'Sw': 5.5, 'Cw': 2.0},
 }
 
+
+def _back_shoulder_line(
+    ver: dict[str, float], neck_w_pt: np.ndarray
+) -> tuple[np.ndarray, np.ndarray, float]:
+    """
+    Shared back-shoulder geometry used by both pieces.
+
+    The back shoulder seam runs from ``neck_w_pt`` through a slope guide
+    2 cm below N on the back-width line, extended 2 cm past that line.
+    The front transfers this seam's length onto its own shoulder.
+
+    Returns ``(shoulder_slope_guide, back_shoulder_pt, shoulder_length)``.
+    """
+    shoulder_slope_pt = np.array([ver['back_width_x'], -2.0])
+    dx = shoulder_slope_pt[0] - neck_w_pt[0]
+    dy = shoulder_slope_pt[1] - neck_w_pt[1]
+    slope = dy / dx if dx != 0 else 0.0
+
+    extension = 2.0
+    back_shoulder_x = ver['back_width_x'] - extension
+    back_shoulder_y = shoulder_slope_pt[1] + slope * (-extension)
+    back_shoulder_pt = np.array([back_shoulder_x, back_shoulder_y])
+
+    shoulder_length = float(np.linalg.norm(back_shoulder_pt - neck_w_pt))
+    return shoulder_slope_pt, back_shoulder_pt, shoulder_length
+
+
 def draft_shirt_block(m: dict[str, float], fit='slim', **_) -> dict:
     """
     Compute shared geometry for the basic shirt block.

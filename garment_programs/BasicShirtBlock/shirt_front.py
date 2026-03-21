@@ -3,7 +3,7 @@ import numpy as np
 
 from garment_programs.measurements import load_measurements
 from garment_programs.plot_utils import setup_figure, finalize_figure
-from .shirt_draft import draft_shirt_block
+from .shirt_draft import _back_shoulder_line, draft_shirt_block
 
 def draft_shirt_front(m: dict[str, float], fit='slim', step=4) -> dict:
     draft = draft_shirt_block(m, fit=fit, step=step)
@@ -32,17 +32,7 @@ def draft_shirt_front(m: dict[str, float], fit='slim', step=4) -> dict:
     # Shoulder line: from front_neck_w_pt through front_shoulder_slope_guide, with length
     # matched to the back shoulder seam ("Measure the back shoulder seam and transfer this
     # measurement to the new front shoulder seam").
-    # Re-derive the back shoulder endpoint to get its length.
-    shoulder_slope_pt_back = np.array([ver['back_width_x'], -2.0])
-    back_neck_w_x = -(mm['Nw'] + 1.0)
-    neck_w_pt_back = np.array([back_neck_w_x, 2.0])
-    dx = shoulder_slope_pt_back[0] - neck_w_pt_back[0]
-    dy = shoulder_slope_pt_back[1] - neck_w_pt_back[1]
-    slope_back = dy / dx if dx != 0 else 0
-    back_shoulder_x = ver['back_width_x'] - 2.0
-    back_shoulder_y = shoulder_slope_pt_back[1] + slope_back * (-2.0)
-    back_shoulder_pt_orig = np.array([back_shoulder_x, back_shoulder_y])
-    back_shoulder_len = np.linalg.norm(back_shoulder_pt_orig - neck_w_pt_back)
+    _, _, back_shoulder_len = _back_shoulder_line(ver, pts['neck_w_pt'])
 
     # Extend front shoulder line to match the back shoulder length.
     front_shoulder_dir = pts['front_shoulder_slope_guide'] - pts['front_neck_w_pt']
@@ -97,10 +87,6 @@ def draft_shirt_front(m: dict[str, float], fit='slim', step=4) -> dict:
         pts['sideseam_chest']
     )
     
-    # "Mark halfway point on front and back hemline and measure 2cm toward CF..."
-    front_hem_mid_x = (halfway_x + ver['cf_x']) / 2.0
-    pts['front_hem_scoop_start'] = np.array([front_hem_mid_x + 2.0, lvl['hem_y'] + 5.0])
-    
     # Taper sideseam at waist. CF is to the LEFT (more negative x) of the sideseam,
     # so subtracting moves the sideseam toward CF — narrowing the front panel.
     # This mirrors the back's +waist_taper (toward CB) so both panels slim symmetrically.
@@ -119,11 +105,17 @@ def draft_shirt_front(m: dict[str, float], fit='slim', step=4) -> dict:
         pts['sideseam_hem_scoop']
     )
 
-    # Front hem curve
-    pts['front_hem_curve'] = _bezier_quad(
+    # Front hem: a single smooth shirt-tail curve from the sideseam scoop down to
+    # the CF hem. Horizontal tangents at both ends — flat near the sideseam so the
+    # scoop stays level before dipping, and flat into CF so the hem meets the fold
+    # at a right angle (no kink when the front is mirrored across CF).
+    pts['cf_hem'] = np.array([ver['cf_x'], lvl['hem_y']])
+    hem_span = pts['sideseam_hem_scoop'][0] - ver['cf_x']
+    pts['front_hem_curve'] = _bezier_cubic(
         pts['sideseam_hem_scoop'],
-        np.array([pts['front_hem_scoop_start'][0], pts['sideseam_hem_scoop'][1]]),
-        pts['front_hem_scoop_start']
+        pts['sideseam_hem_scoop'] + np.array([-hem_span * 0.4, 0.0]),
+        pts['cf_hem'] + np.array([hem_span * 0.4, 0.0]),
+        pts['cf_hem'],
     )
 
     draft['curves'] = {
@@ -157,10 +149,8 @@ def plot_shirt_front(draft, output_path='Logs/shirt_front.svg', debug=False, uni
 
     # Draw straight lines
     ax.plot([ver['cf_x'], ver['cf_x']], [lvl['hem_y'], pts['front_neck_depth_pt'][1]], **OUTLINE)
-    ax.plot([pts['shifted_front_neck_w_pt'][0], pts['shifted_front_shoulder_pt'][0]], 
+    ax.plot([pts['shifted_front_neck_w_pt'][0], pts['shifted_front_shoulder_pt'][0]],
             [pts['shifted_front_neck_w_pt'][1], pts['shifted_front_shoulder_pt'][1]], **OUTLINE)
-    ax.plot([pts['front_hem_scoop_start'][0], ver['cf_x']], 
-            [pts['front_hem_scoop_start'][1], lvl['hem_y']], **OUTLINE)
 
     if debug:
         REF = dict(color='gray', linewidth=0.8, linestyle='--', alpha=0.4)

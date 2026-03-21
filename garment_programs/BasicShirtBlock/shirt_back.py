@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 
 from garment_programs.measurements import load_measurements
 from garment_programs.plot_utils import setup_figure, finalize_figure
-from .shirt_draft import draft_shirt_block
+from .shirt_draft import _back_shoulder_line, draft_shirt_block
 
 def draft_shirt_back(m: dict[str, float], fit='slim') -> dict:
     draft = draft_shirt_block(m, fit=fit)
@@ -28,20 +28,11 @@ def draft_shirt_back(m: dict[str, float], fit='slim') -> dict:
     sd_quarter = mm['Sd'] / 4
     pts['back_pitch'] = np.array([ver['back_width_x'] - 2.0, lvl['chest_y'] + sd_quarter])
 
-    # Shoulder slope guide: 2 cm down from N's level on the back-width line.
-    shoulder_slope_pt = np.array([ver['back_width_x'], -2.0])
+    # Shoulder slope guide and endpoint: shared with the front (which transfers
+    # this seam's length onto its own shoulder).
+    shoulder_slope_pt, back_shoulder_pt, _ = _back_shoulder_line(ver, pts['neck_w_pt'])
     pts['shoulder_slope_guide'] = shoulder_slope_pt
-
-    # Shoulder line runs from neck_w_pt through the slope guide, extended 2 cm
-    # past the back-width line.
-    shoulder_extension_x = 2.0
-    dx = shoulder_slope_pt[0] - pts['neck_w_pt'][0]
-    dy = shoulder_slope_pt[1] - pts['neck_w_pt'][1]
-    slope = dy / dx if dx != 0 else 0
-
-    back_shoulder_x = ver['back_width_x'] - shoulder_extension_x
-    back_shoulder_y = shoulder_slope_pt[1] + slope * (-shoulder_extension_x)
-    pts['back_shoulder_pt'] = np.array([back_shoulder_x, back_shoulder_y])
+    pts['back_shoulder_pt'] = back_shoulder_pt
 
     # ==========================================================
     # Step 3: Shift shoulder seam forward
