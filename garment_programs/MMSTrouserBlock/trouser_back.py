@@ -778,7 +778,7 @@ def plot_trouser_back(front, back, output_path='Logs/trouser_back.svg',
         (bcrv['side_lower'],                                               sa['side']),
         (bcrv['side_upper'],                                               sa['side']),
     ]
-    draw_seam_allowance(ax, sa_edges, scale=1.0)
+    cut_outline = draw_seam_allowance(ax, sa_edges, scale=1.0)
 
     if debug:
         # Verification line: perpendicular from CB to sideseam/hipline
@@ -807,15 +807,18 @@ def plot_trouser_back(front, back, output_path='Logs/trouser_back.svg',
         _annotate_len(ax, np.array([bpts['back_hem_side'], bpts['back_hem_inseam']]),
                       offset=(0, -8))
 
-    _finish_back_plot(fig, ax, back, output_path, step, debug, units=units)
+    return _finish_back_plot(fig, ax, back, output_path, step, debug, units=units,
+                             outline_pts=cut_outline)
 
 
-def _finish_back_plot(fig, ax, back, output_path, step, debug=False, units='cm'):
+def _finish_back_plot(fig, ax, back, output_path, step, debug=False, units='cm',
+                      outline_pts=None):
     """Common plot finalization."""
     if not debug:
         ax.axis('off')
     from garment_programs.plot_utils import save_pattern
-    save_pattern(fig, ax, output_path, units=units, calibration=not debug)
+    return save_pattern(fig, ax, output_path, units=units, calibration=not debug,
+                        outline_pts=outline_pts)
 
 
 # -- Entry point for generic runner ------------------------------------------
@@ -825,4 +828,7 @@ def run(measurements_path, output_path, debug=False, units='cm', num_pleats=1):
     m = load_measurements(measurements_path)
     front = draft_trouser_front(m, num_pleats=num_pleats)
     back = draft_trouser_back(m, front, num_pleats=num_pleats)
-    plot_trouser_back(front, back, output_path, debug=debug, units=units, step=6)
+    outline = plot_trouser_back(front, back, output_path, debug=debug, units=units,
+                                step=6)
+    if outline:
+        return {'layout_outline': outline}

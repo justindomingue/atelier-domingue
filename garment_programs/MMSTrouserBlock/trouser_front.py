@@ -542,7 +542,7 @@ def plot_trouser_front(draft, output_path='Logs/trouser_front.svg',
         (np.array([pts['mid_side'], pts['hip_side']]),            sa['side']),
         (crv['hip'],                                              sa['side']),
     ]
-    draw_seam_allowance(ax, sa_edges, scale=1.0)
+    cut_outline = draw_seam_allowance(ax, sa_edges, scale=1.0)
 
     # ── Debug: outline dimension annotations ──────────────────────
     if debug:
@@ -557,13 +557,16 @@ def plot_trouser_front(draft, output_path='Logs/trouser_front.svg',
         _annotate_len(ax, np.array([pts['knee_side'], pts['hem_side_top']]), offset=(-10, 0))
         _annotate_len(ax, np.array([pts['hem_side'], pts['hem_inseam']]), offset=(0, -8))
 
-    _finish_plot(fig, ax, draft, output_path, step, debug, units=units)
+    return _finish_plot(fig, ax, draft, output_path, step, debug, units=units,
+                        outline_pts=cut_outline)
 
 
-def _finish_plot(fig, ax, draft, output_path, step, debug=False, units='cm'):
+def _finish_plot(fig, ax, draft, output_path, step, debug=False, units='cm',
+                 outline_pts=None):
     """Common plot finalization."""
     from garment_programs.plot_utils import finalize_figure
-    finalize_figure(ax, fig, True, output_path, units=units, debug=debug)
+    return finalize_figure(ax, fig, True, output_path, units=units, debug=debug,
+                           outline_pts=outline_pts)
 
 
 # -- Entry point for generic runner ------------------------------------------
@@ -572,4 +575,7 @@ def run(measurements_path, output_path, debug=False, units='cm', num_pleats=1):
     """Uniform interface called by the generic runner."""
     m = load_measurements(measurements_path)
     draft = draft_trouser_front(m, num_pleats=num_pleats)
-    plot_trouser_front(draft, output_path, debug=debug, units=units, step=5)
+    outline = plot_trouser_front(draft, output_path, debug=debug, units=units,
+                                 step=5)
+    if outline:
+        return {'layout_outline': outline}

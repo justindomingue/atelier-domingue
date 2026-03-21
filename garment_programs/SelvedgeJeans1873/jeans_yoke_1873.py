@@ -226,7 +226,8 @@ def plot_jeans_yoke(front, back, yoke, output_path='Logs/jeans_yoke.svg',
         (seat_seg[::-1],                                         SA_SEAT_YOKE, _sl['seat']),   # seat seam segment (reversed)
         (np.array([bpts['back_waist'], fpts['1']]),              SA_WAIST_YOKE, _sl['waist']),  # waist
     ]
-    draw_seam_allowance(ax, sa_edges, scale=s, label_sas=not debug, units=units)
+    cut_outline = draw_seam_allowance(ax, sa_edges, scale=s, label_sas=not debug,
+                                      units=units)
 
     # -- Notch on yoke seam (midpoint, 1/2" from seamline) --
     yoke_seam = np.array([ypts['yoke_side'], ypts['yoke_seat']])
@@ -250,8 +251,9 @@ def plot_jeans_yoke(front, back, yoke, output_path='Logs/jeans_yoke.svg',
                          yoke['metadata'].get('cut_count'),
                          metadata=yoke.get('metadata'))
 
-    finalize_figure(ax, fig, standalone, output_path, units=units, debug=debug,
-                    pdf_pages=pdf_pages)
+    return finalize_figure(ax, fig, standalone, output_path, units=units,
+                           debug=debug, pdf_pages=pdf_pages,
+                           outline_pts=cut_outline)
 
 
 # -- Entry point for generic runner ------------------------------------------
@@ -263,5 +265,7 @@ def run(measurements_path, output_path, debug=False, units='cm', pdf_pages=None,
     front = cache_draft(context, 'selvedge.front', lambda: draft_jeans_front(m))
     back = cache_draft(context, 'selvedge.back:0.0000', lambda: draft_jeans_back(m, front))
     yoke = cache_draft(context, 'selvedge.yoke_1873:0.0000', lambda: draft_jeans_yoke(m, front, back))
-    plot_jeans_yoke(front, back, yoke, output_path, debug=debug, units=units,
-                    pdf_pages=pdf_pages)
+    outline = plot_jeans_yoke(front, back, yoke, output_path, debug=debug,
+                              units=units, pdf_pages=pdf_pages)
+    if outline:
+        return {'layout_outline': outline}

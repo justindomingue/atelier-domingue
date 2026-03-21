@@ -175,7 +175,8 @@ def plot_jeans_back_pocket(pocket, output_path='Logs/jeans_back_pocket.svg',
         (np.array([pts['f_ref_r'], pts['f_tr']]),      SA['side'], SL['side']),
         (np.array([pts['f_tr'], pts['f_tl']]),         SA['top'], SL['top']),
     ]
-    draw_seam_allowance(ax, sa_edges, scale=s, label_sas=not debug, units=units)
+    cut_outline = draw_seam_allowance(ax, sa_edges, scale=s, label_sas=not debug,
+                                      units=units)
 
     # Grain line arrow (double-headed, now vertical in local frame)
     from garment_programs.plot_utils import draw_grainline, draw_piece_label
@@ -200,8 +201,9 @@ def plot_jeans_back_pocket(pocket, output_path='Logs/jeans_back_pocket.svg',
         _annotate_segment(ax, pts['f_tr'], pts['f_ref_r'], offset=(10, 0))
         _annotate_segment(ax, pts['f_ref_r'], pts['f_bottom'], offset=(10, 0))
 
-    finalize_figure(ax, fig, standalone, output_path, units=units, debug=debug,
-                    pdf_pages=pdf_pages)
+    return finalize_figure(ax, fig, standalone, output_path, units=units,
+                           debug=debug, pdf_pages=pdf_pages,
+                           outline_pts=cut_outline)
 
 
 # -- Entry point for generic runner ------------------------------------------
@@ -217,5 +219,7 @@ def run(measurements_path, output_path, debug=False, units='cm', pdf_pages=None,
         'selvedge.back_pocket:0.0000',
         lambda: draft_jeans_back_pocket(m, front, back, yoke),
     )
-    plot_jeans_back_pocket(pocket, output_path, debug=debug, units=units,
-                           pdf_pages=pdf_pages)
+    outline = plot_jeans_back_pocket(pocket, output_path, debug=debug, units=units,
+                                     pdf_pages=pdf_pages)
+    if outline:
+        return {'layout_outline': outline}

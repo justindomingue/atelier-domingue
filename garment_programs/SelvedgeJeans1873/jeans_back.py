@@ -418,7 +418,8 @@ def plot_jeans_back(front, back, output_path='Logs/jeans_back.svg', debug=False,
                 (np.array([bpts['yoke_seat'], bpts['yoke_side']]),   SA_YOKE, SL['yoke']),
             ]
 
-    draw_seam_allowance(ax, sa_edges, scale=s, label_sas=not debug, units=units)
+    cut_outline = draw_seam_allowance(ax, sa_edges, scale=s, label_sas=not debug,
+                                      units=units)
 
     # -- Yoke seam notch (matches yoke piece notch placement) --
     seam_start = g_ext if gathering is not None else bpts['yoke_seat']
@@ -527,8 +528,9 @@ def plot_jeans_back(front, back, output_path='Logs/jeans_back.svg', debug=False,
                          back['metadata'].get('cut_count'),
                          metadata=back.get('metadata'))
 
-    finalize_figure(ax, fig, standalone, output_path, units=units, debug=debug,
-                    pdf_pages=pdf_pages)
+    return finalize_figure(ax, fig, standalone, output_path, units=units,
+                           debug=debug, pdf_pages=pdf_pages,
+                           outline_pts=cut_outline)
 
 
 # -- Entry point for generic runner ------------------------------------------
@@ -557,5 +559,7 @@ def run(measurements_path, output_path, debug=False, units='cm', pdf_pages=None,
         f'selvedge.back_pocket:{gathering_amount:.4f}',
         lambda: draft_jeans_back_pocket(m, front, back, yoke),
     )
-    plot_jeans_back(front, back, output_path, debug=debug, units=units,
-                    pdf_pages=pdf_pages, pocket=pocket)
+    outline = plot_jeans_back(front, back, output_path, debug=debug, units=units,
+                              pdf_pages=pdf_pages, pocket=pocket)
+    if outline:
+        return {'layout_outline': outline}

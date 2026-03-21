@@ -199,7 +199,8 @@ def plot_jeans_front_facing(piece, output_path='Logs/jeans_front_facing.svg',
         (opening[::-1], meta['sa_opening'], _sl['opening']),     # 1¼" pocket opening
         (rise[::-1],    meta['sa_waist'], _sl['waist']),       # 3/8" waist
     ]
-    draw_seam_allowance(ax, sa_edges, scale=s, label_sas=not debug, units=units)
+    cut_outline = draw_seam_allowance(ax, sa_edges, scale=s, label_sas=not debug,
+                                      units=units)
 
     # --- Notches: matching marks for pocket assembly ---
     NOTCH_OFFSET = 0.375 * INCH   # 3/8" away from pocket mouth
@@ -234,8 +235,9 @@ def plot_jeans_front_facing(piece, output_path='Logs/jeans_front_facing.svg',
         _annotate_curve(ax, curves['opening'], offset=(8, 0))
         _annotate_curve(ax, curves['hip'], offset=(0, 8))
 
-    finalize_figure(ax, fig, standalone, output_path, units=units, debug=debug,
-                    pdf_pages=pdf_pages)
+    return finalize_figure(ax, fig, standalone, output_path, units=units,
+                           debug=debug, pdf_pages=pdf_pages,
+                           outline_pts=cut_outline)
 
 
 # -- Entry point for generic runner ------------------------------------------
@@ -248,5 +250,7 @@ def run(measurements_path, output_path, debug=False, units='cm', pdf_pages=None,
         'selvedge.front_facing',
         lambda: draft_jeans_front_facing(m),
     )
-    plot_jeans_front_facing(piece, output_path, debug=debug, units=units,
-                            pdf_pages=pdf_pages)
+    outline = plot_jeans_front_facing(piece, output_path, debug=debug, units=units,
+                                      pdf_pages=pdf_pages)
+    if outline:
+        return {'layout_outline': outline}

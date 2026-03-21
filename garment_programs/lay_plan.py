@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import re
+import warnings
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import NamedTuple, Sequence
@@ -520,6 +521,13 @@ def _extract_outline_polygon(svg_path: str | Path) -> tuple[Polygon, float, floa
         except (json.JSONDecodeError, ValueError, KeyError, OSError):
             # Invalid sidecar should not break layout generation.
             pass
+
+    warnings.warn(
+        f"No .outline.json sidecar for {Path(svg_path).name}; falling back to "
+        "SVG XML parsing (fragile — the piece module should emit "
+        "layout_outline from run()).",
+        stacklevel=2,
+    )
 
     tree = ET.parse(svg_path)
     root = tree.getroot()

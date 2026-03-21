@@ -136,9 +136,9 @@ def plot_shirt_front(draft, output_path='Logs/shirt_front.svg', debug=False, uni
     crv = draft['curves']
 
     fig, ax, standalone = setup_figure(figsize=(10, 12))
-    
+
     OUTLINE = dict(color='black', linewidth=1.5, zorder=4)
-    
+
     # Draw curves
     ax.plot(crv['front_neck'][:, 0], crv['front_neck'][:, 1], **OUTLINE)
     ax.plot(crv['front_armhole_upper'][:, 0], crv['front_armhole_upper'][:, 1], **OUTLINE)
@@ -152,19 +152,36 @@ def plot_shirt_front(draft, output_path='Logs/shirt_front.svg', debug=False, uni
     ax.plot([pts['shifted_front_neck_w_pt'][0], pts['shifted_front_shoulder_pt'][0]],
             [pts['shifted_front_neck_w_pt'][1], pts['shifted_front_shoulder_pt'][1]], **OUTLINE)
 
+    # Continuous outer boundary for lay-plan polygon nesting
+    # (seamline — no SA defined for this block yet).
+    cf_hem = np.array([ver['cf_x'], lvl['hem_y']])
+    cut_outline = np.vstack([
+        crv['front_neck'],
+        np.array([cf_hem]),
+        crv['hem_scoop'][::-1],
+        crv['sideseam_lower'][::-1],
+        crv['sideseam_upper'][::-1],
+        crv['front_armhole_lower'][::-1],
+        crv['front_armhole_upper'][::-1],
+        np.array([pts['shifted_front_neck_w_pt']]),
+    ])
+
     if debug:
         REF = dict(color='gray', linewidth=0.8, linestyle='--', alpha=0.4)
         ax.plot([ver['cf_x'], ver['cf_x']], [lvl['hem_y'], lvl['shoulder_y']], **REF)
         ax.plot([ver['sideseam_x'], ver['sideseam_x']], [lvl['hem_y'], lvl['chest_y']], **REF)
         ax.plot([ver['front_pitch_x'], ver['front_pitch_x']], [lvl['waist_y'], lvl['shoulder_y']], **REF)
-        
+
         ax.plot([ver['cf_x'], ver['sideseam_x']], [lvl['chest_y'], lvl['chest_y']], **REF)
         ax.plot([ver['cf_x'], ver['sideseam_x']], [lvl['waist_y'], lvl['waist_y']], **REF)
         ax.plot([ver['cf_x'], ver['sideseam_x']], [lvl['hem_y'], lvl['hem_y']], **REF)
 
-    finalize_figure(ax, fig, standalone, output_path, units=units, debug=debug)
+    return finalize_figure(ax, fig, standalone, output_path, units=units,
+                           debug=debug, outline_pts=cut_outline)
 
 def run(measurements_path, output_path, debug=False, units='cm', context=None, **kwargs):
     m = load_measurements(measurements_path)
     draft = draft_shirt_front(m, fit='slim', step=4)
-    plot_shirt_front(draft, output_path, debug=debug, units=units, step=4)
+    outline = plot_shirt_front(draft, output_path, debug=debug, units=units, step=4)
+    if outline:
+        return {'layout_outline': outline}

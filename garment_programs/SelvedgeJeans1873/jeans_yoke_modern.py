@@ -291,7 +291,8 @@ def plot_jeans_yoke_modern(front, back, yoke,
         (np.array([ypts['yoke_seat_rot'], ypts['back_waist_rot']]),       _sa['seat'], _sl['seat']),
         (ycurves['waist_line'][::-1],                                      _sa['waist'], _sl['waist']),
     ]
-    draw_seam_allowance(ax, sa_edges, scale=s, label_sas=not debug, units=units)
+    cut_outline = draw_seam_allowance(ax, sa_edges, scale=s, label_sas=not debug,
+                                      units=units)
 
     # -- Grain line --
     ax.annotate('', xy=ypts['grain_top'], xytext=ypts['grain_bottom'],
@@ -371,8 +372,9 @@ def plot_jeans_yoke_modern(front, back, yoke,
                          yoke['metadata'].get('cut_count'),
                          metadata=yoke.get('metadata'))
 
-    finalize_figure(ax, fig, standalone, output_path, units=units, debug=debug,
-                    pdf_pages=pdf_pages)
+    return finalize_figure(ax, fig, standalone, output_path, units=units,
+                           debug=debug, pdf_pages=pdf_pages,
+                           outline_pts=cut_outline)
 
 
 # -- Entry point for generic runner ------------------------------------------
@@ -388,5 +390,7 @@ def run(measurements_path, output_path, debug=False, units='cm', pdf_pages=None,
         'selvedge.yoke_modern',
         lambda: draft_jeans_yoke_modern(m, front, back),
     )
-    plot_jeans_yoke_modern(front, back, yoke, output_path, debug=debug, units=units,
-                           pdf_pages=pdf_pages)
+    outline = plot_jeans_yoke_modern(front, back, yoke, output_path, debug=debug,
+                                     units=units, pdf_pages=pdf_pages)
+    if outline:
+        return {'layout_outline': outline}

@@ -98,7 +98,7 @@ def draw_calibration_square(ax, size_cm=5.0):
 
 
 def save_pattern(fig, ax, output_path, units='cm', pad_cm=1.0, calibration=False,
-                 pdf_pages=None):
+                 pdf_pages=None, outline_pts=None):
     """Save a pattern figure at 1:1 real-world scale.
 
     Sets figure dimensions so that 1 data-unit maps to 1 physical unit
@@ -106,6 +106,11 @@ def save_pattern(fig, ax, output_path, units='cm', pad_cm=1.0, calibration=False
 
     If calibration=True, draws a 5 cm calibration square in the corner.
     If pdf_pages is provided, also adds the figure to the multi-page PDF.
+
+    If *outline_pts* is provided (N×2 array-like in display units), a
+    ``layout_outline`` dict is returned mapping the cut boundary into
+    SVG-canvas inches so the lay-plan runner can write a sidecar and skip
+    the fragile SVG-XML re-parse.
     """
     ax.set_aspect('equal')
     ax.margins(0)
@@ -137,12 +142,31 @@ def save_pattern(fig, ax, output_path, units='cm', pad_cm=1.0, calibration=False
 
     fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
 
+    layout_outline = None
+    if outline_pts is not None:
+        outline = np.asarray(outline_pts, dtype=float)
+        if outline.ndim == 2 and outline.shape[0] >= 3 and outline.shape[1] == 2:
+            # Map display coords → SVG canvas inches.  Matplotlib renders with
+            # y flipped (SVG origin = top-left), so SVG_y = (ymax − disp_y).
+            svg_x = (outline[:, 0] - xmin) / scale
+            svg_y = (ymax - outline[:, 1]) / scale
+            min_sx = float(svg_x.min())
+            min_sy = float(svg_y.min())
+            poly = [[float(x - min_sx), float(y - min_sy)]
+                    for x, y in zip(svg_x, svg_y)]
+            layout_outline = {
+                'polygon': poly,
+                'pad_x': min_sx,
+                'pad_y': min_sy,
+            }
+
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
     plt.savefig(output_path, dpi=150)
     if pdf_pages is not None:
         pdf_pages.savefig(fig)
     plt.close(fig)
     print(f"Saved visualization to {output_path}")
+    return layout_outline
 
 
 # -- Notch utility -----------------------------------------------------------
@@ -521,6 +545,8 @@ def draw_seam_allowance(ax, edges, scale=1.0, label_sas=False, units=None,
             ax, norm_edges, scale=scale, units=units, fontsize=label_fontsize
         )
 
+    return sa_path
+
 
 # -- Plot boilerplate helpers ------------------------------------------------
 
@@ -546,12 +572,15 @@ def setup_figure(ax=None, figsize=(16, 10)):
 
 
 def finalize_figure(ax, fig, standalone, output_path, units='cm', debug=False,
-                    pdf_pages=None):
+                    pdf_pages=None, outline_pts=None):
     """Clean up axes and save the figure if standalone.
 
     debug=True:  show xlabel, ylabel, and grid.
     debug=False: turn off axes.
     Always saves via save_pattern when standalone.
+
+    Returns the ``layout_outline`` dict from :func:`save_pattern` when
+    *outline_pts* was supplied, otherwise ``None``.
     """
     if not debug:
         ax.axis('off')
@@ -562,5 +591,7 @@ def finalize_figure(ax, fig, standalone, output_path, units='cm', debug=False,
         ax.grid(True, alpha=0.2)
 
     if standalone:
-        save_pattern(fig, ax, output_path, units=units, calibration=not debug,
-                     pdf_pages=pdf_pages)
+        return save_pattern(fig, ax, output_path, units=units,
+                            calibration=not debug, pdf_pages=pdf_pages,
+                            outline_pts=outline_pts)
+    return None

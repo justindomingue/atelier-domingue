@@ -97,6 +97,7 @@ def plot_jeans_fly_one_piece(fly, output_path='Logs/jeans_fly_one_piece.svg',
     xs = [0, width_s, width_s, 0, 0]
     ys = [0, 0, length_s, length_s, 0]
     ax.plot(xs, ys, **OUTLINE)
+    cut_outline = np.column_stack([xs, ys])
 
     # Fold line
     ax.plot([con['fold_x'], con['fold_x']], [0, length_s],
@@ -144,8 +145,9 @@ def plot_jeans_fly_one_piece(fly, output_path='Logs/jeans_fly_one_piece.svg',
         _annotate_segment(ax, pts['bl'], pts['br'], offset=(0, -10))
         _annotate_segment(ax, pts['br'], pts['tr'], offset=(10, 0))
 
-    finalize_figure(ax, fig, standalone, output_path, units=units, debug=debug,
-                    pdf_pages=pdf_pages)
+    return finalize_figure(ax, fig, standalone, output_path, units=units,
+                           debug=debug, pdf_pages=pdf_pages,
+                           outline_pts=cut_outline)
 
 
 # -- Entry point for generic runner ------------------------------------------
@@ -159,5 +161,7 @@ def run(measurements_path, output_path, debug=False, units='cm', pdf_pages=None,
         'selvedge.fly_one_piece',
         lambda: draft_jeans_fly_one_piece(m, front),
     )
-    plot_jeans_fly_one_piece(fly, output_path, debug=debug, units=units,
-                             pdf_pages=pdf_pages)
+    outline = plot_jeans_fly_one_piece(fly, output_path, debug=debug, units=units,
+                                       pdf_pages=pdf_pages)
+    if outline:
+        return {'layout_outline': outline}

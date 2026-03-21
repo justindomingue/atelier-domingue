@@ -242,6 +242,7 @@ def plot_shirt_back(draft, output_path='Logs/shirt_back.svg', debug=False, units
         ax.annotate('', xy=pts['shifted_neck_w_pt'], xytext=pts['neck_w_pt'], arrowprops=dict(arrowstyle='->', lw=0.5))
         ax.annotate('', xy=pts['shifted_back_shoulder_pt'], xytext=pts['back_shoulder_pt'], arrowprops=dict(arrowstyle='->', lw=0.5))
 
+    cut_outline = None
     if step >= 4:
         crv = draft['curves']
         # Draw curves
@@ -250,25 +251,43 @@ def plot_shirt_back(draft, output_path='Logs/shirt_back.svg', debug=False, units
         ax.plot(crv['back_armhole_yoke'][:, 0], crv['back_armhole_yoke'][:, 1], **OUTLINE)
         ax.plot(crv['back_armhole_main'][:, 0], crv['back_armhole_main'][:, 1], **OUTLINE)
         ax.plot(crv['back_armhole_bottom'][:, 0], crv['back_armhole_bottom'][:, 1], **OUTLINE)
-        
+
         ax.plot(crv['sideseam_upper'][:, 0], crv['sideseam_upper'][:, 1], **OUTLINE)
         ax.plot(crv['sideseam_lower'][:, 0], crv['sideseam_lower'][:, 1], **OUTLINE)
         ax.plot(crv['hem_scoop'][:, 0], crv['hem_scoop'][:, 1], **OUTLINE)
 
         # Straight outlines
-        ax.plot([pts['back_hem_scoop_start'][0], ver['cb_x']], 
+        ax.plot([pts['back_hem_scoop_start'][0], ver['cb_x']],
                 [pts['back_hem_scoop_start'][1], lvl['hem_y']], **OUTLINE)
-        ax.plot([ver['cb_x'], ver['cb_x']], 
+        ax.plot([ver['cb_x'], ver['cb_x']],
                 [lvl['hem_y'], pts['N'][1]], **OUTLINE)
-        ax.plot([pts['shifted_neck_w_pt'][0], pts['shifted_back_shoulder_pt'][0]], 
+        ax.plot([pts['shifted_neck_w_pt'][0], pts['shifted_back_shoulder_pt'][0]],
                 [pts['shifted_neck_w_pt'][1], pts['shifted_back_shoulder_pt'][1]], **OUTLINE)
-        ax.plot([pts['yoke_cb'][0], pts['yoke_armhole_intake'][0]], 
+        ax.plot([pts['yoke_cb'][0], pts['yoke_armhole_intake'][0]],
                 [pts['yoke_cb'][1], pts['yoke_armhole_intake'][1]], **OUTLINE)
 
-    finalize_figure(ax, fig, standalone, output_path, units=units, debug=debug)
+        # Continuous outer boundary for lay-plan polygon nesting
+        # (seamline — no SA defined for this block yet).
+        cb_hem = np.array([ver['cb_x'], lvl['hem_y']])
+        cut_outline = np.vstack([
+            crv['back_neck'],
+            np.array([pts['shifted_back_shoulder_pt']]),
+            crv['back_armhole_yoke'],
+            crv['back_armhole_main'],
+            crv['back_armhole_bottom'],
+            crv['sideseam_upper'],
+            crv['sideseam_lower'],
+            crv['hem_scoop'],
+            np.array([cb_hem, pts['N']]),
+        ])
+
+    return finalize_figure(ax, fig, standalone, output_path, units=units,
+                           debug=debug, outline_pts=cut_outline)
 
 
 def run(measurements_path, output_path, debug=False, units='cm', context=None, **kwargs):
     m = load_measurements(measurements_path)
     draft = draft_shirt_back(m, fit='slim')
-    plot_shirt_back(draft, output_path, debug=debug, units=units, step=4)
+    outline = plot_shirt_back(draft, output_path, debug=debug, units=units, step=4)
+    if outline:
+        return {'layout_outline': outline}

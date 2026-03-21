@@ -399,7 +399,8 @@ def plot_jeans_front(draft, output_path='Logs/jeans_front.svg', debug=False, uni
             (np.array([pts['8'], pts["7'"]]),                        SA_FLY, SL['fly']),
             (curves['rise'][::-1],                                   SA_WAIST, SL['waist']),
         ]
-    draw_seam_allowance(ax, sa_edges, scale=s, label_sas=not debug, units=units)
+    cut_outline = draw_seam_allowance(ax, sa_edges, scale=s, label_sas=not debug,
+                                      units=units)
 
     # --- Notches: matching marks for pocket assembly ---
     if pocket is not None:
@@ -437,8 +438,9 @@ def plot_jeans_front(draft, output_path='Logs/jeans_front.svg', debug=False, uni
                          draft['metadata'].get('cut_count'),
                          metadata=draft.get('metadata'))
 
-    finalize_figure(ax, fig, standalone, output_path, units=units, debug=debug,
-                    pdf_pages=pdf_pages)
+    return finalize_figure(ax, fig, standalone, output_path, units=units,
+                           debug=debug, pdf_pages=pdf_pages,
+                           outline_pts=cut_outline)
 
 
 # -- Entry point for generic runner ------------------------------------------
@@ -454,5 +456,7 @@ def run(measurements_path, output_path, debug=False, units='cm', pdf_pages=None,
         'selvedge.front_pocket',
         lambda: draft_jeans_front_pocket(m, draft),
     )
-    plot_jeans_front(draft, output_path, debug=debug, units=units, pocket=pocket,
-                     pdf_pages=pdf_pages)
+    outline = plot_jeans_front(draft, output_path, debug=debug, units=units,
+                               pocket=pocket, pdf_pages=pdf_pages)
+    if outline:
+        return {'layout_outline': outline}

@@ -107,10 +107,12 @@ def plot_jeans_waistband(wb, output_path='Logs/jeans_waistband.svg',
         (np.array([pts['bl'], pts['tl']]),  SA['end'], SL['end']),      # left end
     ]
     if include_seam_allowance:
-        draw_seam_allowance(ax, sa_edges, scale=s, label_sas=not debug, units=units)
+        cut_outline = draw_seam_allowance(ax, sa_edges, scale=s,
+                                          label_sas=not debug, units=units)
     else:
         # Interfacing net shape: cut boundary equals the seamline rectangle.
         ax.plot(xs, ys, **CUTLINE)
+        cut_outline = np.column_stack([xs, ys])
 
     # --- Reference lines ---
 
@@ -161,8 +163,9 @@ def plot_jeans_waistband(wb, output_path='Logs/jeans_waistband.svg',
         _annotate_segment(ax, pts['bl'], pts['br'], offset=(0, -10))
         _annotate_segment(ax, pts['tl'], pts['bl'], offset=(-14, 0))
 
-    finalize_figure(ax, fig, standalone, output_path, units=units, debug=debug,
-                    pdf_pages=pdf_pages)
+    return finalize_figure(ax, fig, standalone, output_path, units=units,
+                           debug=debug, pdf_pages=pdf_pages,
+                           outline_pts=cut_outline)
 
 
 # -- Entry point for generic runner ------------------------------------------
@@ -171,6 +174,8 @@ def run(measurements_path, output_path, debug=False, units='cm', pdf_pages=None,
         context=None, include_seam_allowance=True):
     m = resolve_measurements(context, measurements_path, load_measurements)
     wb = cache_draft(context, 'selvedge.waistband', lambda: draft_jeans_waistband(m))
-    plot_jeans_waistband(wb, output_path, debug=debug, units=units,
-                         pdf_pages=pdf_pages,
-                         include_seam_allowance=include_seam_allowance)
+    outline = plot_jeans_waistband(wb, output_path, debug=debug, units=units,
+                                   pdf_pages=pdf_pages,
+                                   include_seam_allowance=include_seam_allowance)
+    if outline:
+        return {'layout_outline': outline}

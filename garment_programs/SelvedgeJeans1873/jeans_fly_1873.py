@@ -125,15 +125,16 @@ def plot_jeans_fly_1873(fly, output_path='Logs/jeans_fly_1873.svg',
         (np.array([pts['fold_bottom'], pts['fold_top']]),     SA['fold'], SL['fold']),
     ]
     if include_seam_allowance:
-        draw_seam_allowance(ax, sa_edges, scale=s, label_sas=not debug, units=units)
+        cut_outline = draw_seam_allowance(ax, sa_edges, scale=s,
+                                          label_sas=not debug, units=units)
     else:
         # Interfacing net shape: use the seamline/fold boundary (no SA).
-        net_outline = np.vstack([
+        cut_outline = np.vstack([
             np.array([pts['fold_top'], pts['outer_top'], pts['curve_start']]),
             curves['bottom'],
             np.array([pts['fold_top']]),
         ])
-        ax.plot(net_outline[:, 0], net_outline[:, 1], **CUTLINE)
+        ax.plot(cut_outline[:, 0], cut_outline[:, 1], **CUTLINE)
 
     # Thin boundary line at the trim/inlay separation
     ax.plot([0, pts['outer_top'][0]],
@@ -175,8 +176,9 @@ def plot_jeans_fly_1873(fly, output_path='Logs/jeans_fly_1873.svg',
         _annotate_segment(ax, pts['fold_bottom'],
                           np.array([0, con['inlay_y']]), offset=(-14, 0))
 
-    finalize_figure(ax, fig, standalone, output_path, units=units, debug=debug,
-                    pdf_pages=pdf_pages)
+    return finalize_figure(ax, fig, standalone, output_path, units=units,
+                           debug=debug, pdf_pages=pdf_pages,
+                           outline_pts=cut_outline)
 
 
 # -- Entry point for generic runner ------------------------------------------
@@ -190,6 +192,8 @@ def run(measurements_path, output_path, debug=False, units='cm', pdf_pages=None,
         'selvedge.fly_1873',
         lambda: draft_jeans_fly_1873(m, front),
     )
-    plot_jeans_fly_1873(fly, output_path, debug=debug, units=units,
-                        pdf_pages=pdf_pages,
-                        include_seam_allowance=include_seam_allowance)
+    outline = plot_jeans_fly_1873(fly, output_path, debug=debug, units=units,
+                                  pdf_pages=pdf_pages,
+                                  include_seam_allowance=include_seam_allowance)
+    if outline:
+        return {'layout_outline': outline}

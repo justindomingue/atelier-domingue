@@ -158,7 +158,8 @@ def plot_jeans_watch_pocket(piece, output_path='Logs/jeans_watch_pocket.svg',
         (np.array([pts['v_point'], pts['bottom_left']]),      sa_bottom, seam_side),  # lower-left
         (np.array([pts['bottom_left'], pts['top_left']]),     sa_sides, seam_side),   # left side
     ]
-    draw_seam_allowance(ax, sa_edges, scale=s, label_sas=not debug, units=units)
+    cut_outline = draw_seam_allowance(ax, sa_edges, scale=s, label_sas=not debug,
+                                      units=units)
 
     # Grain line arrow (double-headed)
     from garment_programs.plot_utils import draw_grainline, draw_piece_label
@@ -196,8 +197,9 @@ def plot_jeans_watch_pocket(piece, output_path='Logs/jeans_watch_pocket.svg',
                     (pts['v_point'][0], pts['v_point'][1] - sa_bottom * s - 2 * s),
                     fontsize=6, ha='center', color='gray')
 
-    finalize_figure(ax, fig, standalone, output_path, units=units, debug=debug,
-                    pdf_pages=pdf_pages)
+    return finalize_figure(ax, fig, standalone, output_path, units=units,
+                           debug=debug, pdf_pages=pdf_pages,
+                           outline_pts=cut_outline)
 
 
 # -- Entry point for generic runner ------------------------------------------
@@ -210,5 +212,7 @@ def run(measurements_path, output_path, debug=False, units='cm', pdf_pages=None,
         'selvedge.watch_pocket',
         lambda: draft_jeans_watch_pocket(m),
     )
-    plot_jeans_watch_pocket(piece, output_path, debug=debug, units=units,
-                            pdf_pages=pdf_pages)
+    outline = plot_jeans_watch_pocket(piece, output_path, debug=debug, units=units,
+                                      pdf_pages=pdf_pages)
+    if outline:
+        return {'layout_outline': outline}

@@ -158,8 +158,9 @@ def plot_jeans_back_cinch(cinch, output_path='Logs/jeans_back_cinch.svg',
                     textcoords="offset points", xytext=(0, -6),
                     fontsize=6, color='gray', ha='center')
 
-    finalize_figure(ax, fig, standalone, output_path, units=units, debug=debug,
-                    pdf_pages=pdf_pages)
+    return finalize_figure(ax, fig, standalone, output_path, units=units,
+                           debug=debug, pdf_pages=pdf_pages,
+                           outline_pts=cut_outline)
 
 
 # -- Entry point for generic runner ------------------------------------------
@@ -168,5 +169,7 @@ def run(measurements_path, output_path, debug=False, units='cm', pdf_pages=None,
         context=None):
     m = resolve_measurements(context, measurements_path, load_measurements)
     cinch = cache_draft(context, 'selvedge.back_cinch', lambda: draft_jeans_back_cinch(m))
-    plot_jeans_back_cinch(cinch, output_path, debug=debug, units=units,
-                          pdf_pages=pdf_pages)
+    outline = plot_jeans_back_cinch(cinch, output_path, debug=debug, units=units,
+                                    pdf_pages=pdf_pages)
+    if outline:
+        return {'layout_outline': outline}
