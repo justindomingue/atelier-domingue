@@ -1,6 +1,9 @@
 numpy
 matplotlib
 pyyaml
-scipy
 cairosvg
 pypdf
+ezdxf
+
+# dev
+pytest
