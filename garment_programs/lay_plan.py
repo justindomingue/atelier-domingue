@@ -419,7 +419,7 @@ def _extract_outline_polygon(svg_path):
                         float(payload.get('pad_x', 0.0)),
                         float(payload.get('pad_y', 0.0)),
                     )
-        except Exception:
+        except (json.JSONDecodeError, ValueError, KeyError, OSError):
             # Invalid sidecar should not break layout generation.
             pass
 
@@ -1676,6 +1676,12 @@ def _write_pdf(layouts, output_path, units, gap):
         # Convert to PDF via cairosvg
         pdf_bytes = cairosvg.svg2pdf(bytestring=svg_bytes)
 
+        # Add page(s) to the writer
+        reader = PdfReader(io.BytesIO(pdf_bytes))
+        for page in reader.pages:
+            writer.add_page(page)
+
+    with open(output_path, 'wb') as f:
         writer.write(f)
 
 
@@ -1704,10 +1710,8 @@ def _write_dxf(layouts, output_path, units, gap):
     for i, (group, pieces, positions, total_length) in enumerate(layouts):
         layer_name = group['name'].upper()
         color = colors[i % len(colors)]
-        try:
+        if layer_name not in doc.layers:
             doc.layers.add(layer_name, color=color)
-        except Exception:
-            pass # Error if layer already exists
 
         fabric_w_pt = group['fabric_width'] * PTS_PER_INCH
 
@@ -1772,16 +1776,12 @@ def _write_dxf(layouts, output_path, units, gap):
                     target_layer = layer_name
                     if 'stroke:#0000ff' in style or 'stroke:blue' in style:
                         target_layer = layer_name + '_SEAM'
-                        try:
+                        if target_layer not in doc.layers:
                             doc.layers.add(target_layer, color=color)
-                        except Exception:
-                            pass
                     elif 'stroke:#000000' in style or 'stroke:black' in style:
                         target_layer = layer_name + '_CUT'
-                        try:
+                        if target_layer not in doc.layers:
                             doc.layers.add(target_layer, color=color)
-                        except Exception:
-                            pass
 
                     msp.add_lwpolyline(dxf_verts, close=closed, dxfattribs={'layer': target_layer})
 
