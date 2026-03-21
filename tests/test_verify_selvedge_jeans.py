@@ -11,12 +11,9 @@ from pathlib import Path
 
 from garment_programs.core.runtime import cache_draft, resolve_measurements
 from garment_programs.core.types import PieceRuntimeContext
-from garment_programs.SelvedgeJeans1873.jeans_front import (
-    INCH,
-    load_measurements,
-    draft_jeans_front,
-    _curve_length,
-)
+from garment_programs.geometry import INCH, _curve_length
+from garment_programs.measurements import load_measurements
+from garment_programs.SelvedgeJeans1873.jeans_front import draft_jeans_front
 from garment_programs.SelvedgeJeans1873.jeans_back import draft_jeans_back
 from garment_programs.SelvedgeJeans1873.verify import _seg
 

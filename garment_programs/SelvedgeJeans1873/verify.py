@@ -12,7 +12,9 @@ Implements the checks from the "Double Checking Your Work" lesson:
 import numpy as np
 
 from garment_programs.core.runtime import cache_draft, resolve_measurements
-from .jeans_front import INCH, load_measurements, draft_jeans_front, _curve_length
+from garment_programs.geometry import INCH, _curve_length
+from garment_programs.measurements import load_measurements
+from .jeans_front import draft_jeans_front
 from .jeans_back import draft_jeans_back
 
 WAISTBAND = 1.5 * INCH   # 1½" waistband deducted where the lesson specifies

@@ -1,3 +1,5 @@
+# Dependencies are managed in pyproject.toml; this file is kept for
+# tooling that still expects a requirements.txt.
 numpy
 matplotlib
 pyyaml

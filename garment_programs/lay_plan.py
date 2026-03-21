@@ -244,6 +244,7 @@ def _parse_svg_path_data(d_string, curve_steps=10):
         return float(tokens[idx])
 
     i = 0
+    last_i = -1
     cmd = None
     current = np.array([0.0, 0.0], dtype=float)
     subpath_start = None
@@ -251,6 +252,14 @@ def _parse_svg_path_data(d_string, curve_steps=10):
     closed = False
 
     while i < len(tokens):
+        if i == last_i:
+            # No progress since the previous iteration — malformed input
+            # would otherwise spin forever here.
+            raise ValueError(
+                f"SVG path parser stalled at token index {i}: {tokens[i]!r} "
+                f"(current command {cmd!r})"
+            )
+        last_i = i
         if _is_cmd(tokens[i]):
             cmd = tokens[i]
             i += 1
@@ -364,9 +373,12 @@ def _parse_svg_path_data(d_string, curve_steps=10):
                 current = p
             continue
 
-        # Unsupported command in token stream: skip one token to avoid stalling.
-        if i < len(tokens):
-            i += 1
+        # Unsupported command fell through all handlers — fail loudly
+        # instead of silently skipping so malformed input surfaces early.
+        raise ValueError(
+            f"Unsupported SVG path command {cmd!r} at token index {i} "
+            f"in {d_string!r}"
+        )
 
     if not closed and len(vertices) >= 3:
         p0 = np.array(vertices[0], dtype=float)

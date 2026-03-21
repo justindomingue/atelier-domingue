@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "atelier-domingue"
+version = "0.1.0"
+description = "Parametric pattern-drafting and lay-planning for bespoke garments"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy",
+    "matplotlib",
+    "pyyaml",
+    "cairosvg",
+    "pypdf",
+    "ezdxf",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+tui = ["questionary"]
+
+[project.scripts]
+atelier = "tui.app:main"
+
+[tool.setuptools.packages.find]
+include = ["garment_programs*", "tui*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
