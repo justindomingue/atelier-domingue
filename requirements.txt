@@ -5,5 +5,8 @@ cairosvg
 pypdf
 ezdxf
 
+# tui
+questionary
+
 # dev
 pytest
