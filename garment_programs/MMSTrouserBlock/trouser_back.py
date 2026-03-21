@@ -206,6 +206,11 @@ def draft_trouser_back(m: dict[str, float], front: DraftData, num_pleats=1,
     b_coeff = 2.0 * np.dot(d, u)
     c_coeff = np.dot(d, d) - R * R
     discrim = b_coeff**2 - 4 * a_coeff * c_coeff
+    if discrim < 0:
+        raise ValueError(
+            f"Cannot solve seat-line geometry (discriminant={discrim:.3f}). "
+            "Check seat/waist measurements for consistency."
+        )
     t_cb = (-b_coeff + np.sqrt(discrim)) / (2 * a_coeff)  # positive root (upward)
     back_cb_waist = bcw_mark + t_cb * cb_perp_unit
 

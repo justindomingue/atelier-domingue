@@ -18,7 +18,7 @@ MEASUREMENTS_DIR = ROOT / "measurements"
 class RunConfig:
     measurements: str
     program: str
-    units: str = "inch"
+    units: str | None = None
     output_format: str = "svg"
     debug: bool = False
 
@@ -30,7 +30,9 @@ def discover_measurements() -> list[str]:
 
 def discover_programs() -> list[str]:
     """Return garment names discovered from the project runner."""
-    sys.path.insert(0, str(ROOT))
+    root_str = str(ROOT)
+    if root_str not in sys.path:
+        sys.path.insert(0, root_str)
     from run import _discover_garments  # noqa: WPS433 - intentional local import
 
     names = sorted(garment["name"] for _, garment in _discover_garments())
@@ -46,11 +48,11 @@ def build_run_command(config: RunConfig) -> list[str]:
         config.measurements,
         "-p",
         config.program,
-        "-u",
-        config.units,
         "-f",
         config.output_format,
     ]
+    if config.units is not None:
+        cmd.extend(["-u", config.units])
     if config.debug:
         cmd.append("-d")
     return cmd

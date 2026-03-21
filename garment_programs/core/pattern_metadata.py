@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any
 
-_ACTIVE_PATTERN_CONTEXT: Dict[str, Any] = {}
+_ACTIVE_PATTERN_CONTEXT: dict[str, Any] = {}
 
 
 def set_active_pattern_context(context: dict[str, Any] | None) -> None:
