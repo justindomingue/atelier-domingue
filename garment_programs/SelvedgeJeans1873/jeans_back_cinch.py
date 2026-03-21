@@ -161,6 +161,32 @@ def plot_jeans_back_cinch(cinch, output_path='Logs/jeans_back_cinch.svg',
     finalize_figure(ax, fig, standalone, output_path, units=units, debug=debug,
                     pdf_pages=pdf_pages)
 
+# -- Nesting Extractors -----------------------------------------------------
+
+def get_outline_back_cinch(draft):
+    """Return the finished seamline for the back cinch."""
+    pts = draft['points']
+    outline = np.vstack([
+        pts['seam_tl'],
+        pts['seam_tr'],
+        pts['seam_br'],
+        pts['seam_bl'],
+        pts['seam_tl'],
+    ])
+    return outline
+
+def get_sa_outline_back_cinch(draft):
+    """Return the full cut boundary for the back cinch."""
+    pts = draft['points']
+    outline = np.vstack([
+        pts['cut_tl'],
+        pts['cut_tr'],
+        pts['cut_br'],
+        pts['cut_bl'],
+        pts['cut_tl'],
+    ])
+    return outline
+
 
 # -- Entry point for generic runner ------------------------------------------
 
@@ -170,3 +196,5 @@ def run(measurements_path, output_path, debug=False, units='cm', pdf_pages=None,
     cinch = cache_draft(context, 'selvedge.back_cinch', lambda: draft_jeans_back_cinch(m))
     plot_jeans_back_cinch(cinch, output_path, debug=debug, units=units,
                           pdf_pages=pdf_pages)
+    return {'back_cinch': cinch}
+

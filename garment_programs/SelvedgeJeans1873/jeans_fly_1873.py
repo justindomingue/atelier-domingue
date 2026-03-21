@@ -178,6 +178,57 @@ def plot_jeans_fly_1873(fly, output_path='Logs/jeans_fly_1873.svg',
     finalize_figure(ax, fig, standalone, output_path, units=units, debug=debug,
                     pdf_pages=pdf_pages)
 
+# -- Nesting Extractors -----------------------------------------------------
+
+def get_outline_fly_1873(draft):
+    """Return the finished seamline for the fly piece.
+    The piece is cut on fold, so the outline is mirrored.
+    """
+    pts = draft['points']
+    c = draft['curves']
+
+    # Right half (CW from top-fold)
+    right_half = np.vstack([
+        np.array([pts['fold_top'], pts['outer_top']]),
+        np.array([pts['outer_top'], pts['curve_start']]),
+        c['bottom'],
+    ])
+    
+    # Left half (mirrored right half, reversed to continue CW path)
+    left_half = right_half.copy()
+    left_half[:, 0] = -left_half[:, 0]
+    
+    outline = np.vstack([right_half, left_half[::-1]])
+    return outline
+
+def get_sa_outline_fly_1873(draft):
+    """Return the full cut boundary.
+    The piece is cut on fold, so we mirror the SA boundary.
+    """
+    pts = draft['points']
+    c = draft['curves']
+    
+    from garment_programs.plot_utils import offset_polyline
+    from .seam_allowances import SEAM_ALLOWANCES
+    SA = SEAM_ALLOWANCES['fly_1873']
+
+    # Right half SA
+    right_sa = np.vstack([
+        offset_polyline(np.array([pts['fold_top'], pts['outer_top']]), SA['top']),
+        offset_polyline(np.array([pts['outer_top'], pts['curve_start']]), SA['outer']),
+        offset_polyline(c['bottom'], SA['bottom']),
+    ])
+    
+    # Snap the center points back to x=0 to ensure perfect mirroring
+    right_sa[0, 0] = 0.0
+    right_sa[-1, 0] = 0.0
+    
+    left_sa = right_sa.copy()
+    left_sa[:, 0] = -left_sa[:, 0]
+    
+    outline = np.vstack([right_sa, left_sa[::-1], right_sa[0:1]])
+    return outline
+
 
 # -- Entry point for generic runner ------------------------------------------
 
@@ -193,3 +244,5 @@ def run(measurements_path, output_path, debug=False, units='cm', pdf_pages=None,
     plot_jeans_fly_1873(fly, output_path, debug=debug, units=units,
                         pdf_pages=pdf_pages,
                         include_seam_allowance=include_seam_allowance)
+    return {'fly_1873': fly}
+

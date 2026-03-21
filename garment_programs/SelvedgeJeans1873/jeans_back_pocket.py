@@ -203,6 +203,54 @@ def plot_jeans_back_pocket(pocket, output_path='Logs/jeans_back_pocket.svg',
     finalize_figure(ax, fig, standalone, output_path, units=units, debug=debug,
                     pdf_pages=pdf_pages)
 
+# -- Nesting Extractors -----------------------------------------------------
+
+def get_outline_back_pocket(draft):
+    """Return the finished seamline for the back pocket.
+    Shape: pentagon (tl -> ref_l -> bottom -> ref_r -> tr -> tl)
+    """
+    pts = draft['points']
+    outline = np.array([
+        pts['f_tl'],
+        pts['f_ref_l'],
+        pts['f_bottom'],
+        pts['f_ref_r'],
+        pts['f_tr'],
+    ])
+    return outline
+
+def get_sa_outline_back_pocket(draft):
+    """Return the full cut line boundary for the back pocket.
+    This outline is used for polygon packing and bounding boxes.
+    """
+    pts = draft['points']
+
+    # We need to construct the SA outline relative to the local origin
+    # to match the packing logic, but the draft stores absolute coordinates
+    # on the back panel. We use the _to_local transform for extractors too.
+    mouth_dir = draft['construction']['mouth_dir']
+    depth_dir = draft['construction']['depth_dir']
+    origin = draft['construction']['mouth_center']
+    local_pts = _to_local(pts, mouth_dir, depth_dir, origin)
+
+    # SA outline is built in pocket-local coordinates (vertical grain)
+    from garment_programs.plot_utils import offset_polyline
+    from .seam_allowances import SEAM_ALLOWANCES
+    SA = SEAM_ALLOWANCES['back_pocket']
+
+    # CW edge order in local frame:
+    # side(tl->ref_l), side(ref_l->bottom), side(bottom->ref_r),
+    # side(ref_r->tr), top(tr->tl)
+    outline = np.vstack([
+        offset_polyline(np.array([local_pts['f_tl'], local_pts['f_ref_l']]), SA['side']),
+        offset_polyline(np.array([local_pts['f_ref_l'], local_pts['f_bottom']]), SA['side']),
+        offset_polyline(np.array([local_pts['f_bottom'], local_pts['f_ref_r']]), SA['side']),
+        offset_polyline(np.array([local_pts['f_ref_r'], local_pts['f_tr']]), SA['side']),
+        offset_polyline(np.array([local_pts['f_tr'], local_pts['f_tl']]), SA['top']),
+    ])
+    outline = np.vstack([outline, outline[0:1]])
+    return outline
+
 
 # -- Entry point for generic runner ------------------------------------------
 
@@ -219,3 +267,5 @@ def run(measurements_path, output_path, debug=False, units='cm', pdf_pages=None,
     )
     plot_jeans_back_pocket(pocket, output_path, debug=debug, units=units,
                            pdf_pages=pdf_pages)
+    return {'back_pocket': pocket}
+

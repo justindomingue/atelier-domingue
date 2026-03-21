@@ -441,6 +441,61 @@ def plot_jeans_front(draft, output_path='Logs/jeans_front.svg', debug=False, uni
                     pdf_pages=pdf_pages)
 
 
+# -- Nesting Extractors -----------------------------------------------------
+
+def get_outline_front(draft):
+    """Return the finished seamline for the front panel."""
+    pts = draft['points']
+    c = draft['curves']
+    # Outer perimeter (no pocket facing cutout)
+    outline = np.vstack([
+        c['hip'],
+        np.array([pts['4'], pts['0']]),
+        np.array([pts['0'], pts["0'"]]),
+        np.array([pts["0'"], pts["3'"]]),
+        c['inseam'][::-1],
+        c['crotch'][::-1],
+        np.array([pts['8'], pts["7'"]]),
+        c['rise'][::-1],
+    ])
+    return outline
+
+def get_sa_outline_front(draft):
+    """Return the full cut line boundary for the front panel.
+    This outline is used for polygon packing and bounding boxes.
+    """
+    pts = draft['points']
+    c = draft['curves']
+
+    # Sub-curves for crotch SA transition
+    _crotch_rev = c['crotch'][::-1]
+    _crotch_len = _curve_length(_crotch_rev)
+    _split      = 0.5 * INCH
+    _crotch_body = _curve_up_to_arclength(_crotch_rev, _crotch_len - _split)
+    _crotch_end  = _curve_up_to_arclength(_crotch_rev[::-1], _split)[::-1]
+
+    from .seam_allowances import SEAM_ALLOWANCES
+    SA = SEAM_ALLOWANCES['front']
+
+    # Edges with SA (respecting CCW outward offset convention)
+    # The drafting order is roughly CW, so we reverse it or offset negatively.
+    # offset_polyline uses positive = left-hand offset (which is outward for CCW).
+    # Building a CCW outline:
+    outline = np.vstack([
+        offset_polyline(c['rise'], SA['waist']),
+        offset_polyline(np.array([pts["7'"], pts['8']]), SA['fly']),
+        offset_polyline(_crotch_end[::-1], SA['fly']),
+        offset_polyline(_crotch_body[::-1], SA['crotch']),
+        offset_polyline(c['inseam'], SA['inseam']),
+        offset_polyline(np.array([pts["3'"], pts["0'"]]), SA['inseam']),
+        offset_polyline(np.array([pts["0'"], pts['0']]), SA['hem']),
+        offset_polyline(np.array([pts['0'], pts['4']]), SA['side']),
+        offset_polyline(c['hip'][::-1], SA['side']),
+    ])
+    # Close it properly
+    outline = np.vstack([outline, outline[0:1]])
+    return outline
+
 # -- Entry point for generic runner ------------------------------------------
 
 def run(measurements_path, output_path, debug=False, units='cm', pdf_pages=None,
@@ -456,3 +511,4 @@ def run(measurements_path, output_path, debug=False, units='cm', pdf_pages=None,
     )
     plot_jeans_front(draft, output_path, debug=debug, units=units, pocket=pocket,
                      pdf_pages=pdf_pages)
+    return {'front': draft, 'front_pocket': pocket}

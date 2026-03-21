@@ -165,6 +165,30 @@ def plot_jeans_waistband(wb, output_path='Logs/jeans_waistband.svg',
                     pdf_pages=pdf_pages)
 
 
+# -- Nesting Extractors -----------------------------------------------------
+
+def get_outline_waistband(draft):
+    """Return the full cut boundary for the waistband.
+    Since it is a simple rectangle and cut on the selvedge, the seamline
+    and cutline are structurally identical for packing purposes (just a wide rectangle).
+    """
+    pts = draft['points']
+    
+    from garment_programs.plot_utils import offset_polyline
+    from .seam_allowances import SEAM_ALLOWANCES
+    SA = SEAM_ALLOWANCES['waistband']
+
+    # CCW edge order: top -> left -> bottom -> right -> top
+    outline = np.vstack([
+        offset_polyline(np.array([pts['tr'], pts['tl']]), SA['top']),
+        offset_polyline(np.array([pts['tl'], pts['bl']]), SA['end']),
+        offset_polyline(np.array([pts['bl'], pts['br']]), SA['bottom']),
+        offset_polyline(np.array([pts['br'], pts['tr']]), SA['end']),
+    ])
+    outline = np.vstack([outline, outline[0:1]])
+    return outline
+
+
 # -- Entry point for generic runner ------------------------------------------
 
 def run(measurements_path, output_path, debug=False, units='cm', pdf_pages=None,
@@ -174,3 +198,4 @@ def run(measurements_path, output_path, debug=False, units='cm', pdf_pages=None,
     plot_jeans_waistband(wb, output_path, debug=debug, units=units,
                          pdf_pages=pdf_pages,
                          include_seam_allowance=include_seam_allowance)
+    return {'waistband': wb}

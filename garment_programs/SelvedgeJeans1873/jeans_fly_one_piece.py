@@ -148,6 +148,33 @@ def plot_jeans_fly_one_piece(fly, output_path='Logs/jeans_fly_one_piece.svg',
                     pdf_pages=pdf_pages)
 
 
+# -- Nesting Extractors -----------------------------------------------------
+
+def get_outline_fly_one_piece(draft):
+    """Return the full cut boundary for the one-piece fly.
+    Since it is a simple rectangle rotated to align with the grainline/fold,
+    the outline is exactly the bounding box points.
+    """
+    pts = draft['points']
+    
+    from garment_programs.plot_utils import offset_polyline
+    from .seam_allowances import SEAM_ALLOWANCES
+    SA = SEAM_ALLOWANCES['fly_one_piece']
+
+    # CCW outline construction starting from top left
+    outline = np.vstack([
+        offset_polyline(np.array([pts['tr'], pts['tl']]), SA['top']),
+        offset_polyline(np.array([pts['tl'], pts['bl']]), SA['side']),
+        offset_polyline(np.array([pts['bl'], pts['br']]), SA['bottom']),
+        offset_polyline(np.array([pts['br'], pts['tr']]), SA['side']),
+    ])
+    outline = np.vstack([outline, outline[0:1]])
+    return outline
+
+def get_sa_outline_fly_one_piece(draft):
+    """Alias for getter as cutline and seamline logic is identical for rectangle packing."""
+    return get_outline_fly_one_piece(draft)
+
 # -- Entry point for generic runner ------------------------------------------
 
 def run(measurements_path, output_path, debug=False, units='cm', pdf_pages=None,
@@ -161,3 +188,5 @@ def run(measurements_path, output_path, debug=False, units='cm', pdf_pages=None,
     )
     plot_jeans_fly_one_piece(fly, output_path, debug=debug, units=units,
                              pdf_pages=pdf_pages)
+    return {'fly_one_piece': fly}
+
