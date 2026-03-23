@@ -135,10 +135,12 @@ def draft_trouser_front(m: dict[str, float], num_pleats: int = 1,
     cf_hip_x   = Ftw + 0.5
     cf_waist_x = Ftw - config['cf_waist_taper']
 
-    # Front crotch point: Fcw measured right of the Ftw perpendicular on the
-    # crotch line (MM&S step 2). The inseam guideline is a drawing aid only —
-    # the crotch point is placed by measurement, not by intersection.
-    crotch_pt_x = fcw_mark_x
+    # Crotch point: interpolated along the inseam guideline rather than placed
+    # directly at (Ftw+Fcw, crotch_y) per PDF step 2. The PDF placement shifts
+    # the point ~0.6 cm outward and produces a worse curve shape in practice;
+    # the interpolated position gives a cleaner J-curve. See audit notes.
+    t_crotch = (crotch_y - hem_y) / (hip_y - hem_y)
+    crotch_pt_x = hem_inseam_guide_x + t_crotch * (fcw_mark_x - hem_inseam_guide_x)
     crotch_pt = np.array([crotch_pt_x, crotch_y])
 
     # ==========================================================
@@ -158,12 +160,12 @@ def draft_trouser_front(m: dict[str, float], num_pleats: int = 1,
     t_cf_crotch = (crotch_y - waist_y) / cf_dir[1]
     cf_at_crotch = np.array([cf_waist_x + t_cf_crotch * cf_dir[0], crotch_y])
 
-    # Crotch guide (MM&S step 4): divide Fcw in half and transfer that amount
-    # upward on the Ftw perpendicular, measured from the hipline.
-    crotch_guide = np.array([ftw_x, hip_y + Fcw / 2])
-
-    # Slanted line from crotch guide to crotch point (construction reference).
-    # The crotch curve bows toward this guideline.
+    # Crotch guide: half the distance from CF@crotch to crotch_pt, transferred
+    # upward from CF@crotch. Deviates from the PDF's (Ftw, hip_y+Fcw/2)
+    # placement — paired with the interpolated crotch point above, this gives
+    # a cleaner J-curve shape. See audit notes.
+    half_crotch_dist = (crotch_pt_x - cf_at_crotch[0]) / 2
+    crotch_guide = np.array([cf_at_crotch[0], crotch_y + half_crotch_dist])
 
     # Waist sideseam (MM&S step 4): from CF on the waistline measure left by
     #   ¼ Wbg + pleat depth − sideseam relocation.
@@ -244,32 +246,27 @@ def draft_trouser_front(m: dict[str, float], num_pleats: int = 1,
         waist_side_raised,
     )
 
+    # -- Crotch curve: cf_hip → crotch_pt --
+    # Starts at CF on the hipline, sweeps as a shallow curve down to the
+    # crotch point. P2 follows the slant direction (crotch_pt → crotch_guide)
+    # so the curve stays above the guide line.
+    crotch_span_y = cf_hip[1] - crotch_pt[1]
+    slant_dir = crotch_guide - crotch_pt
+    slant_len = np.linalg.norm(slant_dir)
+    slant_unit = slant_dir / slant_len
+    curve_crotch = _bezier_cubic(
+        cf_hip,
+        cf_hip + np.array([0.0, -crotch_span_y / 2]),
+        crotch_pt + slant_unit * (slant_len / 2),
+        crotch_pt,
+    )
+
     # -- Inseam upper: crotch_pt → knee_inseam (gentle C-curve) --
-    # Built before the crotch curve so the crotch curve can arrive tangent to
-    # the inseam direction at crotch_pt.
     inseam_mid = (crotch_pt + knee_inseam) / 2
     curve_inseam_upper = _bezier_quad(
         crotch_pt,
         inseam_mid + np.array([-0.3, 0.0]),  # slight inward bow toward creaseline
         knee_inseam,
-    )
-    # Tangent direction of inseam at crotch_pt (quad Bezier: P1 - P0)
-    inseam_tan = (inseam_mid + np.array([-0.3, 0.0])) - crotch_pt
-    inseam_unit = inseam_tan / np.linalg.norm(inseam_tan)
-
-    # -- Crotch curve: cf_hip → crotch_pt --
-    # Shallow curve per MM&S step 5 ("for sufficient comfort").  P1 drops along
-    # CF; P2 lies back along the inseam tangent so the curve flows smoothly into
-    # the inseam without a step.  The slant guideline (crotch_guide→crotch_pt)
-    # remains as a construction reference.
-    crotch_span_y = cf_hip[1] - crotch_pt[1]
-    crotch_span_x = crotch_pt[0] - cf_hip[0]
-    crotch_span = np.hypot(crotch_span_x, crotch_span_y)
-    curve_crotch = _bezier_cubic(
-        cf_hip,
-        cf_hip + np.array([0.0, -crotch_span_y * 0.6]),
-        crotch_pt - inseam_unit * (crotch_span * 0.35),   # arrive along inseam tangent
-        crotch_pt,
     )
 
     # -- Collect everything --
@@ -602,8 +599,12 @@ def plot_trouser_front(draft, output_path='Logs/trouser_front.svg',
         (crv['crotch'],                                           sa['crotch']),
         (crv['inseam_upper'],                                     sa['inseam']),
         (np.array([pts['knee_inseam'], pts['hem_inseam_top']]),   sa['inseam']),
-        (np.array([pts['hem_inseam_top'], pts['hem_inseam'],
-                   pts['hem_side'], pts['hem_side_top']]),        sa['hem']),
+        # Hem: split so the vertical perpendicular drops carry the leg SA, not
+        # the 4 cm turn-up. When the hem folds up, the allowance sides then
+        # lie inside the tapered leg instead of sticking out as 4 cm ears.
+        (np.array([pts['hem_inseam_top'], pts['hem_inseam']]),    sa['inseam']),
+        (np.array([pts['hem_inseam'], pts['hem_side']]),          sa['hem']),
+        (np.array([pts['hem_side'], pts['hem_side_top']]),        sa['side']),
         (np.array([pts['hem_side_top'], pts['knee_side']]),       sa['side']),
         (crv['side_upper'][::-1],                                 sa['side']),
         (crv['hip'],                                              sa['side']),
