@@ -61,7 +61,8 @@ def draft_trouser_back(m: dict[str, float], front: DraftData,
     ease : EaseConfig
         Tunable ease/fit parameters. See ``EaseConfig`` for the full set of
         range-valued knobs (creaseline_shift, cb_slant, cb_height_extra,
-        sideseam_intake_target, hip_verify_ease).
+        sideseam_intake_target; plus optional cw_reduction / hip_verify_ease
+        overrides for the per-variant PLEAT_CONFIGS defaults).
 
     Returns
     -------
@@ -314,9 +315,19 @@ def draft_trouser_back(m: dict[str, float], front: DraftData,
     # -- Verification: perpendicular from CB to sideseam/hipline --
     # "Draw a perpendicular line from the centre back to the intersection
     # of the sideseam and the hipline."
-    # Should be approximately ¼ Hg + 2.5–3.5 cm.
+    # Range is per-variant: dart/1-pleat ¼Hg+2.5–3.5, 2-pleat ¼Hg+3–4.
+    # EaseConfig.hip_verify_ease can override with a ±0.5 cm window.
     verif_dist = np.linalg.norm(back_hip_side - bcw_mark)
-    verif_expected = Hg / 4 + ease.hip_verify_ease
+    if ease.hip_verify_ease is not None:
+        hv_lo = ease.hip_verify_ease - 0.5
+        hv_hi = ease.hip_verify_ease + 0.5
+    else:
+        hv_lo, hv_hi = PLEAT_CONFIGS[num_pleats]['hip_verify_range']
+    verif_lo = Hg / 4 + hv_lo
+    verif_hi = Hg / 4 + hv_hi
+    if not (verif_lo <= verif_dist <= verif_hi):
+        print(f"WARNING: back hip width {verif_dist:.1f} cm outside "
+              f"[{verif_lo:.1f}, {verif_hi:.1f}] (¼Hg + {hv_lo}–{hv_hi} cm).")
 
     # ================================================================
     # Hip Measurement Verification (MM&S)
@@ -420,7 +431,8 @@ def draft_trouser_back(m: dict[str, float], front: DraftData,
         'half_Tbtw':          half_Tbtw,
         'cb_perp_unit':       cb_perp_unit,
         'verif_dist':         verif_dist,
-        'verif_expected':     verif_expected,
+        'verif_lo':           verif_lo,
+        'verif_hi':           verif_hi,
         # Step 4 intermediate values for visualization
         'front_inseam_len':   front_inseam_len,
         'back_inseam_target': back_inseam_target,
@@ -772,9 +784,8 @@ def plot_trouser_back(front, back, output_path='Logs/trouser_back.svg',
         ax.plot([bpts['bcw_mark'][0], bpts['back_hip_side'][0]],
                 [bpts['bcw_mark'][1], bpts['back_hip_side'][1]], **VERIF)
         verif = bcon['verif_dist']
-        expected = bcon['verif_expected']
         mid_verif = (bpts['bcw_mark'] + bpts['back_hip_side']) / 2
-        ax.annotate(f"{verif:.1f} (\u00bc Hg + 3 \u2248 {expected:.1f})",
+        ax.annotate(f"{verif:.1f} (expect {bcon['verif_lo']:.1f}\u2013{bcon['verif_hi']:.1f})",
                     mid_verif, textcoords='offset points',
                     xytext=(0, -8), fontsize=6, color='darkgreen', ha='center')
 

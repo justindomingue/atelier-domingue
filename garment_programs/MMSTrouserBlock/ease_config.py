@@ -60,8 +60,10 @@ class EaseConfig:
     sideseam_intake_target: float = 1.25
     """PDF: 1–1.5 cm. Back waist equation solves darts to land on this intake."""
 
-    hip_verify_ease: float = 3.0
-    """PDF: 2.5–3.5 cm. Expected back hip width = ¼Hg + this."""
+    hip_verify_ease: float | None = None
+    """PDF: 2.5–3.5 cm (dart/1-pleat) or 3–4 cm (2-pleat). Back hip width
+    check = ¼Hg + this. None = use per-variant range from PLEAT_CONFIGS.
+    Set a value only to override with a ±0.5 cm window around it."""
 
 
 _FIELD_NAMES = {f.name for f in fields(EaseConfig)}
@@ -75,13 +77,13 @@ PRESETS: dict[str, EaseConfig] = {
     'slim': EaseConfig(
         btw_ease=3.0, cw_reduction=5.0,
         creaseline_shift=1.0, cb_slant=2.0, cb_height_extra=0.0,
-        sideseam_intake_target=1.0, hip_verify_ease=2.5,
+        sideseam_intake_target=1.0,
     ),
     'standard': EaseConfig(),
     'relaxed': EaseConfig(
         btw_ease=4.0,
         creaseline_shift=1.5, cb_slant=3.0, cb_height_extra=1.0,
-        sideseam_intake_target=1.5, hip_verify_ease=3.5,
+        sideseam_intake_target=1.5,
     ),
 }
 

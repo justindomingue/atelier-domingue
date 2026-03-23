@@ -29,15 +29,18 @@ PLEAT_CONFIGS = {
         'pleat_offsets': [],
         'dart': {'intake': 2.0, 'length': 9.5},    # centred on creaseline; 9–10 cm
         'cf_waist_taper': 0.5,                     # CF pulled in 0.5 cm at waist
-        'sideseam_relocation': 1.0, 'half_ease_range': (2.5, 4.5)},
+        'sideseam_relocation': 1.0,
+        'half_ease_range': (2.5, 4.5), 'hip_verify_range': (2.5, 3.5)},
     1: {'ftw_ease': 1.0, 'cw_reduction': 4.0,      # 1-pleat — PDF p.15 chart (Cw=21.5)
         'pleat_offsets': [(-3.5, 0.0)],
         'dart': None, 'cf_waist_taper': 0.0,
-        'sideseam_relocation': 1.5, 'half_ease_range': (3.5, 5.5)},
+        'sideseam_relocation': 1.5,
+        'half_ease_range': (3.5, 5.5), 'hip_verify_range': (2.5, 3.5)},
     2: {'ftw_ease': 3.5, 'cw_reduction': 4.0,      # 2-pleat — PDF p.24 chart (Cw=21.5)
         'pleat_offsets': [(-3.5, 0.5), (-9.5, -7.0)],
         'dart': None, 'cf_waist_taper': 0.0,
-        'sideseam_relocation': 1.0, 'half_ease_range': (5.5, 8.0)},
+        'sideseam_relocation': 1.0,
+        'half_ease_range': (5.5, 8.0), 'hip_verify_range': (3.0, 4.0)},
 }
 PLEAT_NAMES = {0: 'Dart', 1: '1-Pleat', 2: '2-Pleat'}
 
