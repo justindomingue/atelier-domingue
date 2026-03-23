@@ -17,6 +17,7 @@ from garment_programs.geometry import (
     INCH, _bezier_cubic, _bezier_quad, _curve_length, _annotate_len,
 )
 from garment_programs.measurements import load_measurements
+from .ease_config import EaseConfig, load_ease
 from .seam_allowances import SEAM_ALLOWANCES
 
 # -- Pleat configuration by count ---------------------------------------------
@@ -33,7 +34,8 @@ PLEAT_NAMES = {0: 'Flat-Front', 1: '1-Pleat', 2: '2-Pleat'}
 
 # -- Drafting ----------------------------------------------------------------
 
-def draft_trouser_front(m: dict[str, float], num_pleats=1) -> DraftData:
+def draft_trouser_front(m: dict[str, float], num_pleats: int = 1,
+                        ease: EaseConfig = EaseConfig()) -> DraftData:
     """
     Compute all geometry for the trouser front.
 
@@ -41,6 +43,7 @@ def draft_trouser_front(m: dict[str, float], num_pleats=1) -> DraftData:
     ----------
     m : dict  Measurements in cm.
     num_pleats : int  Number of pleats (0, 1, or 2).
+    ease : EaseConfig  Tunable ease/fit parameters (range midpoints by default).
 
     Returns
     -------
@@ -56,13 +59,13 @@ def draft_trouser_front(m: dict[str, float], num_pleats=1) -> DraftData:
     Is  = m['inseam']       # inseam (crotch to floor)
 
     # -- Derived measurements --
-    Br  = Sl - Is                     # body rise
-    Kh  = Is / 2 + Is / 10 - 2.0     # knee height
-    Ftw = Hg / 4 + config['ftw_ease'] # front trouser width
-    Fcw = Hg / 2 / 10 + 1.0          # front crotch width
-    Cw  = Hg / 4 - 4.0               # crotch width (total)
-    Bcw = Cw - Fcw                    # back crotch width
-    Btw = Hg / 4 + 3.5               # back trouser width (midpoint of +3 to +4 range)
+    Br  = Sl - Is                        # body rise
+    Kh  = Is / 2 + Is / 10 - 2.0         # knee height
+    Ftw = Hg / 4 + config['ftw_ease']    # front trouser width
+    Fcw = Hg / 2 / 10 + 1.0              # front crotch width
+    Cw  = Hg / 4 - ease.cw_reduction     # crotch width (total)
+    Bcw = Cw - Fcw                       # back crotch width
+    Btw = Hg / 4 + ease.btw_ease         # back trouser width
 
     # ==========================================================
     # Step 1: Framework — vertical + horizontal reference lines
@@ -101,12 +104,10 @@ def draft_trouser_front(m: dict[str, float], num_pleats=1) -> DraftData:
     cf_hip_x   = Ftw + 0.5   # 0.5 cm ease at hip
     cf_waist_x = Ftw          # CF at waist sits on the Ftw perpendicular
 
-    # Inseam guideline: from hem_inseam_guide to Fcw mark on hipline
-    # The actual crotch point is where this inseam line crosses the crotch line.
-    inseam_target = np.array([fcw_mark_x, hip_y])
-    inseam_origin = np.array([hem_inseam_guide_x, hem_y])
-    t_crotch = (crotch_y - hem_y) / (hip_y - hem_y)
-    crotch_pt_x = hem_inseam_guide_x + t_crotch * (fcw_mark_x - hem_inseam_guide_x)
+    # Front crotch point: Fcw measured right of the Ftw perpendicular on the
+    # crotch line (MM&S step 2). The inseam guideline is a drawing aid only —
+    # the crotch point is placed by measurement, not by intersection.
+    crotch_pt_x = fcw_mark_x
     crotch_pt = np.array([crotch_pt_x, crotch_y])
 
     # ==========================================================
@@ -121,25 +122,32 @@ def draft_trouser_front(m: dict[str, float], num_pleats=1) -> DraftData:
     knee_side_dist = creaseline_x - knee_side_x
     knee_inseam_x = creaseline_x + knee_side_dist
 
-    # CF direction (waist→hip, continuing downward)
+    # CF direction (waist→hip, continuing downward) — kept for construction display
     cf_dir = np.array([cf_hip_x - cf_waist_x, hip_y - waist_y])
-    # Find where CF crosses the crotch line
     t_cf_crotch = (crotch_y - waist_y) / cf_dir[1]
     cf_at_crotch = np.array([cf_waist_x + t_cf_crotch * cf_dir[0], crotch_y])
 
-    # Crotch guide: half the distance from CF@crotch to crotch_pt,
-    # transferred upward from CF@crotch
-    half_crotch_dist = (crotch_pt_x - cf_at_crotch[0]) / 2
-    crotch_guide = np.array([cf_at_crotch[0], crotch_y + half_crotch_dist])
+    # Crotch guide (MM&S step 4): divide Fcw in half and transfer that amount
+    # upward on the Ftw perpendicular, measured from the hipline.
+    crotch_guide = np.array([ftw_x, hip_y + Fcw / 2])
 
-    # Slanted line from crotch guide to crotch point (construction reference)
-    # CF goes straight to crotch line; the crotch curve starts there and
-    # bows toward the crotch guide line.
+    # Slanted line from crotch guide to crotch point (construction reference).
+    # The crotch curve bows toward this guideline.
 
-    # Waist sideseam relocation: the front takes this much of the intake;
-    # the back adds the remaining on its side.
+    # Waist sideseam (MM&S step 4): from CF on the waistline measure left by
+    #   ¼ Wbg + pleat depth − sideseam relocation.
+    # The residual distance from x=0 is the hip-curve intake; the PDF says
+    # it "should be no larger than 1–1.5 cm for a shallow hip curve."
     sideseam_relocation = config['sideseam_relocation']
-    waist_side_x = sideseam_relocation
+    waist_width = Wbg / 4 + pleat_total_intake - sideseam_relocation
+    waist_side_x = cf_waist_x - waist_width
+    if waist_side_x > 1.5:
+        print(f"WARNING: front waist intake {waist_side_x:.1f} cm exceeds "
+              f"1.5 cm — hip curve may be too pronounced. Reduce Ftw ease or "
+              f"adjust pleat/sideseam relocation.")
+    elif waist_side_x < 0:
+        print(f"WARNING: front waist intake {waist_side_x:.1f} cm is negative "
+              f"— waist wider than hip draft. Check Wbg/Hg ratio.")
 
     # ==========================================================
     # Step 5: Final curves
@@ -172,12 +180,16 @@ def draft_trouser_front(m: dict[str, float], num_pleats=1) -> DraftData:
         cf_waist,
     )
 
-    # -- Hip curve: hip_side → waist_side_raised --
-    # Gentle C-curve; single control point (quadratic) guarantees no S-shape.
-    hip_mid = (hip_side + waist_side_raised) / 2
-    curve_hip = _bezier_quad(
-        hip_side,
-        hip_mid + np.array([-0.3, 0.0]),   # slight inward bow
+    # -- Hip curve: mid_side → waist_side_raised --
+    # MM&S step 5: "Draw the hip curve from the midpoint between crotch line
+    # and hipline to the raised waistline."
+    # Cubic Bezier keeps the lower end near-vertical (continuous with the
+    # sideseam at x=0 below) and bows gently past the hipline.
+    hip_span_y = waist_side_raised[1] - mid_side[1]
+    curve_hip = _bezier_cubic(
+        mid_side,
+        mid_side + np.array([0.0, hip_span_y / 3]),        # depart vertically
+        waist_side_raised + np.array([-0.5, -hip_span_y / 3]),
         waist_side_raised,
     )
 
@@ -486,12 +498,7 @@ def plot_trouser_front(draft, output_path='Logs/trouser_front.svg',
     ax.plot(crv['waistline'][:, 0], crv['waistline'][:, 1],
             'k-', linewidth=1.5, zorder=4)
 
-    # Sideseam upper straight: mid_side → hip_side
-    ax.plot([pts['mid_side'][0], pts['hip_side'][0]],
-            [pts['mid_side'][1], pts['hip_side'][1]],
-            'k-', linewidth=1.5, zorder=4)
-
-    # Hip curve (hip_side → raised waist, with intake)
+    # Hip curve (mid_side → raised waist, with intake)
     ax.plot(crv['hip'][:, 0], crv['hip'][:, 1],
             'k-', linewidth=1.5, zorder=4)
 
@@ -539,7 +546,6 @@ def plot_trouser_front(draft, output_path='Logs/trouser_front.svg',
                    pts['hem_side'], pts['hem_side_top']]),        sa['hem']),
         (np.array([pts['hem_side_top'], pts['knee_side']]),       sa['side']),
         (crv['side_upper'][::-1],                                 sa['side']),
-        (np.array([pts['mid_side'], pts['hip_side']]),            sa['side']),
         (crv['hip'],                                              sa['side']),
     ]
     cut_outline = draw_seam_allowance(ax, sa_edges, scale=1.0)
@@ -552,7 +558,6 @@ def plot_trouser_front(draft, output_path='Logs/trouser_front.svg',
         _annotate_len(ax, crv['inseam_upper'], offset=(8, 0))
         _annotate_len(ax, crv['side_upper'], offset=(-10, 0))
         _annotate_len(ax, np.array([pts['cf_waist'], pts['cf_hip']]), offset=(6, 0))
-        _annotate_len(ax, np.array([pts['mid_side'], pts['hip_side']]), offset=(-10, 0))
         _annotate_len(ax, np.array([pts['knee_inseam'], pts['hem_inseam_top']]), offset=(8, 0))
         _annotate_len(ax, np.array([pts['knee_side'], pts['hem_side_top']]), offset=(-10, 0))
         _annotate_len(ax, np.array([pts['hem_side'], pts['hem_inseam']]), offset=(0, -8))
@@ -574,7 +579,8 @@ def _finish_plot(fig, ax, draft, output_path, step, debug=False, units='cm',
 def run(measurements_path, output_path, debug=False, units='cm', num_pleats=1):
     """Uniform interface called by the generic runner."""
     m = load_measurements(measurements_path)
-    draft = draft_trouser_front(m, num_pleats=num_pleats)
+    ease = load_ease(measurements_path)
+    draft = draft_trouser_front(m, num_pleats=num_pleats, ease=ease)
     outline = plot_trouser_front(draft, output_path, debug=debug, units=units,
                                  step=5)
     if outline:

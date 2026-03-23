@@ -18,6 +18,7 @@ from .trouser_front import (
     INCH, PLEAT_CONFIGS, PLEAT_NAMES, load_measurements, draft_trouser_front,
     _bezier_cubic, _bezier_quad, _curve_length, _annotate_len,
 )
+from .ease_config import EaseConfig, load_ease
 from .seam_allowances import SEAM_ALLOWANCES
 
 
@@ -32,25 +33,13 @@ from .seam_allowances import SEAM_ALLOWANCES
 #   - Wide seat → needs more length + width (= more slanted).
 #   - Flat seat → needs the opposite (= straighter).
 #
-# Both CREASELINE_SHIFT and CB_SLANT control the slant together.
-# Increase both for a straighter pattern; decrease both for more slant.
-
-# Back creaseline shift: 1–1.5 cm rightward from front creaseline.
-# Larger values → straighter CB (more upright back pattern).
-# Smaller values → more slanted CB.
-# Use larger values for larger sizes to keep the proportion equal.
-CREASELINE_SHIFT = 1.0    # 1 cm to 1.5 cm
-# CB slant: 2–3 cm upward from crotch line along sideseam.
-# Larger values → straighter CB; smaller → more slanted CB.
-CB_SLANT = 2.0             # 2 cm to 3 cm
+# Both creaseline_shift and cb_slant (in EaseConfig) control the slant
+# together. Increase both for a straighter pattern; decrease both for
+# more slant.
+#
+# Tunable range-values now live in EaseConfig. Only fixed design values
+# remain here.
 LEG_EXTENSION = 2.0       # cm parallel to each seam, knee to hem
-CB_HEIGHT_EXTRA = 0.5     # cm added to back waist height at CB
-# Sideseam intake at the waist: 1–1.5 cm.
-# The dart sizes are computed from this to balance the waist check.
-# MM&S note on Maximal Intake: "The hip curve should be shallow and not too
-# round. Adjust the calculation if necessary: reduce the ease at the front
-# trouser width or change the pleat intake or the seam relocation."
-SIDESEAM_INTAKE = 1.25    # 1 cm to 1.5 cm
 DART_LARGE_RATIO = 0.55   # larger dart gets 55% of total dart intake
 DART_LARGE_LEN = 9.5      # cm
 DART_SMALL_LEN = 7.5      # cm
@@ -58,9 +47,9 @@ DART_SMALL_LEN = 7.5      # cm
 
 # -- Drafting ----------------------------------------------------------------
 
-def draft_trouser_back(m: dict[str, float], front: DraftData, num_pleats=1,
-                       creaseline_shift=CREASELINE_SHIFT,
-                       cb_slant=CB_SLANT) -> DraftData:
+def draft_trouser_back(m: dict[str, float], front: DraftData,
+                       num_pleats: int = 1,
+                       ease: EaseConfig = EaseConfig()) -> DraftData:
     """
     Compute all geometry for the trouser back.
 
@@ -69,18 +58,17 @@ def draft_trouser_back(m: dict[str, float], front: DraftData, num_pleats=1,
     m : dict   Measurements in cm (from load_measurements).
     front : dict   Result of draft_trouser_front(m).
     num_pleats : int  Number of pleats (0, 1, or 2) — used for metadata title.
-    creaseline_shift : float
-        Back creaseline offset (1–1.5 cm) rightward from front creaseline.
-        Larger → straighter CB; smaller → more slanted CB.
-        Increase for larger sizes to keep proportionally equal.
-    cb_slant : float
-        CB slant (2–3 cm) upward from crotch line along sideseam.
-        Larger → straighter CB; smaller → more slanted CB.
+    ease : EaseConfig
+        Tunable ease/fit parameters. See ``EaseConfig`` for the full set of
+        range-valued knobs (creaseline_shift, cb_slant, cb_height_extra,
+        sideseam_intake_target, hip_verify_ease).
 
     Returns
     -------
     dict with keys: points, levels, construction, curves, measurements, metadata
     """
+    creaseline_shift = ease.creaseline_shift
+    cb_slant = ease.cb_slant
     fpts = front['points']
     flvl = front['levels']
     fcon = front['construction']
@@ -175,19 +163,15 @@ def draft_trouser_back(m: dict[str, float], front: DraftData, num_pleats=1,
     back_crotch_pt = back_knee_inseam + back_inseam_unit * back_inseam_target
 
     # -- Back sideseam length transfer --
-    # Front sideseam: mid_side → hip (straight) + hip → waist_raised (curve)
-    front_side_straight = np.linalg.norm(fpts['hip_side'] - fpts['mid_side'])
+    # Front sideseam: mid_side → waist_raised (hip curve covers the full span)
     front_side_curve = _curve_length(front['curves']['hip'])
-    front_side_total = front_side_straight + front_side_curve
 
     # Back sideseam guideline: back_knee_side → back_hip_side, extended upward
     back_side_dir = back_hip_side - back_knee_side
     back_side_unit = back_side_dir / np.linalg.norm(back_side_dir)
-    # Distance from back_knee_side to back_hip_side
-    knee_to_hip_dist = np.linalg.norm(back_side_dir)
-    # Front sideseam from knee: add knee→mid_side portion
-    front_knee_to_mid = np.linalg.norm(fpts['mid_side'] - fpts['knee_side'])
-    front_side_from_knee = front_knee_to_mid + front_side_total
+    # Front sideseam from knee: knee→mid_side (side_upper curve) + hip curve
+    front_knee_to_mid = _curve_length(front['curves']['side_upper'])
+    front_side_from_knee = front_knee_to_mid + front_side_curve
     # Place back_waist_side at total front length from back_knee_side
     back_waist_side = back_knee_side + back_side_unit * front_side_from_knee
 
@@ -198,7 +182,7 @@ def draft_trouser_back(m: dict[str, float], front: DraftData, num_pleats=1,
     # Transfer that distance + 0–1 cm from Pp to the CB line.
     # Find the point on the CB line (through bcw_mark in cb_perp_unit direction)
     # at distance (waist_side_height + extra) from Pp.
-    R = waist_side_height + CB_HEIGHT_EXTRA
+    R = waist_side_height + ease.cb_height_extra
     d = bcw_mark - back_creaseline_knee
     u = cb_perp_unit
     # Solve |d + t*u|^2 = R^2  →  t^2 + 2(d·u)t + (|d|^2 - R^2) = 0
@@ -232,7 +216,7 @@ def draft_trouser_back(m: dict[str, float], front: DraftData, num_pleats=1,
     #   ½ Wbg + dart_total + sideseam_intake = back_waist + front_waist_minus_pleat
     half_Wbg = Wbg / 2
     total_available = waist_len + front_waist_minus_pleat
-    dart_total = total_available - half_Wbg - SIDESEAM_INTAKE
+    dart_total = total_available - half_Wbg - ease.sideseam_intake_target
     # Split into two darts
     dart_large = dart_total * DART_LARGE_RATIO
     dart_small = dart_total - dart_large
@@ -304,7 +288,7 @@ def draft_trouser_back(m: dict[str, float], front: DraftData, num_pleats=1,
     # -- Sideseam intake at waist --
     # The sideseam is taken in 1–1.5 cm at the waist.  The actual
     # waist/sideseam junction is inward along the waistline.
-    waist_intake_pt = back_waist_side + waist_unit * SIDESEAM_INTAKE
+    waist_intake_pt = back_waist_side + waist_unit * ease.sideseam_intake_target
 
     # -- Sideseam upper: hip → waist intake point --
     # "...and then curved over the hipline upwards to the marked point
@@ -332,7 +316,7 @@ def draft_trouser_back(m: dict[str, float], front: DraftData, num_pleats=1,
     # of the sideseam and the hipline."
     # Should be approximately ¼ Hg + 2.5–3.5 cm.
     verif_dist = np.linalg.norm(back_hip_side - bcw_mark)
-    verif_expected = Hg / 4 + 3.0
+    verif_expected = Hg / 4 + ease.hip_verify_ease
 
     # ================================================================
     # Hip Measurement Verification (MM&S)
@@ -443,13 +427,13 @@ def draft_trouser_back(m: dict[str, float], front: DraftData, num_pleats=1,
         'front_side_from_knee': front_side_from_knee,
         'back_creaseline_knee': back_creaseline_knee,
         'waist_side_height':  waist_side_height,
-        'cb_height_extra':    CB_HEIGHT_EXTRA,
+        'cb_height_extra':    ease.cb_height_extra,
         # Step 5 waist verification
         'front_waist_minus_pleat': front_waist_minus_pleat,
         'half_Wbg':           half_Wbg,
         'half_Wbg_plus_darts': half_Wbg_plus_darts,
         'dart_total':         dart_total,
-        'sideseam_intake':    SIDESEAM_INTAKE,
+        'sideseam_intake':    ease.sideseam_intake_target,
         # Hip verification
         'A_front':            A_front,
         'B_back':             B_back,
@@ -826,8 +810,9 @@ def _finish_back_plot(fig, ax, back, output_path, step, debug=False, units='cm',
 def run(measurements_path, output_path, debug=False, units='cm', num_pleats=1):
     """Uniform interface called by the generic runner."""
     m = load_measurements(measurements_path)
-    front = draft_trouser_front(m, num_pleats=num_pleats)
-    back = draft_trouser_back(m, front, num_pleats=num_pleats)
+    ease = load_ease(measurements_path)
+    front = draft_trouser_front(m, num_pleats=num_pleats, ease=ease)
+    back = draft_trouser_back(m, front, num_pleats=num_pleats, ease=ease)
     outline = plot_trouser_back(front, back, output_path, debug=debug, units=units,
                                 step=6)
     if outline:
