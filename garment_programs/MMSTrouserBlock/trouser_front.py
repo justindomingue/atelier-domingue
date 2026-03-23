@@ -169,18 +169,43 @@ def draft_trouser_front(m: dict[str, float], num_pleats: int = 1,
 
     # Waist sideseam (MM&S step 4): from CF on the waistline measure left by
     #   ¼ Wbg + pleat depth − sideseam relocation.
-    # The residual distance from x=0 is the hip-curve intake; the PDF says
-    # it "should be no larger than 1–1.5 cm for a shallow hip curve."
+    # The residual from x=0 is the hip-curve intake. PDF p.14/p.22 cap this
+    # at 1.5 cm ("intake max."). When the raw formula overshoots, the p.22
+    # Pattern Adaptation page widens the pleat to absorb the excess — we do
+    # the same here. Beyond ~2 cm of excess the PDF says to fit the block
+    # separately ("only to some extent"), so we flag but still cap.
+    INTAKE_MAX = 1.5
+    ADAPT_LIMIT = 2.0
     sideseam_relocation = config['sideseam_relocation']
-    waist_width = Wbg / 4 + pleat_total_intake - sideseam_relocation
-    waist_side_x = cf_waist_x - waist_width
-    if waist_side_x > 1.5:
-        print(f"WARNING: front waist intake {waist_side_x:.1f} cm exceeds "
-              f"1.5 cm — hip curve may be too pronounced. Reduce Ftw ease or "
-              f"adjust pleat/sideseam relocation.")
-    elif waist_side_x < 0:
-        print(f"WARNING: front waist intake {waist_side_x:.1f} cm is negative "
+    raw_intake = cf_waist_x - (Wbg / 4 + pleat_total_intake - sideseam_relocation)
+
+    if raw_intake < 0:
+        print(f"WARNING: front waist intake {raw_intake:.1f} cm is negative "
               f"— waist wider than hip draft. Check Wbg/Hg ratio.")
+
+    excess = max(0.0, raw_intake - INTAKE_MAX)
+    if excess > ADAPT_LIMIT:
+        print(f"WARNING: intake {raw_intake:.1f} cm exceeds max by "
+              f"{excess:.1f} cm — too large for auto-adaptation. "
+              f"Block needs separate fitting (PDF p.22).")
+    elif excess > 0:
+        print(f"Intake {raw_intake:.1f} cm > {INTAKE_MAX} cm max. "
+              f"Widening pleat by {excess:.1f} cm per PDF p.22 "
+              f"Pattern Adaptation.")
+
+    if excess > 0:
+        pleat_total_intake += excess
+        if front_dart:
+            # Dart variant: widen the dart symmetrically about the creaseline.
+            front_dart['intake'] += excess
+            front_dart['left']  -= excess / 2
+            front_dart['right'] += excess / 2
+        elif pleats:
+            # Widen the first (primary) pleat by extending its left edge.
+            pl, pr = pleats[0]
+            pleats[0] = (pl - excess, pr)
+
+    waist_side_x = min(raw_intake, INTAKE_MAX)
 
     # ==========================================================
     # Step 5: Final curves
