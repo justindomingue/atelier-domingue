@@ -211,53 +211,65 @@ def draft_trouser_front(m: dict[str, float], num_pleats: int = 1,
         cf_waist,
     )
 
-    # -- Hip curve: mid_side → waist_side_raised --
-    # MM&S step 5: "Draw the hip curve from the midpoint between crotch line
-    # and hipline to the raised waistline."
-    # Cubic Bezier keeps the lower end near-vertical (continuous with the
-    # sideseam at x=0 below) and bows gently past the hipline.
-    hip_span_y = waist_side_raised[1] - mid_side[1]
-    curve_hip = _bezier_cubic(
-        mid_side,
-        mid_side + np.array([0.0, hip_span_y / 3]),        # depart vertically
-        waist_side_raised + np.array([-0.5, -hip_span_y / 3]),
-        waist_side_raised,
-    )
-
-    # -- Crotch curve: cf_hip → crotch_pt --
-    # Starts at CF on the hipline, sweeps as a shallow curve down to the
-    # crotch point.  P2 follows the slant direction (crotch_pt → crotch_guide)
-    # so the curve stays above the guide line.
-    crotch_span_y = cf_hip[1] - crotch_pt[1]
-    slant_dir = crotch_guide - crotch_pt
-    slant_len = np.linalg.norm(slant_dir)
-    slant_unit = slant_dir / slant_len
-    curve_crotch = _bezier_cubic(
-        cf_hip,
-        cf_hip + np.array([0.0, -crotch_span_y / 2]),
-        crotch_pt + slant_unit * (slant_len / 2),
-        crotch_pt,
-    )
-
-    # -- Inseam upper: crotch_pt → knee_inseam (gentle C-curve) --
-    inseam_mid = (crotch_pt + knee_inseam) / 2
-    curve_inseam_upper = _bezier_quad(
-        crotch_pt,
-        inseam_mid + np.array([-0.3, 0.0]),  # slight inward bow toward creaseline
-        knee_inseam,
-    )
-
     # -- Sideseam upper: mid_side → knee_side (subtle shallow curve) --
-    # P2 tangent matches the straight segment knee→hem_side_top for smooth flow.
+    # Built before the hip curve so the hip curve can match its tangent at
+    # mid_side.  P2 tangent matches the straight knee→hem segment for smooth
+    # flow into the lower leg.
     side_span_y = mid_side[1] - knee_side[1]
     side_hollow = 0.15  # cm inward (toward creaseline = rightward)
-    leg_dir = knee_side - hem_side_top                    # direction of straight below
+    leg_dir = knee_side - hem_side_top
     leg_unit = leg_dir / np.linalg.norm(leg_dir)
     curve_side_upper = _bezier_cubic(
         mid_side,
         mid_side + np.array([side_hollow, -side_span_y / 3]),
         knee_side + leg_unit * (side_span_y / 3),         # arrives aligned with leg
         knee_side,
+    )
+
+    # -- Hip curve: mid_side → waist_side_raised --
+    # MM&S step 5: "Draw the hip curve from the midpoint between crotch line
+    # and hipline to the raised waistline."
+    # P1 mirrors side_upper's departure from mid_side so the two curves share
+    # a tangent there (C1 continuity — no wobble at the join).  The curve then
+    # bows gently outward toward the raised waist.
+    hip_span_y = waist_side_raised[1] - mid_side[1]
+    side_upper_tan = np.array([side_hollow, -side_span_y / 3])
+    side_upper_unit = side_upper_tan / np.linalg.norm(side_upper_tan)
+    waist_dir = waist_side_raised - mid_side
+    waist_unit = waist_dir / np.linalg.norm(waist_dir)
+    curve_hip = _bezier_cubic(
+        mid_side,
+        mid_side - side_upper_unit * (hip_span_y / 3),   # opposite of side_upper tangent
+        waist_side_raised - waist_unit * (hip_span_y / 3),
+        waist_side_raised,
+    )
+
+    # -- Inseam upper: crotch_pt → knee_inseam (gentle C-curve) --
+    # Built before the crotch curve so the crotch curve can arrive tangent to
+    # the inseam direction at crotch_pt.
+    inseam_mid = (crotch_pt + knee_inseam) / 2
+    curve_inseam_upper = _bezier_quad(
+        crotch_pt,
+        inseam_mid + np.array([-0.3, 0.0]),  # slight inward bow toward creaseline
+        knee_inseam,
+    )
+    # Tangent direction of inseam at crotch_pt (quad Bezier: P1 - P0)
+    inseam_tan = (inseam_mid + np.array([-0.3, 0.0])) - crotch_pt
+    inseam_unit = inseam_tan / np.linalg.norm(inseam_tan)
+
+    # -- Crotch curve: cf_hip → crotch_pt --
+    # Shallow curve per MM&S step 5 ("for sufficient comfort").  P1 drops along
+    # CF; P2 lies back along the inseam tangent so the curve flows smoothly into
+    # the inseam without a step.  The slant guideline (crotch_guide→crotch_pt)
+    # remains as a construction reference.
+    crotch_span_y = cf_hip[1] - crotch_pt[1]
+    crotch_span_x = crotch_pt[0] - cf_hip[0]
+    crotch_span = np.hypot(crotch_span_x, crotch_span_y)
+    curve_crotch = _bezier_cubic(
+        cf_hip,
+        cf_hip + np.array([0.0, -crotch_span_y * 0.6]),
+        crotch_pt - inseam_unit * (crotch_span * 0.35),   # arrive along inseam tangent
+        crotch_pt,
     )
 
     # -- Collect everything --
