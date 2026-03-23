@@ -231,18 +231,15 @@ def draft_trouser_front(m: dict[str, float], num_pleats: int = 1,
     # -- Hip curve: mid_side → waist_side_raised --
     # MM&S step 5: "Draw the hip curve from the midpoint between crotch line
     # and hipline to the raised waistline."
-    # P1 mirrors side_upper's departure from mid_side so the two curves share
-    # a tangent there (C1 continuity — no wobble at the join).  The curve then
-    # bows gently outward toward the raised waist.
+    # Quadratic Bezier guarantees a pure C-curve (a parabolic arc cannot
+    # inflect). Control point placed above the hipline, left of the chord,
+    # so the curve bows outward and departs mid_side near-vertically —
+    # matching side_upper's ~vertical tangent there within ~1°.
     hip_span_y = waist_side_raised[1] - mid_side[1]
-    side_upper_tan = np.array([side_hollow, -side_span_y / 3])
-    side_upper_unit = side_upper_tan / np.linalg.norm(side_upper_tan)
-    waist_dir = waist_side_raised - mid_side
-    waist_unit = waist_dir / np.linalg.norm(waist_dir)
-    curve_hip = _bezier_cubic(
+    hip_bulge = max(0.25, waist_side_x * 0.3)
+    curve_hip = _bezier_quad(
         mid_side,
-        mid_side - side_upper_unit * (hip_span_y / 3),   # opposite of side_upper tangent
-        waist_side_raised - waist_unit * (hip_span_y / 3),
+        mid_side + np.array([-hip_bulge, hip_span_y * 0.55]),
         waist_side_raised,
     )
 
