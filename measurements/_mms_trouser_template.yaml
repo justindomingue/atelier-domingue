@@ -29,3 +29,4 @@ measurements:
 # mms_ease:
 #   preset: standard
 #   btw_ease: 4.0      # override individual fields
+#   cw_reduction: 4.5  # normally per-variant (dart=4.5, pleated=4.0); set only to override

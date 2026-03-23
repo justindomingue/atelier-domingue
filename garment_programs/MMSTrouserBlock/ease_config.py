@@ -37,8 +37,11 @@ class EaseConfig:
     """
 
     # --- Derived-measurement ease ---------------------------------------
-    cw_reduction: float = 4.5
-    """PDF: 4–5 cm. Crotch width = ¼Hg − this. More → narrower crotch."""
+    cw_reduction: float | None = None
+    """PDF: 4–5 cm. Crotch width = ¼Hg − this. More → narrower crotch.
+    None = use the per-variant default from PLEAT_CONFIGS (dart=4.5,
+    pleated=4.0 — matching the PDF's per-variant charts). Set a value
+    only to override all variants uniformly."""
 
     btw_ease: float = 3.5
     """PDF: 3–4 cm. Back trouser width = ¼Hg + this. More → roomier seat."""
@@ -76,7 +79,7 @@ PRESETS: dict[str, EaseConfig] = {
     ),
     'standard': EaseConfig(),
     'relaxed': EaseConfig(
-        btw_ease=4.0, cw_reduction=4.0,
+        btw_ease=4.0,
         creaseline_shift=1.5, cb_slant=3.0, cb_height_extra=1.0,
         sideseam_intake_target=1.5, hip_verify_ease=3.5,
     ),

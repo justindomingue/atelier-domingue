@@ -25,14 +25,17 @@ from .seam_allowances import SEAM_ALLOWANCES
 # The 0-pleat variant is MM&S "Trousers with Dart" (pp. 30–33) — it carries a
 # front DART, not zero shaping. A dart converges to an apex; a pleat folds.
 PLEAT_CONFIGS = {
-    0: {'ftw_ease': 0.0, 'pleat_offsets': [],
-        'dart': {'intake': 2.0, 'length': 9.5},   # centred on creaseline; 9–10 cm
-        'cf_waist_taper': 0.5,                    # CF pulled in 0.5 cm at waist
+    0: {'ftw_ease': 0.0, 'cw_reduction': 4.5,      # dart — PDF p.30 chart (Cw=21.0)
+        'pleat_offsets': [],
+        'dart': {'intake': 2.0, 'length': 9.5},    # centred on creaseline; 9–10 cm
+        'cf_waist_taper': 0.5,                     # CF pulled in 0.5 cm at waist
         'sideseam_relocation': 1.0, 'half_ease_range': (2.5, 4.5)},
-    1: {'ftw_ease': 1.0, 'pleat_offsets': [(-3.5, 0.0)],
+    1: {'ftw_ease': 1.0, 'cw_reduction': 4.0,      # 1-pleat — PDF p.15 chart (Cw=21.5)
+        'pleat_offsets': [(-3.5, 0.0)],
         'dart': None, 'cf_waist_taper': 0.0,
         'sideseam_relocation': 1.5, 'half_ease_range': (3.5, 5.5)},
-    2: {'ftw_ease': 3.5, 'pleat_offsets': [(-3.5, 0.5), (-9.5, -7.0)],
+    2: {'ftw_ease': 3.5, 'cw_reduction': 4.0,      # 2-pleat — PDF p.24 chart (Cw=21.5)
+        'pleat_offsets': [(-3.5, 0.5), (-9.5, -7.0)],
         'dart': None, 'cf_waist_taper': 0.0,
         'sideseam_relocation': 1.0, 'half_ease_range': (5.5, 8.0)},
 }
@@ -72,7 +75,10 @@ def draft_trouser_front(m: dict[str, float], num_pleats: int = 1,
     Kh  = Is / 2 + Is / 10 - 2.0         # knee height
     Ftw = Hg / 4 + config['ftw_ease']    # front trouser width
     Fcw = Hg / 2 / 10 + 1.0              # front crotch width
-    Cw  = Hg / 4 - ease.cw_reduction     # crotch width (total)
+    # Cw: per-variant default from PLEAT_CONFIGS (dart=4.5, pleated=4.0 per
+    # PDF charts); EaseConfig.cw_reduction overrides if set explicitly.
+    cw_red = ease.cw_reduction if ease.cw_reduction is not None else config['cw_reduction']
+    Cw  = Hg / 4 - cw_red                # crotch width (total)
     Bcw = Cw - Fcw                       # back crotch width
     Btw = Hg / 4 + ease.btw_ease         # back trouser width
 
