@@ -1,0 +1,31 @@
+# MM&S Trouser Block — measurement template
+#
+# CONVENTION (this project's deviation from stock MM&S):
+#   - Circumferences (waist, seat): BODY measurements, tape snug, no ease.
+#     The drafting formulas add ease (Ftw +0-1cm, Btw +3-4cm, etc).
+#   - Lengths (side_length, inseam): FINISHED GARMENT lengths, not body-to-floor.
+#     Stock MM&S drafts to floor and hems at fitting; we bake the hem decision
+#     into the draft so the pattern comes out at final length.
+#   - hem_width: design choice — desired finished hem circumference.
+#
+# MM&S measurement locations (from Fundamentals: Menswear pp. 7-8):
+#   waist  → Wbg: 3cm above the hipbone (NOT natural waist indentation).
+#            Tape tight. Or measure a well-fitting trouser waistband.
+#   seat   → Hg: widest part of the hip, tape snug.
+#   side_length → desired finished outseam (waistband top to hem).
+#   inseam → desired finished inseam (crotch to hem).
+
+measurements:
+  unit: cm  # or: inch
+
+  waist:        # Wbg — 3cm above hipbone, tight
+  seat:         # Hg — widest hip, snug
+  side_length:  # finished outseam
+  inseam:       # finished inseam
+  hem_width:    # desired hem circumference
+
+# Optional — tune fit after toile (see ease_config.py for field docs)
+# mms_ease: standard   # or: slim | relaxed
+# mms_ease:
+#   preset: standard
+#   btw_ease: 4.0      # override individual fields
