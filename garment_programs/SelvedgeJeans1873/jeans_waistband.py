@@ -8,12 +8,15 @@ No fold — the piece is cut as a single layer.
 Seamline width breakdown (bottom to top):
   1 1/2" — inside of waistband
   1 1/2" — outside of waistband
-  Total = 3"
+  3/8"   — inside-turn allowance (selvedge wraps to bottom inside)
+  Total = 3 3/8"
 
 Seam allowances (added by visualization):
   Top:    0     — selvedge edge (no SA needed)
   Bottom: 3/8"  — seam to jeans body
   Ends:   3/8"  — for finishing
+
+Total cut width = 3 3/8" seamline + 3/8" bottom SA = 3 3/4"
 
 Length = waist measurement + 3"–4" extra on each side (for turning under ends
 and room for error).
@@ -48,7 +51,10 @@ def draft_jeans_waistband(m):
     """
     extra = 3 * INCH   # extra on each side (3" min per instructions)
     length = m['waist'] + 2 * extra
-    width = 3.0 * INCH  # 1 1/2" inside + 1 1/2" outside
+    # 1 1/2" inside + 1 1/2" outside + 3/8" inside-turn allowance so the
+    # selvedge wraps past the body seam on the inside.  With the 3/8"
+    # bottom SA this gives the source's 3 3/4" total cut width.
+    width = 3.375 * INCH
 
     center_y = 1.5 * INCH   # inside / outside division
 

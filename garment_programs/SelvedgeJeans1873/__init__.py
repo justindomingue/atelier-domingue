@@ -27,7 +27,8 @@ GARMENTS = [
              'kwargs': {'gathering_amount': 1.905}},      # 0.75" gathering for 1873
             {'module': 'jeans_yoke_1873',     'name': 'Yoke',             'cut_count': 2},
             {'module': 'jeans_fly_1873',      'name': 'Fly',              'cut_count': 2, 'grain_axis': 'y', 'interfacing': True},
-            {'module': 'jeans_back_pocket',   'name': 'Back Pocket',      'cut_count': 2, 'grain_axis': 'y'},
+            # Historically the 1873 had only one back pocket (right side).
+            {'module': 'jeans_back_pocket',   'name': 'Back Pocket',      'cut_count': 1, 'grain_axis': 'y'},
             {'module': 'jeans_back_cinch',    'name': 'Cinch Belt',       'cut_count': 1, 'selvedge_edge': 'bottom'},
             # --- Pocketing fabric (last — cut from separate material) ---
             {'module': 'jeans_front_pocket_bag',  'name': 'Pocket Bag',           'cut_count': 1, 'fabric': 'pocketing'},

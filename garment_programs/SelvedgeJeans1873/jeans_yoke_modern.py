@@ -180,9 +180,13 @@ def draft_jeans_yoke_modern(m, front, back):
     waist_curve = _bezier_through_4(
         pt1_rot, dart1_waist, dart2_waist, back_waist_rot)
 
-    # Grain line — parallel to the outseam (side-seam edge), through the
-    # midpoint of the yoke.  The outseam runs from yoke_side_rot to pt1_rot.
-    grain_dir = pt1_rot - yoke_side_rot
+    # Grain line — parallel to the side seam (unrotated, pre-slash-and-spread).
+    # This matches the back panel's side-seam grain for consistent shrinkage
+    # across the yoke seam.
+    # Note: the source diagram shows grain perpendicular to the center-segment
+    # bottom edge; standard convention is parallel to CB.  We use the unrotated
+    # side seam here per user preference (matches back-draft x-axis exactly).
+    grain_dir = pt1 - yoke_side
     grain_dir = grain_dir / np.linalg.norm(grain_dir)
     yoke_center = (pt1_rot + back_waist_rot + yoke_side_rot + yoke_seat_rot) / 4
     grain_top = yoke_center + grain_dir * 1.2 * INCH
