@@ -1,6 +1,8 @@
 GARMENTS = [
     {
-        'name': 'Flat-Front Trouser (MM&S)',
+        # MM&S pp. 30–33: the 0-pleat block carries a 2 cm front dart on the
+        # creaseline — it is "Trousers with Dart", not a true flat front.
+        'name': 'Trouser with Dart (MM&S)',
         'pieces': [
             {'module': 'trouser_front', 'name': 'Front Panel', 'cut_count': 2, 'kwargs': {'num_pleats': 0}},
             {'module': 'trouser_back',  'name': 'Back Panel',  'cut_count': 2, 'kwargs': {'num_pleats': 0}},

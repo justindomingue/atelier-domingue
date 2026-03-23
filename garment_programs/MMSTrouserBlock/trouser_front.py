@@ -22,12 +22,21 @@ from .seam_allowances import SEAM_ALLOWANCES
 
 # -- Pleat configuration by count ---------------------------------------------
 # Each pleat_offsets entry is (left_offset, right_offset) relative to creaseline_x.
+# The 0-pleat variant is MM&S "Trousers with Dart" (pp. 30–33) — it carries a
+# front DART, not zero shaping. A dart converges to an apex; a pleat folds.
 PLEAT_CONFIGS = {
-    0: {'ftw_ease': 0.0, 'pleat_offsets': [],                              'sideseam_relocation': 2.0, 'half_ease_range': (2.5, 4.5)},
-    1: {'ftw_ease': 1.0, 'pleat_offsets': [(-3.5, 0.0)],                   'sideseam_relocation': 1.5, 'half_ease_range': (3.5, 5.5)},
-    2: {'ftw_ease': 3.5, 'pleat_offsets': [(-3.5, 0.5), (-9.5, -7.0)],     'sideseam_relocation': 1.0, 'half_ease_range': (5.5, 8.0)},
+    0: {'ftw_ease': 0.0, 'pleat_offsets': [],
+        'dart': {'intake': 2.0, 'length': 9.5},   # centred on creaseline; 9–10 cm
+        'cf_waist_taper': 0.5,                    # CF pulled in 0.5 cm at waist
+        'sideseam_relocation': 1.0, 'half_ease_range': (2.5, 4.5)},
+    1: {'ftw_ease': 1.0, 'pleat_offsets': [(-3.5, 0.0)],
+        'dart': None, 'cf_waist_taper': 0.0,
+        'sideseam_relocation': 1.5, 'half_ease_range': (3.5, 5.5)},
+    2: {'ftw_ease': 3.5, 'pleat_offsets': [(-3.5, 0.5), (-9.5, -7.0)],
+        'dart': None, 'cf_waist_taper': 0.0,
+        'sideseam_relocation': 1.0, 'half_ease_range': (5.5, 8.0)},
 }
-PLEAT_NAMES = {0: 'Flat-Front', 1: '1-Pleat', 2: '2-Pleat'}
+PLEAT_NAMES = {0: 'Dart', 1: '1-Pleat', 2: '2-Pleat'}
 
 
 
@@ -97,12 +106,34 @@ def draft_trouser_front(m: dict[str, float], num_pleats: int = 1,
     hem_inseam_guide_x = hem_inseam_x - 0.5
 
     # Pleat edges: (left, right) offsets from creaseline_x
-    pleats = [(creaseline_x + l, creaseline_x + r) for l, r in config['pleat_offsets']]
-    pleat_total_intake = sum(r - l for l, r in pleats)
+    pleats = [(creaseline_x + lo, creaseline_x + ro)
+              for lo, ro in config['pleat_offsets']]
+    pleat_intake = sum(ro - lo for lo, ro in pleats)
 
-    # Centre front (CF): Ftw + 0.5 on hipline, angled to Ftw at waistline
-    cf_hip_x   = Ftw + 0.5   # 0.5 cm ease at hip
-    cf_waist_x = Ftw          # CF at waist sits on the Ftw perpendicular
+    # Front dart (0-pleat / "Trousers with Dart" variant only):
+    # centred on the creaseline, converges to an apex dart_length below waist.
+    dart_spec = config['dart']
+    if dart_spec:
+        dart_intake = dart_spec['intake']
+        dart_length = dart_spec['length']
+        front_dart = {
+            'left':  creaseline_x - dart_intake / 2,
+            'right': creaseline_x + dart_intake / 2,
+            'apex':  np.array([creaseline_x, waist_y - dart_length]),
+            'intake': dart_intake,
+        }
+    else:
+        dart_intake = 0.0
+        front_dart = None
+
+    # Total front-waist shaping intake (pleats + dart) — drives the waist
+    # formula here and the back-pattern waist-transfer subtraction.
+    pleat_total_intake = pleat_intake + dart_intake
+
+    # Centre front (CF): Ftw + 0.5 on hipline, angled to Ftw at waistline.
+    # The dart variant additionally tapers CF inward 0.5 cm at the waist.
+    cf_hip_x   = Ftw + 0.5
+    cf_waist_x = Ftw - config['cf_waist_taper']
 
     # Front crotch point: Fcw measured right of the Ftw perpendicular on the
     # crotch line (MM&S step 2). The inseam guideline is a drawing aid only —
@@ -269,6 +300,7 @@ def draft_trouser_front(m: dict[str, float], num_pleats: int = 1,
         'mid_hip_crotch_y':  mid_hip_crotch_y,
         'hem_half':          hem_half,
         'pleats':            pleats,
+        'front_dart':        front_dart,
     }
 
     curves = {
@@ -412,8 +444,24 @@ def plot_trouser_front(draft, output_path='Logs/trouser_front.svg',
             p = pts[pt_name]
             ax.plot(p[0], p[1], 'x', color='gray', markersize=4)
 
-    # Pleat symbols: loop over all pleats (always shown; empty for 0-pleat)
+    # Front dart (Trousers-with-Dart variant): two legs from the waistline
+    # converging to the apex, plus a centre line.
     waist_crv = crv['waistline']
+    dart = con['front_dart']
+    if dart:
+        dy_l = np.interp(dart['left'],  waist_crv[:, 0], waist_crv[:, 1])
+        dy_r = np.interp(dart['right'], waist_crv[:, 0], waist_crv[:, 1])
+        apex = dart['apex']
+        ax.plot([dart['left'], apex[0], dart['right']],
+                [dy_l, apex[1], dy_r], 'k-', linewidth=0.8)
+        ax.plot([apex[0], apex[0]], [apex[1], max(dy_l, dy_r)],
+                'k-', linewidth=0.5, alpha=0.5)
+        if debug:
+            ax.annotate(f"dart {dart['intake']:.1f}", apex,
+                        textcoords='offset points', xytext=(4, -8),
+                        fontsize=6, color='black')
+
+    # Pleat symbols: loop over all pleats (empty for dart variant)
     chev_h = 1.5               # chevron height
     drop   = 6.0               # vertical lines extend below waist curve
     for pl, pr in con['pleats']:
