@@ -4,8 +4,17 @@ Centralises every place the Müller & Sohn draft gives a *range* rather than
 a fixed value, so toile-fitting adjustments live in one immutable record
 instead of scattered module constants.
 
-YAML hook: add an optional ``ease:`` block to a measurements file and
-``load_ease`` will override the matching defaults.
+YAML hook — three forms accepted under the ``mms_ease`` key::
+
+    # 1. Omit entirely → 'standard' preset (range midpoints)
+
+    # 2. Named preset
+    mms_ease: relaxed
+
+    # 3. Preset with per-field overrides
+    mms_ease:
+      preset: relaxed
+      cb_slant: 2.0        # keep the rest of 'relaxed' but tighten CB slant
 """
 from __future__ import annotations
 
@@ -16,10 +25,11 @@ import yaml
 
 @dataclass(frozen=True)
 class EaseConfig:
-    """Ease and fit parameters for the MM&S 1-pleat trouser block.
+    """Ease and fit parameters for the MM&S trouser block.
 
     Defaults are range midpoints from Müller & Sohn *Fundamentals* pp. 13–19.
-    Adjust after toile fitting.
+    Adjust after toile fitting, or pick a preset (``slim``/``standard``/
+    ``relaxed``) as a starting point.
 
     ``ftw_ease`` is intentionally *not* here — it lives in ``PLEAT_CONFIGS``
     because the PDF ties front-width ease to pleat count (0/1/2-pleat each
@@ -54,27 +64,66 @@ class EaseConfig:
 _FIELD_NAMES = {f.name for f in fields(EaseConfig)}
 
 
-def load_ease(yaml_path: str) -> EaseConfig:
-    """Return an ``EaseConfig`` from the optional ``ease:`` block in *yaml_path*.
+# Each preset encodes a coherent fit intent — not simply "all low end" or
+# "all high end". Note e.g. *slim* pairs a low btw_ease (tighter seat) with
+# a HIGH cw_reduction (narrower crotch), and a straighter CB (less seat
+# length) since a closer fit needs less sitting ease.
+PRESETS: dict[str, EaseConfig] = {
+    'slim': EaseConfig(
+        btw_ease=3.0, cw_reduction=5.0,
+        creaseline_shift=1.0, cb_slant=2.0, cb_height_extra=0.0,
+        sideseam_intake_target=1.0, hip_verify_ease=2.5,
+    ),
+    'standard': EaseConfig(),
+    'relaxed': EaseConfig(
+        btw_ease=4.0, cw_reduction=4.0,
+        creaseline_shift=1.5, cb_slant=3.0, cb_height_extra=1.0,
+        sideseam_intake_target=1.5, hip_verify_ease=3.5,
+    ),
+}
 
-    Missing block → all defaults. Unknown keys raise ``ValueError`` so typos
-    fail loudly instead of being silently ignored.
+
+def load_ease(yaml_path: str) -> EaseConfig:
+    """Return an ``EaseConfig`` from the optional ``mms_ease`` block.
+
+    Accepts a bare preset name, or a mapping with an optional ``preset``
+    key plus per-field overrides. Unknown presets or field names raise
+    ``ValueError`` so typos fail loudly.
     """
     with open(yaml_path) as f:
         payload = yaml.safe_load(f) or {}
 
-    raw = payload.get('ease')
-    if not raw:
+    block = payload.get('mms_ease')
+    if block is None:
         return EaseConfig()
-    if not isinstance(raw, dict):
-        raise ValueError(f"{yaml_path}: 'ease' must be a mapping")
 
-    unknown = set(raw) - _FIELD_NAMES
+    if isinstance(block, str):
+        if block not in PRESETS:
+            raise ValueError(
+                f"{yaml_path}: unknown mms_ease preset {block!r}; "
+                f"choose from {sorted(PRESETS)}"
+            )
+        return PRESETS[block]
+
+    if not isinstance(block, dict):
+        raise ValueError(
+            f"{yaml_path}: mms_ease must be a preset name or a mapping"
+        )
+
+    overrides = dict(block)
+    preset_name = overrides.pop('preset', 'standard')
+    if preset_name not in PRESETS:
+        raise ValueError(
+            f"{yaml_path}: unknown mms_ease preset {preset_name!r}; "
+            f"choose from {sorted(PRESETS)}"
+        )
+    base = PRESETS[preset_name]
+
+    unknown = set(overrides) - _FIELD_NAMES
     if unknown:
         raise ValueError(
-            f"{yaml_path}: unknown ease key(s) {sorted(unknown)}; "
+            f"{yaml_path}: unknown mms_ease key(s) {sorted(unknown)}; "
             f"valid keys are {sorted(_FIELD_NAMES)}"
         )
 
-    overrides = {k: float(v) for k, v in raw.items()}
-    return replace(EaseConfig(), **overrides)
+    return replace(base, **{k: float(v) for k, v in overrides.items()})
