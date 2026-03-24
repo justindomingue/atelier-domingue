@@ -144,6 +144,13 @@ def plot_jeans_fly_1873(fly, output_path='Logs/jeans_fly_1873.svg',
                 textcoords="offset points", xytext=(0, 5),
                 fontsize=7, color='dimgray', ha='center')
 
+    # Fly-stop notch on the outer edge at curve_start — marks where the
+    # straight fly stitching ends and the bottom curve begins. Aligns with
+    # the front panel's fly-extension endpoint (pt 8) during construction.
+    from garment_programs.plot_utils import draw_notch
+    draw_notch(ax, np.array([pts['outer_top'], pts['curve_start']]),
+               pts['curve_start'], SA['outer'], scale=s)
+
     # Fold label
     mid_y = (pts['fold_bottom'][1] + pts['fold_top'][1]) / 2
     ax.annotate('FOLD', (pts['fold_bottom'][0] - 0.2 * s, mid_y),

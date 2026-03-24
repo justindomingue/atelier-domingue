@@ -374,8 +374,13 @@ def plot_jeans_front(draft, output_path='Logs/jeans_front.svg', debug=False, uni
         #   hip_below(pocket_lower→4) → 4→0 → 0→0' → 0'→3' → inseam(3'→6)
         #   → crotch(6→8) → 8→7' → rise_above(7'→pocket_upper)
         #   → opening(pocket_upper→pocket_lower)
-        sa_edges = [
-            (hip_below_facing,                                       SA_SIDE, SL['side']),
+        # Skip hip_below_facing when degenerate (pocket_lower coincides with
+        # pt 4 → single point → can't offset/miter → SA gap at the corner).
+        # The opening curve will then miter directly against the 4→0 edge.
+        sa_edges = []
+        if len(hip_below_facing) >= 2:
+            sa_edges.append((hip_below_facing,                       SA_SIDE, SL['side']))
+        sa_edges += [
             (np.array([pts['4'], pts['0']]),                         SA_SIDE, SL['side']),
             (np.array([pts['0'], pts["0'"]]),                        SA_HEM, SL['hem']),
             (np.array([pts["0'"], pts["3'"]]),                       SA_INSEAM, SL['inseam']),
