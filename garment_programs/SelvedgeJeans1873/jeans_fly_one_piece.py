@@ -13,7 +13,7 @@ Layout (left to right):
   Total width = 4 1/2"
 
 Length = 2 × fly_extension + 2"
-  where fly_extension is the fly extension segment (7'→8) from the front panel.
+  where fly_extension is the CF fly line (7'→fly_end) from the front panel.
 """
 import numpy as np
 import matplotlib.pyplot as plt
@@ -45,7 +45,12 @@ def draft_jeans_fly_one_piece(m, front):
     -------
     dict with keys: points, curves, construction, metadata
     """
-    fly_extension = np.linalg.norm(front['points']["7'"] - front['points']['8'])
+    # Fly extension = "the little fly extension" per source — the CF fly
+    # line 7'→fly_end, NOT the waist curve. Our earlier transcription
+    # incorrectly added "(rise curve from 1' to 7')"; the actual source
+    # text just says "the little fly extension."
+    fly_end = front['construction']['fly_end']
+    fly_extension = np.linalg.norm(front['points']["7'"] - fly_end)
     length = 2 * fly_extension + 2 * INCH
     width = 4.5 * INCH
 

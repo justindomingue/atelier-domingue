@@ -81,7 +81,10 @@ def draft_jeans_front(m: dict[str, float]) -> DraftData:
     fly_dir = pt8 - pt7_adj
     fly_dir_norm = fly_dir / np.linalg.norm(fly_dir)
     fly_start = pt7_adj
-    fly_end = pt8 + fly_dir_norm * 5
+    # Fly line extends 1" past pt8 (= 1" below the hip line, since pt8 sits
+    # at pt4's vertical level). Source says "extend slightly beyond" with no
+    # specific distance.
+    fly_end = pt8 + fly_dir_norm * (1 * INCH)
 
     # Step 5: Curves
     # 1. Side hip curve (1' -> 4)
@@ -96,6 +99,10 @@ def draft_jeans_front(m: dict[str, float]) -> DraftData:
     )
 
     # 2. Front rise / waist curve (1' -> 7')
+    # NOTE: "rise" here is the WAIST curve — runs ACROSS the top from the
+    # sideseam corner (1') to the CF corner (7'). It is NOT the CF-rise
+    # (vertical fly edge) despite the name. The source calls it "front rise
+    # curve"; named for its arc shape, not pattern-making convention.
     # Both endpoints tangent in the −y direction (toward the side seam).
     # This guarantees a C-curve with no inflection: the x-component of the
     # Bézier is the product of two non-negative Bernstein terms → monotone.
@@ -111,8 +118,17 @@ def draft_jeans_front(m: dict[str, float]) -> DraftData:
     )
 
     # 3. Crotch curve (8 -> 9 -> 6)
-    crotch_ctrl = 2 * pt9 - 0.5 * (pt8 + pt6)
-    curve_crotch = _bezier_quad(pt8, crotch_ctrl, pt6)
+    # Starts at pt8 per the source diagram — the fly_end extension past pt8
+    # is a dashed CONSTRUCTION reference only, not on the cut outline.
+    # P1 lies along the fly-line direction so the curve departs pt8 tangent
+    # to the incoming 7'→8 segment; P2 pulls through pt9.
+    crotch_span = np.linalg.norm(pt6 - pt8)
+    curve_crotch = _bezier_cubic(
+        pt8,
+        pt8 + fly_dir_norm * (crotch_span * 0.3),
+        2 * pt9 - 0.5 * (pt8 + pt6),
+        pt6,
+    )
 
     # 4. Inseam curve (6 -> 3')
     dir_6_to_3 = pt3_drop - pt6
@@ -219,6 +235,20 @@ def plot_jeans_front(draft, output_path='Logs/jeans_front.svg', debug=False, uni
         rise_above_facing = _curve_from_arclength(curves['rise'], _upper_dist)
         pcurves_sa = {k: v * s for k, v in pocket['curves'].items()}
 
+    # Centre front: straight 7'→8 (the fly line). The fly_end extension
+    # past pt8 is a construction reference only — not on the seamline.
+    # Crotch curve starts at pt8.
+    #
+    # SA split: the fly piece's bottom curve wraps past pt8 to fly_end,
+    # so SA_FLY (3/4") extends that far along the crotch before narrowing
+    # to SA_CROTCH (3/8"). The seamline is unchanged; only the SA widens
+    # through this region.
+    _cf_straight = np.array([pts['8'], pts["7'"]])  # CW: 8 → 7'
+    _fly_wrap = np.linalg.norm(pts['8'] - con['fly_end'])  # ≈ 1"
+    _crotch_fly = _curve_up_to_arclength(curves['crotch'], _fly_wrap)
+    _crotch_body = _curve_from_arclength(curves['crotch'], _fly_wrap)
+    _fly_stop = _crotch_fly[-1]  # fly terminus on crotch curve = notch
+
     # --- Pattern outline: curves ---
     c = curves
     if debug:
@@ -240,12 +270,14 @@ def plot_jeans_front(draft, output_path='Logs/jeans_front.svg', debug=False, uni
         else:
             ax.plot(c['hip'][:, 0], c['hip'][:, 1], 'k-', linewidth=1.5)
             ax.plot(c['rise'][:, 0], c['rise'][:, 1], 'k-', linewidth=1.5)
-        # Curves unaffected by cutout
+        # Curves unaffected by cutout — full crotch from pt8 (seamline)
         ax.plot(c['crotch'][:, 0], c['crotch'][:, 1], 'k-', linewidth=1.5)
         ax.plot(c['inseam'][:, 0], c['inseam'][:, 1], 'k-', linewidth=1.5)
+        # Straight CF: 7' → 8
+        ax.plot(_cf_straight[:, 0], _cf_straight[:, 1], 'k-', linewidth=1.5)
 
     # --- Pattern outline: straight segments ---
-    for a, b in [('4', '0'), ("7'", '8'), ("3'", "0'"), ("0'", '0')]:
+    for a, b in [('4', '0'), ("3'", "0'"), ("0'", '0')]:
         ax.plot([pts[a][0], pts[b][0]], [pts[a][1], pts[b][1]],
                 'k-', linewidth=1.5)
 
@@ -361,14 +393,8 @@ def plot_jeans_front(draft, output_path='Logs/jeans_front.svg', debug=False, uni
     SA_WAIST  = SA['waist']
     SA_FACING = SA['facing']
 
-    # SA transition: 3/4" kicks in 1/2" before pt8 on the crotch curve
-    _crotch_rev = curves['crotch'][::-1]          # scaled, pt6 → pt8
-    _crotch_len = _curve_length(_crotch_rev)
-    _split      = 0.5 * INCH * s
-    _crotch_body = _curve_up_to_arclength(_crotch_rev, _crotch_len - _split)
-    _crotch_end  = _curve_up_to_arclength(_crotch_rev[::-1], _split)[::-1]
-
     # Build edges: (polyline, sa_distance_cm)
+    # _crotch_body and _cf_straight computed above (before seamline plot).
     if not debug and pocket is not None:
         # CW winding with facing area removed:
         #   hip_below(pocket_lower→4) → 4→0 → 0→0' → 0'→3' → inseam(3'→6)
@@ -385,9 +411,9 @@ def plot_jeans_front(draft, output_path='Logs/jeans_front.svg', debug=False, uni
             (np.array([pts['0'], pts["0'"]]),                        SA_HEM, SL['hem']),
             (np.array([pts["0'"], pts["3'"]]),                       SA_INSEAM, SL['inseam']),
             (curves['inseam'][::-1],                                 SA_INSEAM, SL['inseam']),
-            (_crotch_body,                                           SA_CROTCH, SL['crotch']),
-            (_crotch_end,                                            SA_FLY, SL['fly']),
-            (np.array([pts['8'], pts["7'"]]),                        SA_FLY, SL['fly']),
+            (_crotch_body[::-1],                                     SA_CROTCH, SL['crotch']),
+            (_crotch_fly[::-1],                                      SA_FLY, SL['fly']),
+            (_cf_straight,                                           SA_FLY, SL['fly']),
             (rise_above_facing[::-1],                                SA_WAIST, SL['waist']),
             (pcurves_sa['opening'],                                  SA_FACING, SL['facing']),
         ]
@@ -399,9 +425,9 @@ def plot_jeans_front(draft, output_path='Logs/jeans_front.svg', debug=False, uni
             (np.array([pts['0'], pts["0'"]]),                        SA_HEM, SL['hem']),
             (np.array([pts["0'"], pts["3'"]]),                       SA_INSEAM, SL['inseam']),
             (curves['inseam'][::-1],                                 SA_INSEAM, SL['inseam']),
-            (_crotch_body,                                           SA_CROTCH, SL['crotch']),
-            (_crotch_end,                                            SA_FLY, SL['fly']),
-            (np.array([pts['8'], pts["7'"]]),                        SA_FLY, SL['fly']),
+            (_crotch_body[::-1],                                     SA_CROTCH, SL['crotch']),
+            (_crotch_fly[::-1],                                      SA_FLY, SL['fly']),
+            (_cf_straight,                                           SA_FLY, SL['fly']),
             (curves['rise'][::-1],                                   SA_WAIST, SL['waist']),
         ]
     cut_outline = draw_seam_allowance(ax, sa_edges, scale=s, label_sas=not debug,
@@ -425,6 +451,10 @@ def plot_jeans_front(draft, output_path='Logs/jeans_front.svg', debug=False, uni
     draw_notch(ax, np.array([pts["0'"], pts["3'"]]), pts["3'"], SA_INSEAM, scale=s)
     draw_notch(ax, np.array([pts['4'], pts['0']]), side_hem_pt, SA_SIDE, scale=s)
     draw_notch(ax, np.array([pts["0'"], pts["3'"]]), inseam_hem_pt, SA_INSEAM, scale=s)
+
+    # --- Fly-stop notch: at the bottom of the straight CF edge ---
+    # Marks where the fly opening ends and the crotch seam begins.
+    draw_notch(ax, _cf_straight, _fly_stop, SA_FLY, scale=s)
 
     # --- Grainline and piece label (pattern mode only) ---
     if not debug:

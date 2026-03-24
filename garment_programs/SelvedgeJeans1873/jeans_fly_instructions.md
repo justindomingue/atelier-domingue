@@ -36,8 +36,9 @@ for any type of jean after approximately 1877.
 
 ### Steps
 
-1. **Measure the fly extension** on the front pattern piece (the rise curve
-   from 1\* to 7\*).
+1. **Measure the fly extension** on the front pattern piece — the "little fly
+   extension" (the CF edge from 7′ through 8 to fly_end, *not* the waist
+   curve 1′→7′).
 
 2. **Calculate the fly length:** double the fly extension measurement, then add
    **2"** for ease.

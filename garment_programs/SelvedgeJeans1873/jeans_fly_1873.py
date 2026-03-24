@@ -44,8 +44,13 @@ def draft_jeans_fly_1873(m, front):
     -------
     dict with keys: points, curves, construction, metadata
     """
-    # Fly height = length of the straight fly line (7' → 8)
-    fly_height = np.linalg.norm(front['points']["7'"] - front['points']['8'])
+    # Fly height = the front's fly-line length (7' → fly_end). The source
+    # says "draw the construction line parallel to the front fly line" —
+    # the fly piece's height matches that line, not the waist edge.
+    # NOTE: front['curves']['rise'] is the WAIST curve (1'→7'), not the
+    # CF-rise; do not add it here.
+    fly_end = front['construction']['fly_end']
+    fly_height = np.linalg.norm(front['points']["7'"] - fly_end)
     half_width = 1.75 * INCH   # 1 3/4" from seam line
     inlay = 1.0 * INCH         # extra at top to be trimmed
 
@@ -54,8 +59,10 @@ def draft_jeans_fly_1873(m, front):
     fold_bottom = np.array([0.0, 0.0])
     fold_top = np.array([0.0, fly_height + inlay])
     outer_top = np.array([half_width, fly_height + inlay])
-    # The outer edge runs straight down to where the bottom curve begins
-    curve_start = np.array([half_width, fly_height * 0.15])
+    # Bottom curve starts where the fly line meets the hip level (pt8 on
+    # the front) — i.e., 1" from the bottom (the fly_end extension past pt8).
+    curve_start_y = np.linalg.norm(front['points']['8'] - fly_end)
+    curve_start = np.array([half_width, curve_start_y])
 
     # Bottom curve from curve_start back to the fold line
     curve_bottom = _bezier_cubic(
