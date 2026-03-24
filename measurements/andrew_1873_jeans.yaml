@@ -1,11 +1,12 @@
 # Final garment measurements for easy-fitting selvedge denim
 # (not body scan — ease already included)
 #
-# These are low-rise JEANS measurements (waistband at hip bone). For MM&S
-# trousers, use a separate file with outseam measured from the higher
-# trouser-waistband position (~3cm above hipbone).
+# The 1873 draft sits at the NATURAL WAIST (historical convention), not
+# at the hip bone. side_length must be measured from natural waist to hem.
+# TODO: measure Andrew's actual natural-waist outseam (currently estimated
+# at 40.5" to give an ~10" rise).
 measurements:
-  side_length: 36.00 # in - outside leg, jeans waistband to hem
+  side_length: 40.50 # in - natural-waist to hem (1873 convention)
   inseam: 29.00 # in - crotch to hem
   waist: 39.00 # in - pant waist circumference
   seat: 44.00 # in - hip/seat circumference (fullest part)
