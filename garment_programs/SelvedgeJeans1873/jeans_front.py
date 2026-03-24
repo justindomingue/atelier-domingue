@@ -456,6 +456,40 @@ def plot_jeans_front(draft, output_path='Logs/jeans_front.svg', debug=False, uni
     # Marks where the fly opening ends and the crotch seam begins.
     draw_notch(ax, _cf_straight, _fly_stop, SA_FLY, scale=s)
 
+    # --- 1873 fly outline overlay (construction reference) ---
+    # Shows where the fly piece sits on the front: fold edge along the CF
+    # seamline (7'→fly_end), outer edge 1.75" perpendicular into the panel,
+    # bottom curve wrapping from the outer edge back to fly_end.
+    _fly_dir = con['fly_end'] - pts["7'"]
+    _fly_unit = _fly_dir / np.linalg.norm(_fly_dir)
+    _fly_perp = np.array([-_fly_unit[1], _fly_unit[0]])  # rotate 90°
+    # Point perp into the panel interior (toward sideseam, +y direction)
+    if _fly_perp[1] < 0:
+        _fly_perp = -_fly_perp
+    _hw = 1.75 * INCH * s
+    _f_top = pts["7'"]
+    _f_bot = con['fly_end']
+    # Outer edge extends up to the waistband seamline: find the point on
+    # the rise curve (1'→7') at ~1.75" arclength from the 7' end.
+    _f_outtop = _point_at_arclength(curves['rise'][::-1], _hw)
+    # curve_start at |8−fly_end| from bottom (matches jeans_fly_1873.py)
+    _cs_y = np.linalg.norm(pts['8'] - con['fly_end'])
+    _f_cs = _f_bot + _fly_unit * (-_cs_y) + _fly_perp * _hw
+    # Bottom curve in front coords (same cubic as the fly piece)
+    _fcurve = _bezier_cubic(
+        _f_cs,
+        _f_bot + _fly_perp * _hw,
+        _f_bot + _fly_perp * (_hw * 0.3),
+        _f_bot,
+    )
+    FLY_OV = dict(color='red', linewidth=0.7, alpha=0.6, zorder=3)
+    # Open at top: fold edge + outer edge (to waist) + bottom curve only.
+    ax.plot([_f_top[0], _f_bot[0]], [_f_top[1], _f_bot[1]], **FLY_OV)   # fold
+    ax.plot([_f_outtop[0], _f_cs[0]], [_f_outtop[1], _f_cs[1]], **FLY_OV)  # outer
+    ax.plot(_fcurve[:, 0], _fcurve[:, 1], **FLY_OV)                     # bottom curve
+    ax.annotate('fly (1873)', _f_cs + _fly_perp * (0.3 * s),
+                fontsize=6, color='red', alpha=0.7, ha='left', va='bottom')
+
     # --- Grainline and piece label (pattern mode only) ---
     if not debug:
         from garment_programs.plot_utils import draw_grainline, draw_piece_label
