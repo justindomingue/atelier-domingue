@@ -1,10 +1,12 @@
 # Final garment measurements for easy-fitting selvedge denim
 # (not body scan — ease already included)
-# TODO: verify circumferences for MM&S trouser block — MM&S expects body-snug
-# measurements (no ease); the draft formulas add ease themselves.
+#
+# These are low-rise JEANS measurements (waistband at hip bone). For MM&S
+# trousers, use a separate file with outseam measured from the higher
+# trouser-waistband position (~3cm above hipbone).
 measurements:
-  side_length: 37.50 # in - outside leg, waist to floor (includes waistband)
-  inseam: 25.00 # in - TODO: remeasure — cropped-jean length, too short for trousers (~30-32" expected)
+  side_length: 36.00 # in - outside leg, jeans waistband to hem
+  inseam: 29.00 # in - crotch to hem
   waist: 39.00 # in - pant waist circumference
   seat: 44.00 # in - hip/seat circumference (fullest part)
   waistband_width: 1.5 # in - waistband width
