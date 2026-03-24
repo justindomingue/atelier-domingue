@@ -1,0 +1,35 @@
+# Andrew — MM&S trouser measurements
+# Derived from andrew_1873_jeans.yaml where possible; TODOs mark values
+# that need direct measurement at the MM&S locations (Fundamentals pp. 7-8).
+
+measurements:
+  unit: inch
+
+  # Wbg — 3cm above hipbone, tape tight.
+  # Andrew's jeans "pant waist" (39") sits at roughly this height, but the
+  # jeans YAML says "ease already included." Body-snug estimate: 38".
+  # TODO: measure tight at 3cm above hipbone to confirm.
+  waist: 38.0
+
+  # Hg — widest hip, snug. Jeans seat = 44" with ease; body-snug estimate ~43".
+  # TODO: measure snug at widest hip.
+  seat: 43.0
+
+  # Finished outseam from trouser waistband (Wbg height) to hem.
+  # Jeans outseam is 36" from hip-bone level; trouser waistband sits ~1-2"
+  # higher. Bumped further to give a 9.5" rise (MM&S Size-50 ref: 10"),
+  # since 8" would be unusually low for a classic trouser.
+  # TODO: measure from 3cm-above-hipbone to desired hem.
+  side_length: 39.5
+
+  # Finished inseam. Jeans inseam is 29"; classic trousers typically run
+  # slightly longer for more break. 30" gives slight break.
+  # TODO: confirm desired trouser length.
+  inseam: 30.0
+
+  # Design choice — hem circumference. Jeans use 18"; classic 1-pleat
+  # trousers typically 17-19". Keeping 18".
+  hem_width: 18.0
+
+# Optional fit tuning — uncomment after toile (see ease_config.py)
+# mms_ease: standard   # or: slim | relaxed
