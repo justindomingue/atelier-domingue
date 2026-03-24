@@ -27,6 +27,7 @@ from .jeans_front import (
     INCH, load_measurements, draft_jeans_front,
     _curve_length, _annotate_segment,
 )
+from .seam_allowances import FLY_HALF_WIDTH
 
 
 # -- Drafting ----------------------------------------------------------------
@@ -56,8 +57,7 @@ def draft_jeans_fly_one_piece(m, front):
 
     from .seam_allowances import SEAM_ALLOWANCES
     sa = SEAM_ALLOWANCES['fly_one_piece']['side']
-    front_half = 1.75 * INCH    # front half width
-    fold_x = sa + front_half    # fold line position
+    fold_x = sa + FLY_HALF_WIDTH    # fold line position
 
     bl = np.array([0.0, 0.0])
     br = np.array([width, 0.0])

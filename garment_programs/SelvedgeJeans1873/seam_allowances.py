@@ -10,6 +10,8 @@ from garment_programs.seam_types import SEAM_TYPES, INCH
 S = SEAM_TYPES  # short alias for readability
 
 YOKE_SEAT_DEPTH = 2.75 * INCH   # yoke point along seat_upper curve from back_waist
+FLY_HALF_WIDTH = 1.75 * INCH    # 1 3/4" from CF seam line — shared by both fly variants and the front-panel overlay
+FLY_CURVE_PULL = 0.3            # Bezier P2 pull ratio for the fly bottom curve
 
 SEAM_ALLOWANCES = {
     'front': {

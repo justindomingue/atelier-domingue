@@ -48,6 +48,8 @@ def _point_at_arclength(curve, dist):
 
 def _curve_up_to_arclength(curve, dist):
     """Sub-polyline from ``curve[0]`` to the point at *dist* arc-length."""
+    if dist <= 0:
+        return curve[:1].copy()
     diffs = np.diff(curve, axis=0)
     seg_lengths = np.sqrt(diffs[:, 0]**2 + diffs[:, 1]**2)
     cum = np.concatenate([[0.0], np.cumsum(seg_lengths)])

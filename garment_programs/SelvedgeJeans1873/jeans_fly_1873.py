@@ -20,12 +20,13 @@ from pathlib import Path
 from garment_programs.core.runtime import cache_draft, resolve_measurements
 from garment_programs.plot_utils import (
     SEAMLINE, CUTLINE, draw_seam_allowance, display_scale, setup_figure, finalize_figure,
+    draw_notch, draw_grainline, draw_piece_label,
 )
 from .jeans_front import (
     INCH, load_measurements, draft_jeans_front,
     _bezier_cubic, _curve_length, _annotate_segment,
 )
-from .seam_allowances import SEAM_ALLOWANCES, SEAM_LABELS
+from .seam_allowances import SEAM_ALLOWANCES, SEAM_LABELS, FLY_HALF_WIDTH, FLY_CURVE_PULL
 
 
 # -- Drafting ----------------------------------------------------------------
@@ -51,7 +52,7 @@ def draft_jeans_fly_1873(m, front):
     # CF-rise; do not add it here.
     fly_end = front['construction']['fly_end']
     fly_height = np.linalg.norm(front['points']["7'"] - fly_end)
-    half_width = 1.75 * INCH   # 1 3/4" from seam line
+    half_width = FLY_HALF_WIDTH
     inlay = 1.0 * INCH         # extra at top to be trimmed
 
     # Standalone coordinate system:
@@ -68,7 +69,7 @@ def draft_jeans_fly_1873(m, front):
     curve_bottom = _bezier_cubic(
         curve_start,
         np.array([half_width, 0.0]),
-        np.array([half_width * 0.3, 0.0]),
+        np.array([half_width * FLY_CURVE_PULL, 0.0]),
         fold_bottom,
     )
 
@@ -92,6 +93,44 @@ def draft_jeans_fly_1873(m, front):
             'half_width': half_width,
         },
     }
+
+
+def overlay_on_front(ax, front, scale):
+    """Draw the fly outline as a reference overlay on the front-panel plot.
+
+    Transforms the fly draft's local coordinates (origin at fold_bottom,
+    Y up along fold, X perpendicular) into front-panel coordinates so the
+    overlay always matches the actual cut piece.
+    """
+    from garment_programs.geometry import _point_at_arclength
+    fly = draft_jeans_fly_1873(None, front)
+
+    pt7 = front['points']["7'"] * scale
+    fly_end = front['construction']['fly_end'] * scale
+    fly_dir = fly_end - pt7
+    fly_unit = fly_dir / np.linalg.norm(fly_dir)
+    fly_perp = np.array([-fly_unit[1], fly_unit[0]])
+    if fly_perp[1] < 0:
+        fly_perp = -fly_perp
+
+    def _to_front(xy):
+        xy = np.atleast_2d(xy) * scale
+        return fly_end + fly_unit * (-xy[:, 1:2]) + fly_perp * xy[:, 0:1]
+
+    # Fold edge shown 7'→fly_end (inlay is a trim allowance, not drawn here).
+    fold = np.array([pt7, fly_end])
+    cs = _to_front(fly['points']['curve_start'])[0]
+    bottom = _to_front(fly['curves']['bottom'])
+    # Outer-top anchored on the rise (waist) curve at ~half_width from 7'.
+    rise = front['curves']['rise'] * scale
+    outtop = _point_at_arclength(rise[::-1], fly['metadata']['half_width'] * scale)
+
+    STYLE = dict(color='red', linewidth=0.7, alpha=0.6, zorder=3)
+    ax.plot(fold[:, 0], fold[:, 1], **STYLE)
+    ax.plot([outtop[0], cs[0]], [outtop[1], cs[1]], **STYLE)
+    ax.plot(bottom[:, 0], bottom[:, 1], **STYLE)
+    ax.annotate('fly (1873)', cs + fly_perp * (0.3 * scale),
+                fontsize=6, color='red', alpha=0.7, ha='left', va='bottom')
 
 
 # -- Visualization -----------------------------------------------------------
@@ -154,7 +193,6 @@ def plot_jeans_fly_1873(fly, output_path='Logs/jeans_fly_1873.svg',
     # Fly-stop notch on the outer edge at curve_start — marks where the
     # straight fly stitching ends and the bottom curve begins. Aligns with
     # the front panel's fly-extension endpoint (pt 8) during construction.
-    from garment_programs.plot_utils import draw_notch
     draw_notch(ax, np.array([pts['outer_top'], pts['curve_start']]),
                pts['curve_start'], SA['outer'], scale=s)
 
@@ -165,7 +203,6 @@ def plot_jeans_fly_1873(fly, output_path='Logs/jeans_fly_1873.svg',
 
     # --- Grainline and piece label (pattern mode only) ---
     if not debug:
-        from garment_programs.plot_utils import draw_grainline, draw_piece_label
         # Grainline parallel to fold line (vertical, offset from fold)
         fly_height_s = fly['metadata']['fly_height'] * s
         grain_x = pts['outer_top'][0] * 0.5  # midway between fold and outer edge

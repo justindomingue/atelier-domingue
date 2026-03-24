@@ -121,7 +121,9 @@ def draft_jeans_front(m: dict[str, float]) -> DraftData:
     # Starts at pt8 per the source diagram — the fly_end extension past pt8
     # is a dashed CONSTRUCTION reference only, not on the cut outline.
     # P1 lies along the fly-line direction so the curve departs pt8 tangent
-    # to the incoming 7'→8 segment; P2 pulls through pt9.
+    # to the incoming 7'→8 segment (the 0.3 handle length reduced a 14° kink
+    # to ~1° — see rev001.md). P2 is the old quadratic's control point, which
+    # pulls the curve near pt9 but no longer interpolates it exactly.
     crotch_span = np.linalg.norm(pt6 - pt8)
     curve_crotch = _bezier_cubic(
         pt8,
@@ -247,7 +249,6 @@ def plot_jeans_front(draft, output_path='Logs/jeans_front.svg', debug=False, uni
     _fly_wrap = np.linalg.norm(pts['8'] - con['fly_end'])  # ≈ 1"
     _crotch_fly = _curve_up_to_arclength(curves['crotch'], _fly_wrap)
     _crotch_body = _curve_from_arclength(curves['crotch'], _fly_wrap)
-    _fly_stop = _crotch_fly[-1]  # fly terminus on crotch curve = notch
 
     # --- Pattern outline: curves ---
     c = curves
@@ -414,9 +415,10 @@ def plot_jeans_front(draft, output_path='Logs/jeans_front.svg', debug=False, uni
             (_crotch_body[::-1],                                     SA_CROTCH, SL['crotch']),
             (_crotch_fly[::-1],                                      SA_FLY, SL['fly']),
             (_cf_straight,                                           SA_FLY, SL['fly']),
-            (rise_above_facing[::-1],                                SA_WAIST, SL['waist']),
-            (pcurves_sa['opening'],                                  SA_FACING, SL['facing']),
         ]
+        if len(rise_above_facing) >= 2:
+            sa_edges.append((rise_above_facing[::-1],                SA_WAIST, SL['waist']))
+        sa_edges.append((pcurves_sa['opening'],                      SA_FACING, SL['facing']))
     else:
         # Full outline (debug mode or no pocket data)
         sa_edges = [
@@ -452,43 +454,14 @@ def plot_jeans_front(draft, output_path='Logs/jeans_front.svg', debug=False, uni
     draw_notch(ax, np.array([pts['4'], pts['0']]), side_hem_pt, SA_SIDE, scale=s)
     draw_notch(ax, np.array([pts["0'"], pts["3'"]]), inseam_hem_pt, SA_INSEAM, scale=s)
 
-    # --- Fly-stop notch: at the bottom of the straight CF edge ---
-    # Marks where the fly opening ends and the crotch seam begins.
-    draw_notch(ax, _cf_straight, _fly_stop, SA_FLY, scale=s)
+    # --- Fly-stop notch: at pt8 on the CF edge ---
+    # Marks where the fly opening ends and the crotch seam begins. Aligns
+    # with the fly piece's curve_start notch (jeans_fly_1873.py).
+    draw_notch(ax, _cf_straight, pts['8'], SA_FLY, scale=s)
 
     # --- 1873 fly outline overlay (construction reference) ---
-    # Shows where the fly piece sits on the front: fold edge along the CF
-    # seamline (7'→fly_end), outer edge 1.75" perpendicular into the panel,
-    # bottom curve wrapping from the outer edge back to fly_end.
-    _fly_dir = con['fly_end'] - pts["7'"]
-    _fly_unit = _fly_dir / np.linalg.norm(_fly_dir)
-    _fly_perp = np.array([-_fly_unit[1], _fly_unit[0]])  # rotate 90°
-    # Point perp into the panel interior (toward sideseam, +y direction)
-    if _fly_perp[1] < 0:
-        _fly_perp = -_fly_perp
-    _hw = 1.75 * INCH * s
-    _f_top = pts["7'"]
-    _f_bot = con['fly_end']
-    # Outer edge extends up to the waistband seamline: find the point on
-    # the rise curve (1'→7') at ~1.75" arclength from the 7' end.
-    _f_outtop = _point_at_arclength(curves['rise'][::-1], _hw)
-    # curve_start at |8−fly_end| from bottom (matches jeans_fly_1873.py)
-    _cs_y = np.linalg.norm(pts['8'] - con['fly_end'])
-    _f_cs = _f_bot + _fly_unit * (-_cs_y) + _fly_perp * _hw
-    # Bottom curve in front coords (same cubic as the fly piece)
-    _fcurve = _bezier_cubic(
-        _f_cs,
-        _f_bot + _fly_perp * _hw,
-        _f_bot + _fly_perp * (_hw * 0.3),
-        _f_bot,
-    )
-    FLY_OV = dict(color='red', linewidth=0.7, alpha=0.6, zorder=3)
-    # Open at top: fold edge + outer edge (to waist) + bottom curve only.
-    ax.plot([_f_top[0], _f_bot[0]], [_f_top[1], _f_bot[1]], **FLY_OV)   # fold
-    ax.plot([_f_outtop[0], _f_cs[0]], [_f_outtop[1], _f_cs[1]], **FLY_OV)  # outer
-    ax.plot(_fcurve[:, 0], _fcurve[:, 1], **FLY_OV)                     # bottom curve
-    ax.annotate('fly (1873)', _f_cs + _fly_perp * (0.3 * s),
-                fontsize=6, color='red', alpha=0.7, ha='left', va='bottom')
+    from .jeans_fly_1873 import overlay_on_front
+    overlay_on_front(ax, draft, scale=s)
 
     # --- Grainline and piece label (pattern mode only) ---
     if not debug:

@@ -1,4 +1,38 @@
 {
+  "construction": {
+    "inseam_line_end": [
+      0.0,
+      -11.7929
+    ],
+    "inseam_line_start": [
+      -79.6265,
+      -37.1501
+    ],
+    "seat_angle_end": [
+      -128.3741,
+      -17.5516
+    ],
+    "seat_angle_start": [
+      -89.7467,
+      -27.94
+    ],
+    "seat_line_end": [
+      -95.2181,
+      -48.2843
+    ],
+    "seat_line_start": [
+      -82.2325,
+      0.0
+    ],
+    "waist_line_end": [
+      -111.9884,
+      -38.6275
+    ],
+    "waist_line_start": [
+      -101.6,
+      0.0
+    ]
+  },
   "curves": {
     "back_inseam": [
       [

@@ -1,4 +1,14 @@
 {
+  "construction": {
+    "fly_end": [
+      -87.2332,
+      -25.766
+    ],
+    "fly_start": [
+      -100.6475,
+      -23.8125
+    ]
+  },
   "curves": {
     "crotch": [
       [

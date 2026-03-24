@@ -1,4 +1,14 @@
 {
+  "construction": {
+    "back_creaseline_knee": [
+      16.3,
+      46.6
+    ],
+    "cb_perp_unit": [
+      -0.2241,
+      0.9746
+    ]
+  },
   "curves": {
     "crotch": [
       [

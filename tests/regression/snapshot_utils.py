@@ -15,9 +15,9 @@ from pathlib import Path
 import numpy as np
 
 # Keys in a DraftData dict that carry geometry we want to snapshot.
-# Everything else (metadata, measurements, construction scalars, levels, …)
-# is either derivative or not coordinate-bearing.
-GEOMETRY_KEYS = ("points", "curves")
+# ``construction`` holds derived reference points (e.g. fly_end) that
+# downstream pieces depend on, so it's snapshot-locked too.
+GEOMETRY_KEYS = ("points", "curves", "construction")
 
 ROUND_DECIMALS = 4
 

@@ -98,3 +98,21 @@ def test_curve_split_and_rejoin_recovers_total_length():
 
     # Combined length equals the original
     assert_allclose(_curve_length(head) + _curve_length(tail), total)
+
+
+def test_curve_split_at_zero_returns_single_point():
+    line = np.array([[0.0, 0.0], [10.0, 0.0]])
+    head = _curve_up_to_arclength(line, 0.0)
+    assert head.shape == (1, 2)
+    assert_allclose(head[0], [0.0, 0.0])
+    tail = _curve_from_arclength(line, 0.0)
+    assert_allclose(tail, line)
+
+
+def test_curve_split_beyond_length_clamps():
+    line = np.array([[0.0, 0.0], [10.0, 0.0]])
+    head = _curve_up_to_arclength(line, 99.0)
+    assert_allclose(head, line)
+    tail = _curve_from_arclength(line, 99.0)
+    assert tail.shape == (1, 2)
+    assert_allclose(tail[0], [10.0, 0.0])

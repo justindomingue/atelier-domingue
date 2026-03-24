@@ -148,6 +148,34 @@ class SelvedgeJeansVerifyTests(unittest.TestCase):
 
         self._assert_inch('Full knee opening', full_knee, self.m['knee_width'])
 
+    # -- 6. FLY / CROTCH invariants ------------------------------------
+
+    def test_fly_end_extension_is_one_inch_past_pt8(self):
+        import numpy as np
+        fpts = self.front['points']
+        fcon = self.front['construction']
+        ext = np.linalg.norm(fcon['fly_end'] - fpts['8'])
+        self.assertAlmostEqual(ext, 1.0 * INCH, delta=1e-6)
+
+    def test_crotch_departs_tangent_to_fly_line(self):
+        """The crotch curve must leave pt8 tangent to the 7'→8 fly line
+        (why it was rewritten from quadratic to cubic)."""
+        import numpy as np
+        fpts = self.front['points']
+        crotch = self.front['curves']['crotch']
+        fly_dir = fpts['8'] - fpts["7'"]
+        fly_dir /= np.linalg.norm(fly_dir)
+        start_dir = crotch[1] - crotch[0]
+        start_dir /= np.linalg.norm(start_dir)
+        self.assertGreater(
+            np.dot(fly_dir, start_dir), 0.99,
+            f"crotch start tangent drifted from fly line "
+            f"(dot={np.dot(fly_dir, start_dir):.4f})"
+        )
+        # Endpoints pinned to pt8 and pt6
+        self.assertLess(np.linalg.norm(crotch[0] - fpts['8']), 1e-6)
+        self.assertLess(np.linalg.norm(crotch[-1] - fpts['6']), 1e-6)
+
     # -- memoisation smoke-test ----------------------------------------
 
     def test_draft_cache_shared(self):
