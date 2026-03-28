@@ -428,6 +428,14 @@ def plot_jeans_back(front, back, output_path='Logs/jeans_back.svg', debug=False,
     draw_notch(ax, np.array([seam_start, seam_end]), seam_mid, SA_YOKE, scale=s,
                count=2)
 
+    # -- Ease note on yoke seam (back is wrap side of the flat-fell; its cut
+    #    edge runs longer than the yoke's — distribute fullness when basting) --
+    if not debug and gathering is None:
+        ax.annotate('ease into yoke', seam_mid, textcoords="offset points",
+                    xytext=(0, -12), fontsize=7, color='gray', ha='center',
+                    bbox=dict(boxstyle='round,pad=0.2', fc='white',
+                              ec='none', alpha=0.8))
+
     # -- Balance notches: knee + hem on side seam and inseam --
     # Hem notches are pulled slightly off the corners to avoid seam intersections.
     hem_t = 0.06
