@@ -25,7 +25,7 @@ import matplotlib.pyplot as plt
 
 from garment_programs.core.runtime import cache_draft, resolve_measurements
 from .jeans_front import (
-    INCH, load_measurements, draft_jeans_front,
+    load_measurements, draft_jeans_front,
     _annotate_segment, _annotate_curve, _curve_length,
     _curve_up_to_arclength,
 )
@@ -170,7 +170,7 @@ def plot_jeans_front_facing(piece, output_path='Logs/jeans_front_facing.svg',
     pts = {k: v * s for k, v in piece['points'].items()}
     curves = {k: v * s for k, v in piece['curves'].items()}
     meta = piece['metadata']
-    from .seam_allowances import SEAM_LABELS
+    from .seam_allowances import SEAM_LABELS, POCKET_NOTCH_OFFSET
     _sl = SEAM_LABELS['front_facing']
 
     fig, ax, standalone = setup_figure(ax, figsize=(10, 8))
@@ -203,11 +203,13 @@ def plot_jeans_front_facing(piece, output_path='Logs/jeans_front_facing.svg',
                                       units=units)
 
     # --- Notches: matching marks for pocket assembly ---
-    NOTCH_OFFSET = 0.375 * INCH   # 3/8" away from pocket mouth
     draw_notch(ax, rise, pts['pocket_upper'], meta['sa_waist'], scale=s,
-               tangent_offset=NOTCH_OFFSET, flip=True)
+               tangent_offset=POCKET_NOTCH_OFFSET, flip=True)
+    # Side-seam notch: hip curve here is reversed (pocket_lower → pt1), so the
+    # tangent points toward pt1.  Negate the offset so the notch lands 3/8"
+    # *below* pocket_lower — matching the front panel's notch placement.
     draw_notch(ax, hip, pts['pocket_lower'], meta['sa_sideseam'], scale=s,
-               tangent_offset=NOTCH_OFFSET, flip=True)
+               tangent_offset=-POCKET_NOTCH_OFFSET, flip=True)
 
     # Grain line arrow (double-headed)
     from garment_programs.plot_utils import draw_grainline, draw_piece_label

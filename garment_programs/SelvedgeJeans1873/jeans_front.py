@@ -383,7 +383,7 @@ def plot_jeans_front(draft, output_path='Logs/jeans_front.svg', debug=False, uni
                             xytext=(6, -8), ha='left', fontsize=5, color='steelblue')
 
     # --- Seam allowances (always drawn) ---
-    from .seam_allowances import SEAM_ALLOWANCES, SEAM_LABELS
+    from .seam_allowances import SEAM_ALLOWANCES, SEAM_LABELS, POCKET_NOTCH_OFFSET
     SA = SEAM_ALLOWANCES['front']
     SL = SEAM_LABELS['front']
     SA_SIDE   = SA['side']
@@ -438,11 +438,10 @@ def plot_jeans_front(draft, output_path='Logs/jeans_front.svg', debug=False, uni
     # --- Notches: matching marks for pocket assembly ---
     if pocket is not None:
         ppts = {k: v * s for k, v in pocket['points'].items()}
-        NOTCH_OFFSET = 0.375 * INCH   # 3/8" away from pocket mouth
         draw_notch(ax, curves['rise'], ppts['pocket_upper'], SA_WAIST, scale=s,
-                   tangent_offset=NOTCH_OFFSET, flip=True)
+                   tangent_offset=POCKET_NOTCH_OFFSET, flip=True)
         draw_notch(ax, curves['hip'], ppts['pocket_lower'], SA_SIDE, scale=s,
-                   tangent_offset=NOTCH_OFFSET)
+                   tangent_offset=POCKET_NOTCH_OFFSET)
 
     # --- Balance notches: knee + hem on side seam and inseam ---
     # Hem notches are pulled slightly off the corners to avoid seam intersections.

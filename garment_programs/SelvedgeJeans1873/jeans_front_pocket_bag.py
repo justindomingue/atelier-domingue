@@ -25,7 +25,7 @@ from .jeans_front import (
     _point_at_arclength,
     _curve_up_to_arclength,
 )
-from .seam_allowances import SEAM_ALLOWANCES, SEAM_LABELS
+from .seam_allowances import SEAM_ALLOWANCES, SEAM_LABELS, POCKET_NOTCH_OFFSET
 from garment_programs.plot_utils import (
     SEAMLINE, CUTLINE, offset_polyline, draw_seam_allowance, draw_notch,
     display_scale, setup_figure, finalize_figure, draw_fold_line,
@@ -414,11 +414,10 @@ def plot_jeans_front_pocket(piece, output_path='Logs/jeans_front_pocket.svg',
     # --- Notches: matching marks for pocket assembly ---
     rot_pocket_upper = rot_opening[0]
     rot_pocket_lower = rot_opening[-1]
-    NOTCH_OFFSET = 0.375 * INCH   # 3/8" away from pocket mouth
     draw_notch(ax, rot_rise, rot_pocket_upper, _sa['waist'], scale=s,
-               tangent_offset=NOTCH_OFFSET, flip=True)
+               tangent_offset=POCKET_NOTCH_OFFSET, flip=True)
     draw_notch(ax, rot_hip, rot_pocket_lower, _sa['sideseam'], scale=s,
-               tangent_offset=NOTCH_OFFSET)
+               tangent_offset=POCKET_NOTCH_OFFSET)
 
     # --- Grainline (parallel to fold line, centered on piece) ---
     from garment_programs.plot_utils import draw_grainline, draw_piece_label
