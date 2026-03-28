@@ -79,6 +79,7 @@ def draft_jeans_fly_1873(m, front):
             'fold_top': fold_top,
             'outer_top': outer_top,
             'curve_start': curve_start,
+            'fold_stop': np.array([0.0, curve_start_y]),
         },
         'curves': {
             'bottom': curve_bottom,
@@ -190,11 +191,11 @@ def plot_jeans_fly_1873(fly, output_path='Logs/jeans_fly_1873.svg',
                 textcoords="offset points", xytext=(0, 5),
                 fontsize=7, color='dimgray', ha='center')
 
-    # Fly-stop notch on the outer edge at curve_start — marks where the
-    # straight fly stitching ends and the bottom curve begins. Aligns with
-    # the front panel's fly-extension endpoint (pt 8) during construction.
-    draw_notch(ax, np.array([pts['outer_top'], pts['curve_start']]),
-               pts['curve_start'], SA['outer'], scale=s)
+    # Fly-stop notch on the fold edge at fold_stop — the fold edge is what
+    # lays against the front panel's CF/fly extension, so this notch
+    # registers with the front's pt8 notch during construction.
+    draw_notch(ax, np.array([pts['fold_bottom'], pts['fold_top']]),
+               pts['fold_stop'], SA['fold'], scale=s)
 
     # Fold label
     mid_y = (pts['fold_bottom'][1] + pts['fold_top'][1]) / 2
