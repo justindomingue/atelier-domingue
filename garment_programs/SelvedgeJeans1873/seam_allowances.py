@@ -33,7 +33,8 @@ SEAM_ALLOWANCES = {
     'yoke': {
         'seat':    S['wide'],                # long side / seat seam
         'side':    2 * S['flat_fell'],       # 3/4" — short edge / side seam
-        'waist':   S['simple'],              # waist and yoke seams
+        'waist':   S['simple'],              # waist seam (waistband join)
+        'yoke':    2 * S['flat_fell'],       # 3/4" — yoke-to-back join (matches back.yoke)
     },
     'back_cinch': {
         'wide':    3/4 * INCH,               # specific to cinch belt construction
@@ -97,6 +98,7 @@ SEAM_LABELS = {
         'seat': 'Seat seam',
         'side': 'Flat-felled seam',
         'waist': 'Waistband join seam',
+        'yoke': 'Yoke join seam',
     },
     'back_pocket': {
         'side': 'Pocket attach seam',

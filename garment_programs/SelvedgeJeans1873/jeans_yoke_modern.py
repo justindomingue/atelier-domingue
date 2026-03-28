@@ -291,7 +291,7 @@ def plot_jeans_yoke_modern(front, back, yoke,
     #   seat(yoke_seat→back_waist) → waist reversed(back_waist→1)
     sa_edges = [
         (np.array([ypts['pt1_rot'], ypts['yoke_side_rot']]),              _sa['side'], _sl['side']),
-        (ycurves['yoke_line'],                                             _sa['waist'], _sl['waist']),
+        (ycurves['yoke_line'],                                             _sa['yoke'], _sl['yoke']),
         (np.array([ypts['yoke_seat_rot'], ypts['back_waist_rot']]),       _sa['seat'], _sl['seat']),
         (ycurves['waist_line'][::-1],                                      _sa['waist'], _sl['waist']),
     ]
