@@ -1,0 +1,9 @@
+measurements:
+  width: 15.0        # cm - finished width (front face)
+  depth: 11.0        # cm - finished depth (boxed bottom)
+  height: 28.0       # cm - finished height (bottom to roll-top fold)
+  roll_top: 10.0     # cm - extra height for roll-top closure
+  strap_width: 2.0   # cm - finished strap width (folded in half)
+  strap_tail: 30.0   # cm - free tail length extending past each side
+  seam_allowance: 1.0
+  unit: cm

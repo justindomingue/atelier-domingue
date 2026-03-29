@@ -22,6 +22,7 @@ class RunConfig:
     units: str | None = None
     output_format: str = "svg"
     debug: bool = False
+    fabric_width: float | None = None
 
 
 def discover_measurements() -> list[str]:
@@ -56,6 +57,8 @@ def build_run_command(config: RunConfig) -> list[str]:
         cmd.extend(["-u", config.units])
     if config.debug:
         cmd.append("-d")
+    if config.fabric_width is not None:
+        cmd.extend(["--fabric-width", str(config.fabric_width)])
     return cmd
 
 

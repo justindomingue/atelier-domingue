@@ -107,12 +107,22 @@ def _collect_config(last: RunConfig | None) -> RunConfig | None:
     if _cancelled(fmt):
         return None
 
+    fw_default = str(last.fabric_width) if last and last.fabric_width else ""
+    fw_answer = questionary.text(
+        "Fabric width in inches (leave blank for garment default)",
+        default=fw_default,
+    ).ask()
+    if _cancelled(fw_answer):
+        return None
+    fabric_width = float(fw_answer) if fw_answer.strip() else None
+
     return RunConfig(
         measurements=meas,
         program=program,
         units=units,
         output_format=fmt,
         debug=debug,
+        fabric_width=fabric_width,
     )
 
 
@@ -123,6 +133,8 @@ def _confirm(config: RunConfig) -> bool:
     questionary.print(f"  Units        : {config.units}")
     questionary.print(f"  Format       : {config.output_format}")
     questionary.print(f"  Debug        : {'yes' if config.debug else 'no'}")
+    fw_display = f'{config.fabric_width}"' if config.fabric_width else "garment default"
+    questionary.print(f"  Fabric width : {fw_display}")
     lay = "no (debug mode)" if config.debug else f"yes ({config.output_format})"
     questionary.print(f"  Lay plan     : {lay}")
     ok = questionary.confirm("Run?", default=True).ask()
