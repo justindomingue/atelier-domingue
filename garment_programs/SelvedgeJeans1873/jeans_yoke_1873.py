@@ -80,6 +80,10 @@ def draft_jeans_yoke(m, front, back):
     dart_center_yoke = dart_center_waist + params[0] * perp
 
     # -- 5. Dart edges — 3/8" on each side along waist direction --
+    # Parallel (non-tapering) legs are intentional: the 1873 pleat is tacked
+    # only ~1/4" at the waist edge and released below, so it never reaches
+    # the yoke-bottom seam.  Contrast the modern yoke, where darts are closed
+    # into the yoke seam via slash-and-spread to create curvature.
     hw = 3 / 8 * INCH
     dart_left_waist  = dart_center_waist - waist_dir_norm * hw
     dart_right_waist = dart_center_waist + waist_dir_norm * hw
