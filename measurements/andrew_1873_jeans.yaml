@@ -6,9 +6,9 @@
 # TODO: measure Andrew's actual natural-waist outseam (currently estimated
 # at 40.5" to give an ~10" rise).
 measurements:
-  side_length: 40.50 # in - natural-waist to hem (1873 convention)
+  side_length: 40.00 # in - natural-waist to hem (1873 convention)
   inseam: 29.00 # in - crotch to hem
-  waist: 39.00 # in - pant waist circumference
+  waist: 38.00 # in - pant waist circumference
   seat: 44.00 # in - hip/seat circumference (fullest part)
   waistband_width: 1.5 # in - waistband width
   hem_width: 18.0 # in - desired hem opening (full width)
